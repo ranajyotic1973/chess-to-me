@@ -1,0 +1,82 @@
+{
+  "name": "chess-to-me",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron + React local Stockfish chess trainer",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "dev:renderer": "cross-env BROWSER=none vite --strictPort --port 5173 --host 127.0.0.1",
+    "dev:electron": "wait-on tcp:5173 && cross-env ELECTRON_START_URL=http://127.0.0.1:5173 electron .",
+    "build:renderer": "vite build",
+    "build": "npm run build:renderer",
+    "start": "electron .",
+    "prepare:installer-assets": "powershell -ExecutionPolicy Bypass -File scripts/prepare-installer-assets.ps1",
+    "dist:win": "npm run build && electron-builder --win nsis",
+    "nsis:version": ".\\tools\\nsis\\makensis.exe /VERSION",
+    "fetch:reference-games": "powershell -ExecutionPolicy Bypass -File scripts/fetch-reference-games.ps1",
+    "fetch:mega-reference-db": "powershell -ExecutionPolicy Bypass -File scripts/fetch-mega-reference-db.ps1"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.13.1",
+    "@emotion/styled": "^11.13.0",
+    "@fontsource-variable/manrope": "^5.2.8",
+    "@fontsource/sora": "^5.2.8",
+    "@mui/icons-material": "^5.11.16",
+    "@mui/material": "^5.11.16",
+    "chess.js": "^1.4.0",
+    "chessboardjs": "^0.0.1",
+    "electron-store": "^10.1.0",
+    "jquery": "^4.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.0",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^41.2.0",
+    "electron-builder": "^26.8.1",
+    "vite": "^7.1.7",
+    "wait-on": "^8.0.4"
+  },
+  "build": {
+    "appId": "com.xalgo.chess-to-me",
+    "productName": "Chess To Me",
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "data/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "vendor",
+        "to": "vendor",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "release"
+    },
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "include": "build/installer.nsh"
+    }
+  }
+}

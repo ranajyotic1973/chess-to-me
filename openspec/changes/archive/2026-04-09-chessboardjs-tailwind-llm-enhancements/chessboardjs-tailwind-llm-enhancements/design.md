@@ -1,0 +1,41 @@
+## Context
+
+The renderer currently attempts to mount the chess UI immediately and relies on CDN assets for Tailwind. The board fails because `baseGame` is referenced before initialization, and the layout lacks the requested entry flow, responsive sizing, and Stockfish/LLM integration. We need to correct the initialization order, host all assets locally (Tailwind + chessboardjs), and rebuild the App into a settings-led, responsive layout capable of rendering a draggable board, rerendering on pasted FEN, and presenting synthesized Stockfish-LLM commentary.
+
+## Goals / Non-Goals
+
+**Goals:**
+- Replace CDN Tailwind with a PostCSS/Tailwind CLI workflow so styling is compiled locally.
+- Create a settings-first landing screen that saves preferences, then shows only the analysis view (with a gear icon and no menus/titles) in a layout that fits a laptop screen without scrollbars aside from the chat textarea.
+- Render chessboardjs with draggable pieces starting at the start position, allow re-rendering from pasted FEN, and wire that FEN into Stockfish + LLM analysis while keeping chat-area height rules.
+- Allow the user to ask LLM questions tied to the current position and ensure all content remains chess-focused.
+
+**Non-Goals:**
+- Adding new game modes beyond FEN-based analysis.
+- Reworking the Electron security model beyond complying with existing requirements.
+
+## Decisions
+
+1. **Tailwind tooling:** Install `tailwindcss` as a PostCSS plugin (or via the CLI) and keep the generated stylesheet local so we can drop `cdn.tailwindcss.com`. This also lets us configure the `@tailwind` directives for the new layout without pulling from a CDN.
+2. **UI flow:** Split the renderer into two states—`settings` and `analysis`. `settings` appears first and writes a flag/local preferences when the user saves. After that, the App immediately shows the analysis view; the settings page is skipped on future launches until the flag is cleared. The analysis view includes a FontAwesome gear icon and no additional headers/menu bars.
+3. **Layout constraints:** Compose the analysis view with Tailwind utility classes that create a responsive grid ensuring the board, info column, and chat panel fit within a laptop-sized viewport. Use flex/shrink utilities to prevent overflow and limit vertical scrolling to the chat textarea, which should expand to 10–15 lines before adding its own scroll.
+4. **Chessboard integration:** Add `chessboardjs` via npm, instantiate it after the React state holds the board ref, and keep the start position (“start”). Make pieces draggable using the library’s options; on FEN input (controlled textarea or dedicated paste field), update the chessboard position and feed that FEN string to the analysis workflow.
+5. **Analysis pipeline:** When a FEN is submitted, call Stockfish (likely via an existing integration point) to get an evaluation, then forward that result plus current board metadata to the LLM request for risk/plan explanation. Capture user questions through the chat input and scope them to the active position before submitting to the LLM.
+
+## Risks / Trade-offs
+
+- [Stockfish performance] ? Running Stockfish on the renderer/main thread can block UI updates; mitigate by using an asynchronous worker or batching analysis so the UI remains responsive.
+- [Tailwind build complexity] ? Adding PostCSS/Tailwind tooling increases build steps; keep the config minimal and document how to regenerate the CSS.
+- [LLM filtering] ? Ensuring the LLM stays strictly chess-focused might require prompt engineering; include a strict instruction prefix before sending prompts.
+
+## Migration Plan
+
+1. Install `tailwindcss`, `postcss`, `autoprefixer`, and `chessboardjs` via npm and add a Tailwind config + PostCSS build step (if not already present).
+2. Update the App state/structure to add the settings screen, local persistence flag, and layout grid along with the gear icon (FontAwesome can be added via npm as well).
+3. Initialize `chessboardjs` inside the board container, handle draggable options, and add FEN handling + Stockfish/LLM integration.
+4. Adjust stylesheet imports/references to use the local Tailwind output and remove the CDN script from `index.html`.
+
+## Open Questions
+
+- Should the gear icon link back to the settings screen or just display as decoration?
+- Are there existing utilities for invoking Stockfish and the LLM, or do new wrappers/wrappers need to be written?

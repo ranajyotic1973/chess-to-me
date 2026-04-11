@@ -1,0 +1,29 @@
+## Context
+Tailwind CSS utilities are currently declared via `src/styles.css`, but the renderer still falls back to the basic gradient background because the PostCSS pipeline never runs the Tailwind plugin. Vite’s default PostCSS behavior loads `postcss.config.js`, and the design needs to ensure that configuration resolves to the latest `@tailwindcss/postcss` plugin plus `autoprefixer`, and that the entrypoint imports the compiled `styles.css` before the React tree boots.
+
+## Goals / Non-Goals
+**Goals:**
+- Configure PostCSS with `@tailwindcss/postcss` so Tailwind directives are expanded into real CSS.
+- Keep the renderer’s stylesheet simple (`@tailwind base/components/utilities`) and import it from `src/main.jsx` before the app renders.
+- Surface a `tailwind:build` script and README note so contributors can regenerate the CSS bundle when the Tailwind configuration changes.
+
+**Non-Goals:**
+- Re-architecting the Electron renderer or changing Tailwind’s theming.
+- Building a separate CSS pipeline outside of Vite’s PostCSS hooks.
+
+## Decisions
+1. **PostCSS plugin choice:** Use the `@tailwindcss/postcss` package instead of the legacy `tailwindcss` entry exported inside tailwind’s own dist bundle. The new package is explicitly designed for PostCSS integration and avoids warnings about module types. It also keeps Vite’s plugin loading path simple (CommonJS), which is compatible with the rest of the toolchain.
+2. **Stylesheet placement:** Keep `@tailwind` directives inside `src/styles.css` to let Vite treat it as a PostCSS entry point, but also import the same file from `src/main.jsx` so nothing relies on global HTML injection from the old CDN-era setup.
+3. **Script exposure:** Provide an explicit `npm run tailwind:build` script for contributors to regenerate the CSS bundle manually (e.g., when editing `tailwind.config.js`). This is easier to document than relying on Vite’s implicit watch-only behavior.
+
+## Risks / Trade-offs
+- [Plugin compatibility] ? Adding a new PostCSS plugin could conflict with other PostCSS rules if additional plugins are introduced. Keep the list minimal and only include `@tailwindcss/postcss` + `autoprefixer` for now.
+- [Build drift] ? If someone edits `tailwind.config.js` but doesn’t rebuild, the generated CSS might be stale. Mitigate by adding README instructions and the dedicated `tailwind:build` script so it’s easy to rerun.
+
+## Migration Plan
+1. Install `@tailwindcss/postcss` and ensure `postcss.config.js` requires it along with `autoprefixer`.
+2. Update `src/styles.css` to include the `@tailwind` directives (if not already present) and confirm it is imported from `src/main.jsx` before `<App />` renders.
+3. Add the `tailwind:build` npm script plus README note.
+
+## Open Questions
+- Should we expose the generated CSS as a separate file under `dist/` to use in other contexts (e.g., docs)? Not in scope yet.

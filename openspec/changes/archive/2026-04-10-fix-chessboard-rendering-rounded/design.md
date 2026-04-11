@@ -1,0 +1,35 @@
+## Context
+
+The renderer already relies on ChessboardJS inside `src/App.jsx`, but the board container is conditionally created and the initialization hook may run before the DOM node attaches, which leaves the user staring at an empty viewport. The Blueprint-powered UI also uses sharp edges in some wrappers, making the board area feel visually disconnected from the rest of the interface.
+
+## Goals / Non-Goals
+
+**Goals:**
+- Ensure ChessboardJS is initialized after the board container renders and is kept mounted whenever the analysis view is active.
+- Add gentle border-radius styling around the board container and its adjacent Blueprint control cards so they match the rest of the rounded UI elements.
+- Preserve the existing Stockfish/LLM logic while reinforcing the view lifecycle and styling tweaks needed to keep the board visible.
+
+**Non-Goals:**
+- Replacing the ChessboardJS library or swapping in a completely different board rendering engine.
+- Overhauling the Blueprint layout beyond the necessary board container and control card adjustments.
+
+## Decisions
+
+1. **Board initialization timing** ? Use a `useEffect` hook that runs after the board container ref is available and creates the Chessboard instance only once, storing it in a ref so the board remains mounted even when the view toggles. This avoids repeated destruction/recreation and ensures the DOM node exists before `Chessboard` is called.
+2. **Rounded edges styling** ? Extend `src/styles.css` to apply a subtle `border-radius` to the board wrapper and related control cards, matching Blueprint’s general rounded aesthetic. This keeps the UI cohesive without needing new Blueprint components.
+3. **Status messaging** ? Keep the existing status/analysis messaging logic unchanged while ensuring errors or missing board renders show actionable messages.
+
+## Risks / Trade-offs
+
+- [Risk] ChessboardJS may still fail silently if the DOM ref vanishes during rendering transitions. ? Mitigation: guard initialization to rerun only when the ref is present and fallback to a message if Chessboard is unavailable.
+- [Risk] Extra border-radius overrides might conflict with Blueprint’s own card styling on other screens. ? Mitigation: scope the CSS to `.board-wrapper` and explicitly set `border-radius`/`overflow` rather than applying global overrides.
+
+## Migration Plan
+
+1. Apply the new `useEffect` board initialization and keep the `boardInstance` ref alive as the analysis view renders.
+2. Update `styles.css` to include the new `border-radius` rules for `.board-wrapper`, `.analysis-shell`, and related containers so they share the same rounded corners.
+3. Test the renderer (`npm run dev`) to verify the board shows up and the controls appear with the updated edges.
+
+## Open Questions
+
+- None at this time.

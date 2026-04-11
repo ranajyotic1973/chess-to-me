@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build/
+release/
+electron/
+*.log
+*.tmp
+*.cache
+*.exe
+*.dll
+*.pdb

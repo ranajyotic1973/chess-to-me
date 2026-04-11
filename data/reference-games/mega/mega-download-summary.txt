@@ -1,0 +1,56 @@
+Downloaded files: 0
+Failed files: 50
+Output PGN: C:\Users\Yashashree Chakrabor\Documents\chess-to-me\data\reference-games\mega\mega-famous-2600plus.pgn
+Generated at: 2026-03-22 19:35:51
+
+Failed names:
+Carlsen
+Kasparov
+Karpov
+Anand
+Kramnik
+Topalov
+Aronian
+Nakamura
+So
+Giri
+Nepomniachtchi
+Ding
+Firouzja
+Karjakin
+Svidler
+Mamedyarov
+Grischuk
+Radjabov
+VachierLagrave
+Dominguez
+Caruana
+Polgar
+Ivanchuk
+Shirov
+Ponomariov
+Adams
+Leko
+Bacrot
+Naiditsch
+Navara
+Wojtaszek
+Duda
+Gelfand
+Shabalov
+Short
+Fischer
+Spassky
+Tal
+Petrosian
+Smyslov
+Botvinnik
+Alekhine
+Capablanca
+Korchnoi
+Larsen
+Timman
+Portisch
+Keres
+Bronstein
+Reshevsky
