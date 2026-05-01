@@ -36,22 +36,22 @@
 
 ## 5. Integration and Testing
 
-- [ ] 5.1 Integrate normalization, formatting, and prompt enhancements into buildPrompt() function
-- [ ] 5.2 Test explain-lines flow with sample Stockfish analysis output
-- [ ] 5.3 Test explain-lines flow with sample LC0 analysis output
-- [ ] 5.4 Test ask-question with auto-fetch FEN (board state → engine → LLM)
-- [ ] 5.5 Test best-move recommendations from top line
-- [ ] 5.6 Test move-by-move explanation requests
-- [ ] 5.7 Test cache hit/miss scenarios (same position questioned within 30 seconds)
-- [ ] 5.8 Test with multiple languages (ensure language preference respected)
+- [x] 5.1 Integrate normalization, formatting, and prompt enhancements into buildPrompt() function
+- [x] 5.2 Test explain-lines flow with sample Stockfish analysis output
+- [x] 5.3 Test explain-lines flow with sample LC0 analysis output
+- [x] 5.4 Test ask-question with auto-fetch FEN (board state → engine → LLM)
+- [x] 5.5 Test best-move recommendations from top line
+- [x] 5.6 Test move-by-move explanation requests
+- [x] 5.7 Test cache hit/miss scenarios (same position questioned within 30 seconds)
+- [x] 5.8 Test with multiple languages (ensure language preference respected)
 
 ## 6. Documentation and Verification
 
-- [ ] 6.1 Verify system prompt explains grandmaster role and engine output format
-- [ ] 6.2 Verify LLM responses use tactical, strategic terminology
-- [ ] 6.3 Verify normalization handles both Stockfish and LC0 outputs correctly
-- [ ] 6.4 Verify line formatting is human-readable and LLM-friendly
-- [ ] 6.5 Test end-to-end: question → FEN fetch → engine query → normalization → formatting → LLM response
+- [x] 6.1 Verify system prompt explains grandmaster role and engine output format
+- [x] 6.2 Verify LLM responses use tactical, strategic terminology
+- [x] 6.3 Verify normalization handles both Stockfish and LC0 outputs correctly
+- [x] 6.4 Verify line formatting is human-readable and LLM-friendly
+- [x] 6.5 Test end-to-end: question → FEN fetch → engine query → normalization → formatting → LLM response
 
 ## 7. Chess Piece Glyphs and Algebraic Notation
 
@@ -59,8 +59,8 @@
 - [x] 7.2 Add function to convert piece names to glyphs in LLM prompts
 - [x] 7.3 Update system prompt to instruct LLM to use piece glyphs instead of words
 - [x] 7.4 Update system prompt to instruct LLM to use algebraic notation (e.g., Ne4) instead of text descriptions
-- [ ] 7.5 Test glyph rendering in LLM responses (ensure Ollama model supports Unicode glyphs)
-- [ ] 7.6 Test algebraic notation is used consistently in line explanations
+- [x] 7.5 Test glyph rendering in LLM responses (ensure Ollama model supports Unicode glyphs)
+- [x] 7.6 Test algebraic notation is used consistently in line explanations
 
 ## 8. File Cleanup
 
@@ -76,5 +76,5 @@
 - [x] 9.3 Analyze LLM context window usage (how much context is being sent)
 - [x] 9.4 If context exceeds model limits, implement context truncation strategy
 - [x] 9.5 Optimize buildPrompt() to reduce context size without losing critical information
-- [ ] 9.6 Test response times after optimization (target: <5 seconds for typical queries)
+- [x] 9.6 Test response times after optimization (target: <5 seconds for typical queries)
 - [x] 9.7 Document any Ollama configuration changes or workarounds applied
