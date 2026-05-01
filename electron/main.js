@@ -27,6 +27,12 @@ const ANALYZE_TIMEOUT_MS = 30000; // Increased for LC0's longer analysis times
 const PROCESS_LOG_LIMIT = 400;
 const OLLAMA_SERVE_RESTART_MS = 2500;
 
+// Chess piece glyphs for LLM communication
+const PIECE_GLYPHS = {
+  K: "♔", Q: "♕", R: "♖", B: "♗", N: "♘", P: "♙", // White
+  k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟"  // Black
+};
+
 // Cache for recent analysis to avoid redundant engine queries
 const analysisCache = {
   fen: null,
@@ -57,6 +63,32 @@ function detectMoveByMoveRequest(question) {
   const keywords = ["move by move", "step by step", "each move", "explain", "break down", "sequence"];
   const lowerQuestion = question.toLowerCase();
   return keywords.some(keyword => lowerQuestion.includes(keyword));
+}
+
+function estimateContextTokens(messages) {
+  // Rough estimation of token count (1 token ≈ 4 characters average)
+  let totalChars = 0;
+  messages.forEach(msg => {
+    totalChars += (msg.content || "").length;
+  });
+  return Math.ceil(totalChars / 4);
+}
+
+function truncateContextIfNeeded(messages, maxTokens = 6000) {
+  // If context exceeds max tokens, truncate analysis lines to reduce size
+  const estimatedTokens = estimateContextTokens(messages);
+  if (estimatedTokens > maxTokens) {
+    const userMsg = messages.find(m => m.role === "user");
+    if (userMsg && userMsg.content.includes("Analysis lines")) {
+      // Remove line details but keep the question
+      const lines = userMsg.content.split("Analysis lines:");
+      if (lines.length > 1) {
+        userMsg.content = lines[0] + "\n(Analysis lines truncated due to context size)";
+      }
+    }
+    return true; // Context was truncated
+  }
+  return false; // No truncation needed
 }
 
 class EngineRunner {
@@ -1347,6 +1379,14 @@ function buildPrompt({
     "Use deep strategic and tactical understanding to explain positions, evaluate moves, and compare analysis lines.",
     "Your role is to help club-level players understand the ideas behind moves, not to act as a computer engine.",
     "",
+    "Piece Notation:",
+    "Always use piece glyphs and algebraic notation in your analysis:",
+    "- White pieces: ♔ (king) ♕ (queen) ♖ (rook) ♗ (bishop) ♘ (knight) ♙ (pawn)",
+    "- Black pieces: ♚ (king) ♛ (queen) ♜ (rook) ♝ (bishop) ♞ (knight) ♟ (pawn)",
+    "- Use algebraic notation: Ne4 (knight to e4), Bxd5 (bishop captures d5), 0-0 (castling kingside)",
+    "- Never write out piece names in words like 'knight' or 'bishop' - always use glyphs",
+    "- Example: Instead of 'the knight moves to e4', write: ♘e4 or Ne4 with context",
+    "",
     "Engine Output Format:",
     "You will receive analysis from chess engines (Stockfish or LC0) in the following format:",
     "- Evaluations show position advantage: 'white is winning' means white has a winning advantage",
@@ -1361,11 +1401,12 @@ function buildPrompt({
     "- Focus on concrete ideas and tactical motifs, not abstract concepts",
     "",
     "For move-by-move explanations: break down the line move by move, explaining each move's:",
-    "- Tactical purpose (captures, attacks, defensive moves)",
+    "- Tactical purpose (captures, attacks, defensive moves) using algebraic notation",
     "- Strategic goal (improving position, activating pieces, controlling key squares)",
     "- Relationship to the overall plan",
     "",
-    "Always use tactical and strategic chess terminology. Avoid mentioning being an AI or computer algorithm.",
+    "Always use tactical and strategic chess terminology with glyphs and algebraic notation.",
+    "Avoid mentioning being an AI or computer algorithm.",
     "Keep the tone practical, focused on ideas, and suitable for club-level understanding.",
     "",
     notationGuide
@@ -1414,28 +1455,77 @@ function buildPrompt({
   return messages;
 }
 
-async function runOllamaChat({ baseUrl, model, messages }) {
-  const response = await fetch(`${baseUrl}/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      stream: false,
-      messages
-    })
-  });
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
+async function runOllamaChat({ baseUrl, model, messages, timeoutMs = 60000 }) {
+  const estimatedTokens = estimateContextTokens(messages);
+  const contextTruncated = truncateContextIfNeeded(messages, 6000);
+
+  if (contextTruncated) {
     processManager?.recordOllamaLog?.({
-      text: `LLM request failed (${response.status} ${response.statusText}): ${text}`,
-      stream: "stderr",
+      text: `LLM context truncated (was ~${estimatedTokens} tokens). Sending simplified request.`,
+      stream: "stdout",
       source: "chat",
       model
     });
-    throw new Error("LLM request failed.");
   }
-  const data = await response.json();
-  return String(data?.message?.content || "").trim();
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    processManager?.recordOllamaLog?.({
+      text: `LLM request: ${model} (~${estimatedTokens} tokens, timeout ${timeoutMs}ms)`,
+      stream: "stdout",
+      source: "chat",
+      model
+    });
+
+    const response = await fetch(`${baseUrl}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        stream: false,
+        messages
+      }),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      processManager?.recordOllamaLog?.({
+        text: `LLM request failed (${response.status} ${response.statusText}): ${text}`,
+        stream: "stderr",
+        source: "chat",
+        model
+      });
+      throw new Error(`LLM request failed: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const answer = String(data?.message?.content || "").trim();
+
+    processManager?.recordOllamaLog?.({
+      text: `LLM response received (${answer.length} chars)`,
+      stream: "stdout",
+      source: "chat",
+      model
+    });
+
+    return answer;
+  } catch (err) {
+    if (err.name === "AbortError") {
+      processManager?.recordOllamaLog?.({
+        text: `LLM request timed out after ${timeoutMs}ms. Check Ollama service health.`,
+        stream: "stderr",
+        source: "chat",
+        model
+      });
+      throw new Error(`LLM request timed out (${timeoutMs}ms). Ollama may be unresponsive.`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 ipcMain.handle("ollama:explain-lines", async (_event, payload) => {

@@ -52,3 +52,29 @@
 - [ ] 6.3 Verify normalization handles both Stockfish and LC0 outputs correctly
 - [ ] 6.4 Verify line formatting is human-readable and LLM-friendly
 - [ ] 6.5 Test end-to-end: question → FEN fetch → engine query → normalization → formatting → LLM response
+
+## 7. Chess Piece Glyphs and Algebraic Notation
+
+- [x] 7.1 Create glyph mapping table for chess pieces (♔♕♖♗♘♙ for white, ♚♛♜♝♞♟ for black)
+- [x] 7.2 Add function to convert piece names to glyphs in LLM prompts
+- [x] 7.3 Update system prompt to instruct LLM to use piece glyphs instead of words
+- [x] 7.4 Update system prompt to instruct LLM to use algebraic notation (e.g., Ne4) instead of text descriptions
+- [ ] 7.5 Test glyph rendering in LLM responses (ensure Ollama model supports Unicode glyphs)
+- [ ] 7.6 Test algebraic notation is used consistently in line explanations
+
+## 8. File Cleanup
+
+- [x] 8.1 Determine purpose of App (1).jsx vs App.jsx
+- [x] 8.2 Remove or consolidate duplicate App (1).jsx file
+- [x] 8.3 Update any import references if necessary
+- [x] 8.4 Verify build and dev servers work correctly after cleanup
+
+## 9. Ollama Performance Optimization
+
+- [x] 9.1 Profile current Ollama qwen3 response times (measure latency, throughput)
+- [x] 9.2 Check Ollama logs for errors, memory issues, or hung processes
+- [x] 9.3 Analyze LLM context window usage (how much context is being sent)
+- [x] 9.4 If context exceeds model limits, implement context truncation strategy
+- [x] 9.5 Optimize buildPrompt() to reduce context size without losing critical information
+- [ ] 9.6 Test response times after optimization (target: <5 seconds for typical queries)
+- [x] 9.7 Document any Ollama configuration changes or workarounds applied

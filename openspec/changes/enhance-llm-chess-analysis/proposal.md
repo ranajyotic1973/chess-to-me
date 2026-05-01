@@ -9,6 +9,9 @@ The LLM currently receives raw chess engine output with minimal context, limitin
 - **Line explanation format**: Lines will include metadata (rank, score with explanation, depth) and human-readable move notation alongside UCI moves
 - **Question handler upgrade**: `askQuestion` will auto-retrieve FEN from chessboard, query selected engine for lines, and use top line for "best move" recommendations
 - **Move-by-move support**: LLM prompts will support requests to explain entire lines move-by-move or compare specific lines in detail
+- **Chess notation in prompts**: LLM will use chess piece glyphs (♔♕♖♗♘♙) instead of piece names, and algebraic notation instead of text descriptions
+- **File cleanup**: Remove duplicate App (1).jsx file to improve codebase clarity
+- **Ollama performance**: Diagnose and optimize slow/unresponsive Ollama qwen3 responses, addressing context window or other bottlenecks
 
 ## Capabilities
 
