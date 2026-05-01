@@ -1363,7 +1363,7 @@ async function runOllamaChat(params: {
   messages: Array<{ role: string; content: string }>;
   timeoutMs?: number;
 }): Promise<string> {
-  const { baseUrl, model, messages, timeoutMs = 60000 } = params;
+  const { baseUrl, model, messages, timeoutMs = 120000 } = params;
   const estimatedTokens = estimateContextTokens(messages);
   const contextTruncated = truncateContextIfNeeded(messages, 6000);
 
