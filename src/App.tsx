@@ -221,12 +221,37 @@ export default function App() {
     }
   }, []);
 
+  const warmupOllama = useCallback(async (): Promise<void> => {
+    if (!electronAPI?.askQuestion) {
+      return;
+    }
+    try {
+      // Send a simple test message to warm up Ollama on first load
+      await electronAPI.askQuestion({
+        question: "Hello",
+        fen: "",
+        lines: [],
+        language: "English",
+        model: formState.ollamaModel,
+        baseUrl: formState.ollamaBaseUrl
+      });
+    } catch {
+      // Silently fail - warming up is optional
+    }
+  }, [formState.ollamaModel, formState.ollamaBaseUrl]);
+
   useEffect(() => {
     let cancelled = false;
     const bootstrap = async () => {
       setAppLoading(true);
       try {
         await Promise.all([fetchSystemStatus(), loadEngineStatus()]);
+        // Warm up Ollama after system status is loaded
+        setTimeout(() => {
+          if (!cancelled) {
+            warmupOllama();
+          }
+        }, 500);
       } catch (err) {
         setStatusMessage("Unable to initialize the platform.");
       } finally {
@@ -239,7 +264,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [fetchSystemStatus, loadEngineStatus]);
+  }, [fetchSystemStatus, loadEngineStatus, warmupOllama]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
