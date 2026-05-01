@@ -660,7 +660,7 @@ export default function App() {
       return;
     }
     setQuestionLoading(true);
-    setStatusMessage("Sending question to LLM...");
+    setQuestionResponse(""); // Clear previous response
     try {
       const response = await electronAPI.askQuestion({
         question,
@@ -671,13 +671,14 @@ export default function App() {
         baseUrl: formState.ollamaBaseUrl
       });
       if (!response?.ok) {
-        setStatusMessage((response as any)?.error || "No response from LLM.");
+        const errorMsg = (response as any)?.error || "No response from LLM.";
+        setQuestionResponse(`⚠️ Error: ${errorMsg}`);
         return;
       }
       setQuestionResponse(response.answer || "No answer returned.");
-      setStatusMessage("LLM answered your question.");
     } catch (err) {
-      setStatusMessage("LLM question failed.");
+      const errorMessage = (err as Error)?.message || "LLM question failed.";
+      setQuestionResponse(`⚠️ Error: ${errorMessage}`);
     } finally {
       setQuestionLoading(false);
     }

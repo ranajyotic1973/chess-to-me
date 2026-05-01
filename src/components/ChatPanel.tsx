@@ -148,7 +148,7 @@ export default function ChatPanel({
               ))}
             </Stack>
           </Box>
-          {questionResponse && (
+          {(questionResponse || questionLoading) && (
             <Box
               sx={{
                 borderTop: 1,
@@ -159,13 +159,22 @@ export default function ChatPanel({
               }}
             >
               <Typography variant="subtitle2">LLM answer</Typography>
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                component="div"
-                sx={{ wordBreak: "break-word", whiteSpace: "pre-wrap" }}
-                dangerouslySetInnerHTML={{ __html: responseHtml }}
-              />
+              {questionLoading ? (
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: 2 }}>
+                  <CircularProgress size={24} />
+                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: "italic" }}>
+                    Waiting for LLM response...
+                  </Typography>
+                </Box>
+              ) : (
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  component="div"
+                  sx={{ wordBreak: "break-word", whiteSpace: "pre-wrap" }}
+                  dangerouslySetInnerHTML={{ __html: responseHtml }}
+                />
+              )}
             </Box>
           )}
         </Box>
