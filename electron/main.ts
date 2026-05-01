@@ -1284,6 +1284,23 @@ function buildPrompt(params: {
     "- Checks and checkmate: + indicates check, # indicates checkmate\n" +
     "- Promotions: =Q means promotion to queen (e.g., e8=Q)";
 
+  const toolsInfo = `
+Available Chess Analysis Tools:
+You can use these functions to verify moves and understand the position better:
+- is_move_legal(from, to): Check if a move is legal (e.g., is_move_legal("e2", "e4"))
+- get_legal_moves(): List all legal moves in the position
+- get_position_fen(): Get the current position in FEN notation
+- get_board_ascii(): Get ASCII visualization of the board
+- get_move_san(from, to): Get standard algebraic notation for a move
+- get_piece_at(square): Identify the piece on a square
+- is_check(): Check if the current side is in check
+- is_checkmate(): Check if it's checkmate
+- is_stalemate(): Check if it's stalemate
+- get_game_status(): Get game status (turn, check, game over status, etc.)
+
+When analyzing, use these tools to verify legal moves and understand the position.
+`;
+
   const defaultSystemPrompt = [
     "You are a chess grandmaster analyzing positions with expert-level insight.",
     "Use deep strategic and tactical understanding to explain positions, evaluate moves, and compare analysis lines.",
@@ -1318,6 +1335,8 @@ function buildPrompt(params: {
     "Always use tactical and strategic chess terminology with glyphs and algebraic notation.",
     "Avoid mentioning being an AI or computer algorithm.",
     "Keep the tone practical, focused on ideas, and suitable for club-level understanding.",
+    "",
+    toolsInfo,
     "",
     notationGuide
   ].join("\n");
