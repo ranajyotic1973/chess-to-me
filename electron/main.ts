@@ -762,6 +762,42 @@ async function verifyEnginePath(enginePath: string, engineName = "stockfish"): P
   });
 }
 
+function searchDirectoryRecursive(dirPath: string, engineName: string, isBinary: boolean, maxDepth = 3): string[] {
+  const results: string[] = [];
+  const execName = process.platform === "win32"
+    ? (isBinary ? "stockfish.exe" : "lc0.exe")
+    : (isBinary ? "stockfish" : "lc0");
+  const binaryPattern = isBinary
+    ? /^stockfish([-_].+)?(\.exe)?$/i
+    : /^lc0([-_].+)?(\.exe)?$/i;
+
+  const search = (dir: string, depth: number) => {
+    if (depth > maxDepth || !fs.existsSync(dir)) return;
+    try {
+      const items = fs.readdirSync(dir, { withFileTypes: true });
+      for (const item of items) {
+        try {
+          if (item.isFile() && binaryPattern.test(item.name)) {
+            const fullPath = path.join(dir, item.name);
+            if (isExecutableCandidate(fullPath)) {
+              results.push(fullPath);
+            }
+          } else if (item.isDirectory() && depth < maxDepth) {
+            search(path.join(dir, item.name), depth + 1);
+          }
+        } catch {
+          // Skip items we can't access
+        }
+      }
+    } catch (err) {
+      console.warn(`[${engineName}] Cannot read directory ${dir}:`, (err as Error).message);
+    }
+  };
+
+  search(dirPath, 0);
+  return results;
+}
+
 function engineCandidates(engineName: string): string[] {
   const candidates: string[] = [];
   const settingKey = `${engineName}Path`;
@@ -788,8 +824,8 @@ function engineCandidates(engineName: string): string[] {
 
   const osDirs = process.platform === "win32"
     ? [
-        path.join("C:\\", "Program Files", engineName.charAt(0).toUpperCase() + engineName.slice(1)),
-        path.join("C:\\", "Program Files (x86)", engineName.charAt(0).toUpperCase() + engineName.slice(1))
+        path.join("C:\\", "Program Files"),
+        path.join("C:\\", "Program Files (x86)")
       ]
     : [path.join("/usr/local/bin"), path.join("/opt/homebrew/bin"), path.join("/usr/bin")];
 
@@ -862,11 +898,20 @@ function engineCandidates(engineName: string): string[] {
     return binaryPattern.test(path.basename(p));
   });
 
+  // Add recursive search results for Program Files
+  const recursiveSearchCandidates = process.platform === "win32"
+    ? [
+        ...searchDirectoryRecursive(path.join("C:\\", "Program Files"), engineName, isBinary),
+        ...searchDirectoryRecursive(path.join("C:\\", "Program Files (x86)"), engineName, isBinary)
+      ]
+    : [];
+
   candidates.push(
     ...bundledCandidates,
     ...cwdCandidates,
     ...osCandidates,
     ...patternCandidates,
+    ...recursiveSearchCandidates,
     ...commandPathCandidates()
   );
 
