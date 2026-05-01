@@ -710,6 +710,8 @@ async function verifyEnginePath(enginePath: string, engineName = "stockfish"): P
   return new Promise((resolve) => {
     let buffer = "";
     let done = false;
+    let hasOutput = false;
+
     const finalize = (ok: boolean) => {
       if (done) return;
       done = true;
@@ -719,22 +721,44 @@ async function verifyEnginePath(enginePath: string, engineName = "stockfish"): P
       resolve(ok);
     };
 
-    probe.on("error", () => finalize(false));
-    probe.on("exit", () => finalize(false));
+    probe.on("error", (err) => {
+      console.error(`Engine verification error for ${enginePath}:`, err.message);
+      finalize(false);
+    });
+
+    probe.on("exit", (code) => {
+      if (!hasOutput) {
+        console.error(`Engine ${enginePath} exited without output (code: ${code})`);
+      }
+      finalize(false);
+    });
+
     probe.stdout?.on("data", (chunk: Buffer) => {
+      hasOutput = true;
       buffer += chunk.toString();
       if (buffer.includes("uciok")) {
         finalize(true);
       }
     });
 
+    probe.stderr?.on("data", (chunk: Buffer) => {
+      console.error(`Engine stderr (${enginePath}):`, chunk.toString());
+    });
+
     try {
       probe.stdin.write("uci\n");
-    } catch {
+      probe.stdin.end();
+    } catch (err) {
+      console.error(`Failed to write to engine ${enginePath}:`, err);
       finalize(false);
     }
 
-    setTimeout(() => finalize(false), ENGINE_VERIFY_TIMEOUT_MS);
+    setTimeout(() => {
+      if (!done) {
+        console.warn(`Engine verification timeout for ${enginePath}`);
+        finalize(false);
+      }
+    }, ENGINE_VERIFY_TIMEOUT_MS);
   });
 }
 
@@ -851,15 +875,19 @@ function engineCandidates(engineName: string): string[] {
 
 async function findWorkingEngine(engineName: string, persist = false): Promise<{ path: string }> {
   const candidates = engineCandidates(engineName);
+  console.log(`[${engineName}] Checking ${candidates.length} candidates:`, candidates.slice(0, 5).join(", "), candidates.length > 5 ? `... and ${candidates.length - 5} more` : "");
+
   for (const candidate of candidates) {
     const ok = await verifyEnginePath(candidate, engineName);
     if (ok) {
+      console.log(`[${engineName}] Found working engine at ${candidate}`);
       if (persist) {
         settings.set(`${engineName}Path`, candidate);
       }
       return { path: candidate };
     }
   }
+  console.log(`[${engineName}] No working engine found in any candidates`);
   return { path: "" };
 }
 
@@ -996,13 +1024,17 @@ ipcMain.handle("app:open-external", async (_event, url: string) => {
 });
 
 ipcMain.handle("app:system-check", async () => {
+  console.log("[system-check] Starting system check...");
   const [ollama, stockfish, lc0] = await Promise.all([
     checkOllamaQwen3(),
     findWorkingEngine("stockfish", false),
     findWorkingEngine("lc0", false)
   ]);
+  console.log("[system-check] Stockfish result:", stockfish.path ? `found at ${stockfish.path}` : "not found");
+  console.log("[system-check] LC0 result:", lc0.path ? `found at ${lc0.path}` : "not found");
+
   const processState = processManager.getOllamaState();
-  return {
+  const result = {
     platform: process.platform,
     ollamaRunning: processState.serveRunning || ollama.ollamaRunning,
     qwen3Installed: ollama.qwen3Installed,
@@ -1015,6 +1047,8 @@ ipcMain.handle("app:system-check", async () => {
     ollamaRunActive: processState.runActive,
     lastModelError: processState.lastModelError
   };
+  console.log("[system-check] Result:", { stockfishFound: result.stockfishFound, lc0Found: result.lc0Found });
+  return result;
 });
 
 ipcMain.handle("setEnginePath", async (_event, { engine, path: enginePath }) => {
