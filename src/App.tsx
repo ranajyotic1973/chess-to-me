@@ -872,35 +872,50 @@ export default function App() {
                     flex: 1,
                     minHeight: 0,
                     overflowY: "auto",
-                    border: 1,
-                    borderColor: "divider",
-                    borderRadius: 2,
+                    overflowX: "hidden",
+                    border: "1px solid #333",
+                    borderRadius: 0.5,
                     px: 2,
                     py: 1,
                     fontFamily: "monospace",
                     fontSize: "0.75rem",
-                    backgroundColor: "background.default",
-                    display: activeLogTab === 0 ? "block" : "none"
+                    backgroundColor: "#000",
+                    color: "#fff",
+                    display: activeLogTab === 0 ? "block" : "none",
+                    scrollbarWidth: "thin",
+                    scrollbarColor: "#666 #1a1a1a",
+                    "&::-webkit-scrollbar": {
+                      width: "8px"
+                    },
+                    "&::-webkit-scrollbar-track": {
+                      backgroundColor: "#1a1a1a"
+                    },
+                    "&::-webkit-scrollbar-thumb": {
+                      backgroundColor: "#666",
+                      borderRadius: "4px",
+                      "&:hover": {
+                        backgroundColor: "#888"
+                      }
+                    }
                   }}
                 >
                   {logLoading ? (
                     <Stack direction="row" alignItems="center" spacing={1}>
                       <CircularProgress size={14} />
-                      <Typography variant="body2">Loading Stockfish logs…</Typography>
+                      <Typography variant="body2" sx={{ color: "#fff" }}>Loading Stockfish logs…</Typography>
                     </Stack>
                   ) : logEntries.stockfish.length ? (
                     logEntries.stockfish.map((entry) => (
                       <Typography
                         key={`stockfish-log-${entry.id}`}
                         variant="body2"
-                        color="text.secondary"
-                        sx={{ whiteSpace: "pre-wrap" }}
+                        sx={{ whiteSpace: "pre-wrap", color: "#fff", mb: 0.5 }}
                       >
                         [{entry.stream?.toUpperCase() || "OUT"}] {entry.text}
                       </Typography>
                     ))
                   ) : (
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" sx={{ color: "#888" }}>
                       Stockfish logs will appear here.
                     </Typography>
                   )}
@@ -913,35 +928,50 @@ export default function App() {
                     flex: 1,
                     minHeight: 0,
                     overflowY: "auto",
-                    border: 1,
-                    borderColor: "divider",
-                    borderRadius: 2,
+                    overflowX: "hidden",
+                    border: "1px solid #333",
+                    borderRadius: 0.5,
                     px: 2,
                     py: 1,
                     fontFamily: "monospace",
                     fontSize: "0.75rem",
-                    backgroundColor: "background.default",
-                    display: activeLogTab === 1 ? "block" : "none"
+                    backgroundColor: "#000",
+                    color: "#fff",
+                    display: activeLogTab === 1 ? "block" : "none",
+                    scrollbarWidth: "thin",
+                    scrollbarColor: "#666 #1a1a1a",
+                    "&::-webkit-scrollbar": {
+                      width: "8px"
+                    },
+                    "&::-webkit-scrollbar-track": {
+                      backgroundColor: "#1a1a1a"
+                    },
+                    "&::-webkit-scrollbar-thumb": {
+                      backgroundColor: "#666",
+                      borderRadius: "4px",
+                      "&:hover": {
+                        backgroundColor: "#888"
+                      }
+                    }
                   }}
                 >
                   {logLoading ? (
                     <Stack direction="row" alignItems="center" spacing={1}>
                       <CircularProgress size={14} />
-                      <Typography variant="body2">Loading Ollama logs…</Typography>
+                      <Typography variant="body2" sx={{ color: "#fff" }}>Loading Ollama logs…</Typography>
                     </Stack>
                   ) : logEntries.ollama.length ? (
                     logEntries.ollama.map((entry) => (
                       <Typography
                         key={`ollama-log-${entry.id}`}
                         variant="body2"
-                        color="text.secondary"
-                        sx={{ whiteSpace: "pre-wrap" }}
+                        sx={{ whiteSpace: "pre-wrap", color: "#fff", mb: 0.5 }}
                       >
                         [{entry.stream?.toUpperCase() || "OUT"}] {entry.text}
                       </Typography>
                     ))
                   ) : (
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" sx={{ color: "#888" }}>
                       Ollama logs will appear here.
                     </Typography>
                   )}
