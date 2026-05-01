@@ -18,6 +18,6 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false
   },
-  "include": ["electron/**/*.ts"],
+  "include": ["electron/main.ts", "electron/preload.ts"],
   "exclude": ["node_modules", "electron/dist"]
 }

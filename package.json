@@ -9,7 +9,7 @@
     "dev:renderer": "cross-env BROWSER=none vite --strictPort --port 5173 --host 127.0.0.1",
     "dev:electron": "npm run build:electron && wait-on tcp:5173 && cross-env ELECTRON_START_URL=http://127.0.0.1:5173 electron .",
     "build:renderer": "vite build",
-    "build:electron": "tsc -p tsconfig.electron.json",
+    "build:electron": "tsc -p tsconfig.electron.json && move electron\\dist\\electron\\*.js electron\\dist\\ && move electron\\dist\\electron\\*.js.map electron\\dist\\ && move electron\\dist\\electron\\*.d.ts electron\\dist\\ && move electron\\dist\\electron\\*.d.ts.map electron\\dist\\ && rmdir electron\\dist\\electron",
     "build": "npm run build:renderer && npm run build:electron",
     "start": "electron .",
     "test": "jest",

@@ -1012,7 +1012,7 @@ async function createWindow(): Promise<void> {
     width: 1300,
     height: 840,
     webPreferences: {
-      preload: path.join(__dirname, "preload.ts"),
+      preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false
     }
