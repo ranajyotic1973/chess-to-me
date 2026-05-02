@@ -35,6 +35,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     const { userMessage, question, ...rest } = payload || {};
     return ipcRenderer.invoke("ollama:ask-question", { userMessage, question, ...rest }) as Promise<IpcResponses["askQuestion"]>;
   },
+  getAvailableModels: (payload: IpcPayloads["getAvailableModels"]) =>
+    ipcRenderer.invoke("getAvailableModels", payload) as Promise<IpcResponses["getAvailableModels"]>,
 
   // Logging and state
   getProcessLogs: () =>

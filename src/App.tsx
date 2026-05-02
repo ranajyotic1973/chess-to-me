@@ -50,7 +50,9 @@ const DEFAULT_FORM: AppSettings = {
   analysisDepth: 16,
   explainLanguage: "English",
   ollamaModel: "qwen3:8b",
-  ollamaBaseUrl: "http://localhost:11434/api"
+  ollamaBaseUrl: "http://localhost:11434/api",
+  llmProvider: "ollama",
+  llmApiKey: ""
 };
 
 const normalizeModelName = (value: string | null | undefined): string => String(value || "").trim();
@@ -92,6 +94,7 @@ export default function App() {
     return window.localStorage.getItem(SETTINGS_FLAG) === "true" ? "analysis" : "settings";
   });
   const [formState, setFormState] = useState<AppSettings>(DEFAULT_FORM);
+  const [llmApiKeyLength, setLlmApiKeyLength] = useState<number>(0);
   const [engineStatus, setEngineStatus] = useState<EngineStatus | null>(null);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>("");
@@ -184,6 +187,7 @@ export default function App() {
     try {
       const status = await electronAPI.getEngineStatus();
       setEngineStatus(status);
+      setLlmApiKeyLength(status.settings?.llmApiKeyLength || 0);
       setFormState((prev) => ({
         ...prev,
         stockfishPath: status.stockfishPath || prev.stockfishPath,
@@ -192,7 +196,9 @@ export default function App() {
         analysisDepth: Number(status.settings?.analysisDepth) || prev.analysisDepth,
         explainLanguage: status.settings?.explainLanguage || prev.explainLanguage,
         ollamaModel: status.settings?.ollamaModel || prev.ollamaModel,
-        ollamaBaseUrl: status.settings?.ollamaBaseUrl || prev.ollamaBaseUrl
+        ollamaBaseUrl: status.settings?.ollamaBaseUrl || prev.ollamaBaseUrl,
+        llmProvider: (status.settings?.llmProvider as any) || prev.llmProvider,
+        llmApiKey: ""
       }));
       userSelectedModelRef.current = Boolean(status.settings?.ollamaModel);
     } catch (err) {
@@ -299,6 +305,11 @@ export default function App() {
     });
   }, [analysisEntries]);
 
+  const prevLogCountRef = useRef<{ stockfish: number; ollama: number }>({
+    stockfish: 0,
+    ollama: 0
+  });
+
   useEffect(() => {
     if (analysisMode !== "logs") {
       return undefined;
@@ -313,10 +324,20 @@ export default function App() {
       return;
     }
     const bucket = activeLogTab === 0 ? "stockfish" : "ollama";
-    const container = logContainerRefs.current[bucket];
-    if (container) {
-      container.scrollTop = container.scrollHeight;
+    const currentCount = logEntries[bucket].length;
+    const prevCount = prevLogCountRef.current[bucket];
+
+    // Only scroll if new logs were added
+    if (currentCount > prevCount) {
+      const container = logContainerRefs.current[bucket];
+      if (container) {
+        setTimeout(() => {
+          container.scrollTop = container.scrollHeight;
+        }, 0);
+      }
     }
+
+    prevLogCountRef.current[bucket] = currentCount;
   }, [analysisMode, activeLogTab, logEntries]);
 
   const fetchExplanations = useCallback(
@@ -330,13 +351,15 @@ export default function App() {
           lines,
           language: formState.explainLanguage,
           model: formState.ollamaModel,
-          baseUrl: formState.ollamaBaseUrl
+          baseUrl: formState.ollamaBaseUrl,
+          llmProvider: formState.llmProvider,
+          llmApiKey: formState.llmApiKey
         });
       } catch (err) {
         // Handle error silently
       }
     },
-    [formState.explainLanguage, formState.ollamaModel, formState.ollamaBaseUrl]
+    [formState.explainLanguage, formState.ollamaModel, formState.ollamaBaseUrl, formState.llmProvider, formState.llmApiKey]
   );
 
   const handleAnalysisSuccess = useCallback(
@@ -415,7 +438,8 @@ export default function App() {
         userSelectedModelRef.current = true;
       }
       setFormState((prev) => ({ ...prev, [key]: value }));
-      if (key === "ollamaModel" && electronAPI?.setOllamaModel) {
+      // Only call setOllamaModel for Ollama provider
+      if (key === "ollamaModel" && formState.llmProvider === "ollama" && electronAPI?.setOllamaModel) {
         const selected = String(value) || DEFAULT_FORM.ollamaModel;
         setStatusMessage(`Switching to ${selected}...`);
         electronAPI
@@ -428,7 +452,7 @@ export default function App() {
           });
       }
     },
-    []
+    [formState.llmProvider]
   );
 
   const handleDetect = useCallback(async (): Promise<void> => {
@@ -503,7 +527,9 @@ export default function App() {
         analysisDepth: Number(formState.analysisDepth),
         explainLanguage: formState.explainLanguage,
         ollamaModel: formState.ollamaModel,
-        ollamaBaseUrl: formState.ollamaBaseUrl
+        ollamaBaseUrl: formState.ollamaBaseUrl,
+        llmProvider: formState.llmProvider,
+        llmApiKey: formState.llmApiKey
       });
       if (!configResult?.ok) {
         setStatusMessage("Failed to persist application settings.");
@@ -585,11 +611,13 @@ export default function App() {
           lines: analysisLines,
           language: formState.explainLanguage,
           model: formState.ollamaModel,
-          baseUrl: formState.ollamaBaseUrl
+          baseUrl: formState.ollamaBaseUrl,
+          llmProvider: formState.llmProvider,
+          llmApiKey: formState.llmApiKey
         });
         if (!response?.ok || !response.answer) {
           const fallback = (response as any)?.error || "LLM did not return any analysis.";
-          setLineAnalysisError(`${fallback} (ensure Ollama is reachable at ${formState.ollamaBaseUrl})`);
+          setLineAnalysisError(fallback);
         } else {
           setLineAnalysisText(response.answer);
         }
@@ -599,7 +627,7 @@ export default function App() {
         setLineAnalysisLoading(false);
       }
     },
-    [analysisLines, currentFen, formState.explainLanguage, formState.ollamaBaseUrl, formState.ollamaModel]
+    [analysisLines, currentFen, formState.explainLanguage, formState.ollamaBaseUrl, formState.ollamaModel, formState.llmProvider, formState.llmApiKey]
   );
 
   const handleAnalysisIconClick = useCallback((): void => {
@@ -693,7 +721,9 @@ export default function App() {
         lines: analysisLines,
         language: formState.explainLanguage,
         model: formState.ollamaModel,
-        baseUrl: formState.ollamaBaseUrl
+        baseUrl: formState.ollamaBaseUrl,
+        llmProvider: formState.llmProvider,
+        llmApiKey: formState.llmApiKey
       });
       if (!response?.ok) {
         const errorMsg = (response as any)?.error || "No response from LLM.";
@@ -713,6 +743,8 @@ export default function App() {
     formState.explainLanguage,
     formState.ollamaBaseUrl,
     formState.ollamaModel,
+    formState.llmProvider,
+    formState.llmApiKey,
     questionText
   ]);
 
@@ -801,6 +833,7 @@ export default function App() {
               availableEngines={availableEngines}
               selectedEngine={formState.selectedEngine}
               onEngineChange={handleEngineChange}
+              llmApiKeyLength={llmApiKeyLength}
               sx={{ width: "100%", height: "100%" }}
             />
           </Container>
@@ -827,11 +860,13 @@ export default function App() {
                 borderRadius: 2,
                 backgroundColor: "background.paper",
                 boxShadow: 3,
-                p: 2,
-                gap: 2
+                pt: 2,
+                px: 2,
+                gap: 0.5,
+                overflow: "hidden"
               }}
             >
-              <Stack direction="row" alignItems="center" spacing={1}>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ flexShrink: 0 }}>
                 <IconButton
                   size="small"
                   onClick={() => setAnalysisMode("main")}
@@ -845,13 +880,13 @@ export default function App() {
                 value={activeLogTab}
                 onChange={(_, value) => setActiveLogTab(value)}
                 aria-label="engine log tabs"
-                sx={{ borderBottom: 1, borderColor: "divider" }}
+                sx={{ borderBottom: 1, borderColor: "divider", flexShrink: 0, mx: -2 }}
               >
-                <Tab label="Stockfish" />
+                <Tab label={`${formState.selectedEngine === "lc0" ? "LC0" : "Stockfish"}`} />
                 <Tab label="Ollama" />
               </Tabs>
               {analysisLogError && (
-                <Typography variant="body2" color="error" sx={{ mt: 1 }}>
+                <Typography variant="body2" color="error" sx={{ flexShrink: 0, px: 2 }}>
                   {analysisLogError}
                 </Typography>
               )}
@@ -861,7 +896,10 @@ export default function App() {
                   minHeight: 0,
                   display: "flex",
                   flexDirection: "column",
-                  gap: 1
+                  gap: 0,
+                  overflow: "hidden",
+                  px: 2,
+                  pb: 2
                 }}
               >
                 <Box
@@ -871,30 +909,37 @@ export default function App() {
                   sx={{
                     flex: 1,
                     minHeight: 0,
-                    overflowY: "auto",
+                    overflowY: "scroll",
                     overflowX: "hidden",
                     border: "1px solid #333",
                     borderRadius: 0.5,
                     px: 2,
                     py: 1,
-                    fontFamily: "monospace",
-                    fontSize: "0.75rem",
+                    fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
+                    fontSize: "0.8rem",
+                    lineHeight: 1.4,
                     backgroundColor: "#000",
                     color: "#fff",
                     display: activeLogTab === 0 ? "block" : "none",
-                    scrollbarWidth: "thin",
-                    scrollbarColor: "#666 #1a1a1a",
+                    scrollbarWidth: "auto",
+                    scrollbarColor: "#999 #1a1a1a",
                     "&::-webkit-scrollbar": {
-                      width: "8px"
+                      width: "14px"
                     },
                     "&::-webkit-scrollbar-track": {
                       backgroundColor: "#1a1a1a"
                     },
                     "&::-webkit-scrollbar-thumb": {
-                      backgroundColor: "#666",
-                      borderRadius: "4px",
+                      backgroundColor: "#555",
+                      borderRadius: "7px",
+                      backgroundClip: "padding-box",
+                      border: "3px solid #1a1a1a",
+                      minHeight: "40px",
                       "&:hover": {
-                        backgroundColor: "#888"
+                        backgroundColor: "#777"
+                      },
+                      "&:active": {
+                        backgroundColor: "#999"
                       }
                     }
                   }}
@@ -927,30 +972,37 @@ export default function App() {
                   sx={{
                     flex: 1,
                     minHeight: 0,
-                    overflowY: "auto",
+                    overflowY: "scroll",
                     overflowX: "hidden",
                     border: "1px solid #333",
                     borderRadius: 0.5,
                     px: 2,
                     py: 1,
-                    fontFamily: "monospace",
-                    fontSize: "0.75rem",
+                    fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
+                    fontSize: "0.8rem",
+                    lineHeight: 1.4,
                     backgroundColor: "#000",
                     color: "#fff",
                     display: activeLogTab === 1 ? "block" : "none",
-                    scrollbarWidth: "thin",
-                    scrollbarColor: "#666 #1a1a1a",
+                    scrollbarWidth: "auto",
+                    scrollbarColor: "#999 #1a1a1a",
                     "&::-webkit-scrollbar": {
-                      width: "8px"
+                      width: "14px"
                     },
                     "&::-webkit-scrollbar-track": {
                       backgroundColor: "#1a1a1a"
                     },
                     "&::-webkit-scrollbar-thumb": {
-                      backgroundColor: "#666",
-                      borderRadius: "4px",
+                      backgroundColor: "#555",
+                      borderRadius: "7px",
+                      backgroundClip: "padding-box",
+                      border: "3px solid #1a1a1a",
+                      minHeight: "40px",
                       "&:hover": {
-                        backgroundColor: "#888"
+                        backgroundColor: "#777"
+                      },
+                      "&:active": {
+                        backgroundColor: "#999"
                       }
                     }
                   }}

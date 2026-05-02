@@ -72,6 +72,8 @@ export interface AppSettings {
   explainLanguage: string;
   ollamaModel: string;
   ollamaBaseUrl: string;
+  llmProvider: "ollama" | "openai" | "anthropic" | "gemini" | "grok";
+  llmApiKey: string;
 }
 
 export type FormState = AppSettings;
@@ -96,6 +98,8 @@ export interface EngineStatus {
     explainLanguage: string;
     ollamaModel: string;
     ollamaBaseUrl: string;
+    llmProvider: "ollama" | "openai" | "anthropic" | "gemini" | "grok";
+    llmApiKeyLength: number;
   };
 }
 
@@ -164,6 +168,8 @@ export interface IpcPayloads {
     language?: string;
     model?: string;
     baseUrl?: string;
+    llmProvider?: "ollama" | "openai" | "anthropic" | "gemini" | "grok";
+    llmApiKey?: string;
   };
   askQuestion: {
     question?: string;
@@ -177,8 +183,15 @@ export interface IpcPayloads {
     engine?: string;
     depth?: number;
     systemPrompt?: string;
+    llmProvider?: "ollama" | "openai" | "anthropic" | "gemini" | "grok";
+    llmApiKey?: string;
   };
   setOllamaModel: string;
+  getAvailableModels: {
+    provider: "ollama" | "openai" | "anthropic" | "gemini" | "grok";
+    apiKey?: string;
+    baseUrl?: string;
+  };
 }
 
 export interface IpcResponses {
@@ -194,6 +207,7 @@ export interface IpcResponses {
   setOllamaModel: { ok: boolean; activeModel?: string; error?: string };
   openExternalUrl: { ok: boolean };
   getSystemStatus: SystemStatus;
+  getAvailableModels: { ok: boolean; models?: string[]; error?: string };
 }
 
 // ============================================================================
@@ -246,6 +260,7 @@ export interface SettingsPanelProps {
   availableEngines?: EngineInfo[];
   selectedEngine?: string;
   onEngineChange?: (engineName: string) => void;
+  llmApiKeyLength?: number;
 }
 
 // ============================================================================
@@ -287,6 +302,8 @@ export interface ElectronAPI {
     language?: string;
     model?: string;
     baseUrl?: string;
+    llmProvider?: "ollama" | "openai" | "anthropic" | "gemini" | "grok";
+    llmApiKey?: string;
   }): Promise<{ ok: true; explanations: Array<{ rank: number; text: string }> } | { ok: false; error: string }>;
 
   askQuestion(payload?: {
@@ -301,11 +318,20 @@ export interface ElectronAPI {
     engine?: string;
     depth?: number;
     systemPrompt?: string;
+    llmProvider?: "ollama" | "openai" | "anthropic" | "gemini" | "grok";
+    llmApiKey?: string;
   }): Promise<{ ok: true; answer: string; linesUsed: number } | { ok: false; error: string }>;
 
   // Logging
   getProcessLogs(): Promise<ProcessLogs>;
   setOllamaModel(model: string): Promise<{ ok: true; activeModel: string } | { ok: false; error: string }>;
+
+  // LLM Model Management
+  getAvailableModels(payload: {
+    provider: "ollama" | "openai" | "anthropic" | "gemini" | "grok";
+    apiKey?: string;
+    baseUrl?: string;
+  }): Promise<{ ok: true; models: string[] } | { ok: false; error: string }>;
 
   // System
   openExternalUrl(url: string): Promise<{ ok: boolean }>;

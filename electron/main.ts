@@ -10,6 +10,29 @@ const Store = ElectronStore as any;
 
 const DEFAULT_OLLAMA_MODEL = "qwen3:8b";
 
+const PROVIDER_ENDPOINTS = {
+  ollama: "http://localhost:11434/api",
+  openai: "https://api.openai.com/v1",
+  grok: "https://api.x.ai/v1",
+  anthropic: "https://api.anthropic.com",
+  gemini: "https://generativelanguage.googleapis.com/v1beta"
+};
+
+const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
+  ollama: "qwen3:8b",
+  openai: "gpt-4o",
+  grok: "grok-3",
+  anthropic: "claude-sonnet-4-6",
+  gemini: "gemini-2.0-flash"
+};
+
+const PROVIDER_DOCS: Record<string, string> = {
+  openai: "https://platform.openai.com/api-keys",
+  grok: "https://console.x.ai",
+  anthropic: "https://console.anthropic.com",
+  gemini: "https://aistudio.google.com/app/apikey"
+};
+
 const settings = new Store({
   name: "settings",
   defaults: {
@@ -19,7 +42,9 @@ const settings = new Store({
     analysisDepth: 16,
     explainLanguage: "English",
     ollamaModel: DEFAULT_OLLAMA_MODEL,
-    ollamaBaseUrl: "http://localhost:11434/api"
+    ollamaBaseUrl: "http://localhost:11434/api",
+    llmProvider: "ollama",
+    llmApiKey: ""
   }
 });
 
@@ -1112,6 +1137,7 @@ ipcMain.handle("getEngineStatus", async () => {
   const lc0Path = settings.get("lc0Path") || "";
   const stockfishValid = stockfishPath ? await verifyEnginePath(stockfishPath, "stockfish") : false;
   const lc0Valid = lc0Path ? await verifyEnginePath(lc0Path, "lc0") : false;
+  const llmApiKey = settings.get("llmApiKey") || "";
 
   return {
     selectedEngine,
@@ -1122,7 +1148,9 @@ ipcMain.handle("getEngineStatus", async () => {
       analysisDepth: Number(settings.get("analysisDepth")) || 16,
       explainLanguage: settings.get("explainLanguage") || "English",
       ollamaModel: settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL,
-      ollamaBaseUrl: settings.get("ollamaBaseUrl") || "http://localhost:11434/api"
+      ollamaBaseUrl: settings.get("ollamaBaseUrl") || "http://localhost:11434/api",
+      llmProvider: settings.get("llmProvider") || "ollama",
+      llmApiKeyLength: llmApiKey.length
     }
   };
 });
@@ -1142,6 +1170,22 @@ ipcMain.handle("app:update-settings", async (_event, payload) => {
     settings.set("lc0Path", payload.lc0Path);
   }
 
+  // Handle LLM provider and API key
+  if (payload?.llmProvider) {
+    settings.set("llmProvider", payload.llmProvider);
+  }
+
+  // Handle API key with mask detection
+  if (payload?.llmApiKey !== undefined && payload.llmApiKey !== "") {
+    const storedKey = settings.get("llmApiKey") || "";
+    const isMask = payload.llmApiKey === "•".repeat(storedKey.length);
+    if (!isMask) {
+      // Real API key provided, update it
+      settings.set("llmApiKey", payload.llmApiKey);
+    }
+    // If mask, don't update (key unchanged)
+  }
+
   try {
     await processManager.setActiveModel(settings.get("ollamaModel"));
   } catch {
@@ -1154,7 +1198,9 @@ ipcMain.handle("app:update-settings", async (_event, payload) => {
       analysisDepth: nextDepth,
       explainLanguage: settings.get("explainLanguage"),
       ollamaModel: settings.get("ollamaModel"),
-      ollamaBaseUrl: settings.get("ollamaBaseUrl")
+      ollamaBaseUrl: settings.get("ollamaBaseUrl"),
+      llmProvider: settings.get("llmProvider"),
+      llmApiKeyLength: (settings.get("llmApiKey") || "").length
     }
   };
 });
@@ -1170,6 +1216,83 @@ ipcMain.handle("process:set-model", async (_event, model) => {
   } catch (err) {
     return { ok: false, error: (err as Error)?.message || "Failed to start Ollama model." };
   }
+});
+
+ipcMain.handle("getAvailableModels", async (_event, payload) => {
+  const { provider, apiKey, baseUrl } = payload || {};
+
+  if (provider === "ollama") {
+    try {
+      const ollamaStatus = await checkOllamaQwen3();
+      return { ok: true, models: ollamaStatus.models };
+    } catch (err) {
+      return { ok: false, error: "Unable to fetch Ollama models." };
+    }
+  }
+
+  if (provider === "openai") {
+    if (!apiKey) {
+      return { ok: false, error: "API key is required for OpenAI." };
+    }
+    try {
+      const response = await fetch("https://api.openai.com/v1/models", {
+        headers: { Authorization: `Bearer ${apiKey}` }
+      });
+      if (!response.ok) {
+        return { ok: false, error: `OpenAI API error: ${response.statusText}` };
+      }
+      const data = await response.json() as any;
+      const models = (data.data || [])
+        .map((m: any) => m.id)
+        .filter((id: string) => id.includes("gpt")) // Only show GPT models
+        .sort()
+        .reverse(); // Newest first
+      return { ok: true, models };
+    } catch (err) {
+      return { ok: false, error: "Failed to fetch OpenAI models." };
+    }
+  }
+
+  if (provider === "grok") {
+    if (!apiKey) {
+      return { ok: false, error: "API key is required for Grok." };
+    }
+    try {
+      const response = await fetch("https://api.x.ai/v1/models", {
+        headers: { Authorization: `Bearer ${apiKey}` }
+      });
+      if (!response.ok) {
+        return { ok: false, error: `Grok API error: ${response.statusText}` };
+      }
+      const data = await response.json() as any;
+      const models = (data.data || [])
+        .map((m: any) => m.id)
+        .filter((id: string) => id.includes("grok")) // Only show grok models
+        .sort()
+        .reverse(); // Newest first
+      return { ok: true, models };
+    } catch (err) {
+      return { ok: false, error: "Failed to fetch Grok models." };
+    }
+  }
+
+  if (provider === "anthropic") {
+    if (!apiKey) {
+      return { ok: false, error: "API key is required for Anthropic." };
+    }
+    // Anthropic doesn't provide a model listing API, return known models
+    return { ok: true, models: ["claude-opus-4-1", "claude-sonnet-4-6", "claude-haiku-4-5"] };
+  }
+
+  if (provider === "gemini") {
+    if (!apiKey) {
+      return { ok: false, error: "API key is required for Gemini." };
+    }
+    // Gemini doesn't provide a model listing API, return known models
+    return { ok: true, models: ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"] };
+  }
+
+  return { ok: false, error: `Unknown provider: ${provider}` };
 });
 
 async function performAnalysis(engine: string, fen: string, depth?: number, multiPv?: number) {
@@ -1344,6 +1467,21 @@ When analyzing, use these tools to verify legal moves and understand the positio
   const systemContent = systemPrompt || `${defaultSystemPrompt}\nLanguage: ${language}`;
   const messages: Array<{ role: string; content: string }> = [{ role: "system", content: systemContent }];
 
+  // Add chess engine analysis as an assistant message if lines are available
+  if (lines.length > 0) {
+    const engineAnalysis = lines
+      .map((l: any) => {
+        const evaluation = normalizeEvaluation(l.score);
+        const lineNum = l.rank || "?";
+        const pv = l.pv || l.line || "";
+        return `Line ${lineNum}: ${evaluation.description}${pv ? ` (${pv})` : ""}`;
+      })
+      .join("\n");
+
+    const assistantContent = `Chess Engine Analysis:\n${engineAnalysis}`;
+    messages.push({ role: "assistant", content: assistantContent });
+  }
+
   let userContent = "";
 
   if (userMessage) {
@@ -1360,11 +1498,6 @@ When analyzing, use these tools to verify legal moves and understand the positio
       `Position FEN: ${fen || "unknown"}`
     ];
 
-    if (lines.length) {
-      context.push("Analysis lines:");
-      context.push(lines.map((l: any) => `Line ${l.rank}: ${normalizeEvaluation(l.score).description}`).join("\n"));
-    }
-
     if (question) {
       context.push(`Player question: ${question}`);
     }
@@ -1376,13 +1509,15 @@ When analyzing, use these tools to verify legal moves and understand the positio
   return messages;
 }
 
-async function runOllamaChat(params: {
+async function runLlmChat(params: {
+  provider: string;
   baseUrl: string;
   model: string;
+  apiKey?: string;
   messages: Array<{ role: string; content: string }>;
   timeoutMs?: number;
 }): Promise<string> {
-  const { baseUrl, model, messages, timeoutMs = 120000 } = params;
+  const { provider, baseUrl, model, apiKey, messages, timeoutMs = 120000 } = params;
   const estimatedTokens = estimateContextTokens(messages);
   const contextTruncated = truncateContextIfNeeded(messages, 6000);
 
@@ -1400,54 +1535,32 @@ async function runOllamaChat(params: {
 
   try {
     processManager?.recordOllamaLog?.({
-      text: `LLM request: ${model} (~${estimatedTokens} tokens, timeout ${timeoutMs}ms)`,
+      text: `LLM request: ${provider}/${model} (~${estimatedTokens} tokens, timeout ${timeoutMs}ms)`,
       stream: "stdout",
       source: "chat",
       model
     });
 
-    const response = await fetch(`${baseUrl}/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        stream: false,
-        messages
-      }),
-      signal: controller.signal
-    });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      processManager?.recordOllamaLog?.({
-        text: `LLM request failed (${response.status} ${response.statusText}): ${text}`,
-        stream: "stderr",
-        source: "chat",
-        model
-      });
-      throw new Error(`LLM request failed: ${response.statusText}`);
+    if (provider === "ollama") {
+      return await runOllamaChatInternal(baseUrl, model, messages, controller.signal);
+    } else if (provider === "openai" || provider === "grok") {
+      return await runOpenAICompatibleChat(baseUrl, model, apiKey, messages, controller.signal);
+    } else if (provider === "anthropic") {
+      return await runAnthropicChat(baseUrl, model, apiKey, messages, controller.signal);
+    } else if (provider === "gemini") {
+      return await runGeminiChat(baseUrl, model, apiKey, messages, controller.signal);
+    } else {
+      throw new Error(`Unknown LLM provider: ${provider}`);
     }
-
-    const data = await response.json() as any;
-    const answer = String(data?.message?.content || "").trim();
-
-    processManager?.recordOllamaLog?.({
-      text: `LLM response received (${answer.length} chars)`,
-      stream: "stdout",
-      source: "chat",
-      model
-    });
-
-    return answer;
   } catch (err) {
     if ((err as any).name === "AbortError") {
       processManager?.recordOllamaLog?.({
-        text: `LLM request timed out after ${timeoutMs}ms. Check Ollama service health.`,
+        text: `LLM request timed out after ${timeoutMs}ms.`,
         stream: "stderr",
         source: "chat",
         model
       });
-      throw new Error(`LLM request timed out (${timeoutMs}ms). Ollama may be unresponsive.`);
+      throw new Error(`LLM request timed out (${timeoutMs}ms).`);
     }
     throw err;
   } finally {
@@ -1455,12 +1568,121 @@ async function runOllamaChat(params: {
   }
 }
 
+async function runOllamaChatInternal(baseUrl: string, model: string, messages: Array<{ role: string; content: string }>, signal: AbortSignal): Promise<string> {
+  const response = await fetch(`${baseUrl}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model, stream: false, messages }),
+    signal
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Ollama request failed (${response.status}): ${text}`);
+  }
+
+  const data = await response.json() as any;
+  return String(data?.message?.content || "").trim();
+}
+
+async function runOpenAICompatibleChat(baseUrl: string, model: string, apiKey: string | undefined, messages: Array<{ role: string; content: string }>, signal: AbortSignal): Promise<string> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (apiKey) {
+    headers["Authorization"] = `Bearer ${apiKey}`;
+  }
+
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ model, messages }),
+    signal
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`OpenAI-compatible request failed (${response.status}): ${text}`);
+  }
+
+  const data = await response.json() as any;
+  return String(data?.choices?.[0]?.message?.content || "").trim();
+}
+
+async function runAnthropicChat(baseUrl: string, model: string, apiKey: string | undefined, messages: Array<{ role: string; content: string }>, signal: AbortSignal): Promise<string> {
+  if (!apiKey) {
+    throw new Error("Anthropic API requires an API key.");
+  }
+
+  // Extract system message from messages array
+  const systemMessage = messages.find(m => m.role === "system")?.content || "";
+  const otherMessages = messages.filter(m => m.role !== "system");
+
+  const response = await fetch(`${baseUrl}/messages`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01"
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 4096,
+      ...(systemMessage && { system: systemMessage }),
+      messages: otherMessages
+    }),
+    signal
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Anthropic request failed (${response.status}): ${text}`);
+  }
+
+  const data = await response.json() as any;
+  return String(data?.content?.[0]?.text || "").trim();
+}
+
+async function runGeminiChat(baseUrl: string, model: string, apiKey: string | undefined, messages: Array<{ role: string; content: string }>, signal: AbortSignal): Promise<string> {
+  if (!apiKey) {
+    throw new Error("Gemini API requires an API key.");
+  }
+
+  // Convert messages to Gemini format
+  const contents = messages
+    .filter(m => m.role !== "system") // Gemini doesn't support system role in the same way
+    .map(m => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }]
+    }));
+
+  const systemInstruction = messages.find(m => m.role === "system")?.content;
+
+  const response = await fetch(`${baseUrl}/models/${model}:generateContent?key=${apiKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...(systemInstruction && { system_instruction: { parts: [{ text: systemInstruction }] } }),
+      contents
+    }),
+    signal
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Gemini request failed (${response.status}): ${text}`);
+  }
+
+  const data = await response.json() as any;
+  return String(data?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
+}
+
 ipcMain.handle("ollama:explain-lines", async (_event, payload) => {
   const lines = Array.isArray(payload?.lines) ? payload.lines.slice(0, 4) : [];
   const fen = payload?.fen || "";
   const language = payload?.language || settings.get("explainLanguage") || "English";
+  const llmProvider = payload?.llmProvider || settings.get("llmProvider") || "ollama";
+  const llmApiKey = payload?.llmApiKey || settings.get("llmApiKey") || "";
   const model = payload?.model || settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL;
-  const baseUrl = (payload?.baseUrl || settings.get("ollamaBaseUrl") || "http://localhost:11434/api").replace(/\/$/, "");
+  const baseUrl = (payload?.baseUrl || settings.get("ollamaBaseUrl") || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
 
   if (!lines.length) {
     return { ok: true, explanations: [] };
@@ -1470,7 +1692,7 @@ ipcMain.handle("ollama:explain-lines", async (_event, payload) => {
     const explanations = await Promise.all(
       lines.map(async (line: any) => {
         const messages = buildPrompt({ language, fen, line });
-        const text = await runOllamaChat({ baseUrl, model, messages });
+        const text = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
         return {
           rank: line.rank,
           text: text || `No explanation returned for line ${line.rank}.`
@@ -1479,7 +1701,7 @@ ipcMain.handle("ollama:explain-lines", async (_event, payload) => {
     );
     return { ok: true, explanations };
   } catch (err) {
-    return { ok: false, error: (err as Error)?.message || "Ollama explanation failed." };
+    return { ok: false, error: (err as Error)?.message || "LLM explanation failed." };
   }
 });
 
@@ -1520,8 +1742,10 @@ ipcMain.handle("ollama:ask-question", async (_event, payload) => {
   }
 
   const language = payload?.language || settings.get("explainLanguage") || "English";
+  const llmProvider = payload?.llmProvider || settings.get("llmProvider") || "ollama";
+  const llmApiKey = payload?.llmApiKey || settings.get("llmApiKey") || "";
   const model = payload?.model || settings.get("ollamaModel") || "qwen3";
-  const baseUrl = (payload?.baseUrl || settings.get("ollamaBaseUrl") || "http://localhost:11434/api").replace(/\/$/, "");
+  const baseUrl = (payload?.baseUrl || settings.get("ollamaBaseUrl") || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
 
   try {
     const messages = buildPrompt({
@@ -1532,7 +1756,7 @@ ipcMain.handle("ollama:ask-question", async (_event, payload) => {
       userMessage: payload?.userMessage,
       systemPrompt: payload?.systemPrompt
     });
-    const answer = await runOllamaChat({ baseUrl, model, messages });
+    const answer = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
     return { ok: true, answer: answer || "No response returned.", linesUsed: lines.length };
   } catch (err) {
     return { ok: false, error: (err as Error)?.message || "LLM question failed." };
