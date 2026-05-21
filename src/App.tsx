@@ -11,16 +11,22 @@ import {
   DialogTitle,
   IconButton,
   LinearProgress,
+  Snackbar,
   Stack,
   Tab,
   Tabs,
   TextField,
+  Tooltip,
   Typography
 } from "@mui/material";
+import { Alert } from "@mui/material";
+import { Chess } from "chess.js";
+import MoveWarningDialog from "./components/MoveWarningDialog";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ListAltIcon from "@mui/icons-material/ListAlt";
-import InsightsIcon from "@mui/icons-material/Insights";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import StopIcon from "@mui/icons-material/Stop";
 import SettingsPanel from "./components/SettingsPanel";
 import AnalysisBoard from "./components/AnalysisBoard";
 import ChatPanel from "./components/ChatPanel";
@@ -51,11 +57,44 @@ const DEFAULT_FORM: AppSettings = {
   explainLanguage: "English",
   ollamaModel: "qwen3:8b",
   ollamaBaseUrl: "http://localhost:11434/api",
-  llmProvider: "ollama",
+  llmProvider: "ollama" as const,
   llmApiKey: ""
 };
 
+const VALID_PROVIDERS = ["ollama", "openai", "anthropic", "gemini", "grok"] as const;
+
 const normalizeModelName = (value: string | null | undefined): string => String(value || "").trim();
+
+const getModelForProvider = (provider: string, savedModel: string): string => {
+  // Only send saved model for Ollama; for other providers let backend use defaults
+  return provider === "ollama" ? savedModel : "";
+};
+
+const getBaseUrlForProvider = (provider: string, ollamaBaseUrl: string): string => {
+  // Only send baseUrl for Ollama; for other providers let backend use provider-specific endpoints
+  return provider === "ollama" ? ollamaBaseUrl : "";
+};
+
+const detectLineNumberInText = (text: string): number | null => {
+  // Look for patterns like "line 1", "Line 2", "line number 3", "line #4"
+  const match = text.match(/line\s+(?:number\s+)?#?(\d+)/i);
+  if (match && match[1]) {
+    return parseInt(match[1], 10);
+  }
+  return null;
+};
+
+const isLlmSettingsValid = (provider: string, model: string, apiKey: string): boolean => {
+  if (!provider || !model) return false;
+
+  if (provider === "ollama") {
+    // Ollama just needs model name
+    return model.trim() !== "";
+  } else {
+    // Cloud providers need both model and API key
+    return model.trim() !== "" && apiKey.trim() !== "";
+  }
+};
 
 const normalizeModelList = (models: string[] | null | undefined): string[] => {
   if (!Array.isArray(models)) {
@@ -101,7 +140,11 @@ export default function App() {
   const [settingsSaving, setSettingsSaving] = useState<boolean>(false);
   const [analysisLoading, setAnalysisLoading] = useState<boolean>(false);
   const [analysisStatus, setAnalysisStatus] = useState<string>("");
+  const [isAnalysisRunning, setIsAnalysisRunning] = useState<boolean>(false);
   const [analysisLines, setAnalysisLines] = useState<AnalysisLine[]>([]);
+  const [selectedEngineLineIndex, setSelectedEngineLineIndex] = useState<number | null>(null);
+  const [selectedEngineLineData, setSelectedEngineLineData] = useState<AnalysisLine | null>(null);
+  const [currentMoveIndex, setCurrentMoveIndex] = useState<number>(0);
   const [analysisEntries, setAnalysisEntries] = useState<AnalysisEntry[]>([]);
   const [selectedAnalysisLineId, setSelectedAnalysisLineId] = useState<string | null>(null);
   const [analysisMode, setAnalysisMode] = useState<"main" | "logs">("main");
@@ -121,7 +164,7 @@ export default function App() {
   const [questionResponse, setQuestionResponse] = useState<string>("");
   const [questionLoading, setQuestionLoading] = useState<boolean>(false);
   const [importDialogOpen, setImportDialogOpen] = useState<boolean>(false);
-  const [importText, setImportText] = useState<string>("start");
+  const [importText, setImportText] = useState<string>("");
   const [importError, setImportError] = useState<string>("");
   const [importLoading, setImportLoading] = useState<boolean>(false);
   const [windowSize, setWindowSize] = useState<{ width: number; height: number }>(() => ({
@@ -129,6 +172,11 @@ export default function App() {
     height: typeof window !== "undefined" ? window.innerHeight : 720
   }));
   const [availableEngines, setAvailableEngines] = useState<EngineInfo[]>([]);
+  const [snackbarOpen, setSnackbarOpen] = useState<boolean>(false);
+  const [snackbarMessage, setSnackbarMessage] = useState<string>("");
+  const [snackbarSeverity, setSnackbarSeverity] = useState<"success" | "error" | "info">("info");
+  const [moveWarningOpen, setMoveWarningOpen] = useState<boolean>(false);
+  const [moveWarningMessage, setMoveWarningMessage] = useState<string>("");
   const importFileInput = useRef<HTMLInputElement>(null);
   const userSelectedModelRef = useRef<boolean>(false);
 
@@ -188,18 +236,22 @@ export default function App() {
       const status = await electronAPI.getEngineStatus();
       setEngineStatus(status);
       setLlmApiKeyLength(status.settings?.llmApiKeyLength || 0);
-      setFormState((prev) => ({
-        ...prev,
-        stockfishPath: status.stockfishPath || prev.stockfishPath,
-        lc0Path: status.lc0Path || prev.lc0Path,
-        selectedEngine: (status.selectedEngine as "stockfish" | "lc0") || prev.selectedEngine,
-        analysisDepth: Number(status.settings?.analysisDepth) || prev.analysisDepth,
-        explainLanguage: status.settings?.explainLanguage || prev.explainLanguage,
-        ollamaModel: status.settings?.ollamaModel || prev.ollamaModel,
-        ollamaBaseUrl: status.settings?.ollamaBaseUrl || prev.ollamaBaseUrl,
-        llmProvider: (status.settings?.llmProvider as any) || prev.llmProvider,
-        llmApiKey: ""
-      }));
+      setFormState((prev) => {
+        const provider = status.settings?.llmProvider as any;
+        const validProvider = VALID_PROVIDERS.includes(provider) ? provider : prev.llmProvider;
+        return {
+          ...prev,
+          stockfishPath: status.stockfishPath || prev.stockfishPath,
+          lc0Path: status.lc0Path || prev.lc0Path,
+          selectedEngine: (status.selectedEngine as "stockfish" | "lc0") || prev.selectedEngine,
+          analysisDepth: Number(status.settings?.analysisDepth) || prev.analysisDepth,
+          explainLanguage: status.settings?.explainLanguage || prev.explainLanguage,
+          ollamaModel: status.settings?.ollamaModel || prev.ollamaModel,
+          ollamaBaseUrl: status.settings?.ollamaBaseUrl || prev.ollamaBaseUrl,
+          llmProvider: validProvider,
+          llmApiKey: status.settings?.llmApiKey || prev.llmApiKey || ""
+        };
+      });
       userSelectedModelRef.current = Boolean(status.settings?.ollamaModel);
     } catch (err) {
       setStatusMessage("Unable to read saved engine settings.");
@@ -231,28 +283,38 @@ export default function App() {
     if (!electronAPI?.askQuestion) {
       return;
     }
+    console.log(`[frontend] warmupOllama called | Current llmProvider: ${formState.llmProvider}`);
     try {
-      // Send a simple test message to warm up Ollama on first load
-      await electronAPI.askQuestion({
-        question: "Hello",
-        fen: "",
-        lines: [],
-        language: "English",
-        model: formState.ollamaModel,
-        baseUrl: formState.ollamaBaseUrl
-      });
-    } catch {
+      // Send a simple test message to warm up Ollama on first load (only for Ollama provider)
+      if (formState.llmProvider === "ollama") {
+        console.log(`[frontend] Warming up Ollama | model: ${formState.ollamaModel}`);
+        await electronAPI.askQuestion({
+          question: "Hello",
+          fen: "",
+          lines: [],
+          language: "English",
+          model: formState.ollamaModel,
+          baseUrl: formState.ollamaBaseUrl,
+          llmProvider: "ollama"
+        });
+      } else {
+        console.log(`[frontend] Skipping Ollama warmup | Provider is ${formState.llmProvider}, not ollama`);
+      }
+    } catch (err) {
       // Silently fail - warming up is optional
+      console.log(`[frontend] Warmup error: ${(err as Error).message}`);
     }
-  }, [formState.ollamaModel, formState.ollamaBaseUrl]);
+  }, [formState.llmProvider, formState.ollamaModel, formState.ollamaBaseUrl]);
 
   useEffect(() => {
     let cancelled = false;
     const bootstrap = async () => {
       setAppLoading(true);
       try {
-        await Promise.all([fetchSystemStatus(), loadEngineStatus()]);
-        // Warm up Ollama after system status is loaded
+        // Load engine status from settings (including saved engine paths)
+        await loadEngineStatus();
+        // Warm up Ollama after settings are loaded
+        // Use setTimeout to ensure state is updated before calling warmupOllama
         setTimeout(() => {
           if (!cancelled) {
             warmupOllama();
@@ -270,7 +332,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [fetchSystemStatus, loadEngineStatus, warmupOllama]);
+  }, [loadEngineStatus, warmupOllama]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -350,8 +412,8 @@ export default function App() {
           fen,
           lines,
           language: formState.explainLanguage,
-          model: formState.ollamaModel,
-          baseUrl: formState.ollamaBaseUrl,
+          model: getModelForProvider(formState.llmProvider, formState.ollamaModel),
+          baseUrl: getBaseUrlForProvider(formState.llmProvider, formState.ollamaBaseUrl),
           llmProvider: formState.llmProvider,
           llmApiKey: formState.llmApiKey
         });
@@ -365,6 +427,8 @@ export default function App() {
   const handleAnalysisSuccess = useCallback(
     (lines: AnalysisLine[], fen: string): void => {
       setAnalysisLines(lines);
+      setSelectedEngineLineIndex(null);
+      setSelectedEngineLineData(null);
       const entries = (lines || []).map((line, index) =>
         parseStockfishLine(line, index + 1, currentFen)
       );
@@ -391,30 +455,128 @@ export default function App() {
       }
       setAnalysisLoading(true);
       setAnalysisStatus("");
+      const engineName = formState.selectedEngine?.toUpperCase() || "ENGINE";
       try {
         const response = await electronAPI.analyzePosition({
+          engine: formState.selectedEngine,
           fen,
           depth: formState.analysisDepth,
           multiPv: 4
         });
         if (!response?.ok) {
-          setAnalysisStatus((response as any)?.error || "Stockfish failed to return analysis.");
+          setAnalysisStatus((response as any)?.error || `${engineName} analysis failed.`);
           setAnalysisLines([]);
           setAnalysisEntries([]);
-              return;
+          return;
         }
         const lines = (response as any).analysis?.lines || [];
         handleAnalysisSuccess(lines, fen);
       } catch (err) {
-        setAnalysisStatus("Stockfish analysis failed.");
+        setAnalysisStatus(`${engineName} analysis failed.`);
         setAnalysisLines([]);
         setAnalysisEntries([]);
-        } finally {
+      } finally {
         setAnalysisLoading(false);
       }
     },
-    [formState.analysisDepth, handleAnalysisSuccess]
+    [formState.analysisDepth, formState.selectedEngine, handleAnalysisSuccess]
   );
+
+  const handleStartAnalysis = useCallback(() => {
+    setIsAnalysisRunning(true);
+    runAnalysis(currentFen);
+  }, [currentFen, runAnalysis]);
+
+  const handleStopAnalysis = useCallback(() => {
+    setIsAnalysisRunning(false);
+    setAnalysisLoading(false);
+    setAnalysisStatus("Analysis stopped.");
+  }, []);
+
+  const handleSelectEngineLine = useCallback((lineIndex: number, line: AnalysisLine) => {
+    setSelectedEngineLineIndex(lineIndex);
+    setSelectedEngineLineData(line);
+    setCurrentMoveIndex(0);
+    const lineNum = line.rank || lineIndex + 1;
+    setStatusMessage(`Line ${lineNum} selected.`);
+  }, []);
+
+  const handleKeyboardNavigation = useCallback((event: KeyboardEvent) => {
+    // Only navigate if a line is selected
+    if (selectedEngineLineIndex === null || !selectedEngineLineData) {
+      return;
+    }
+
+    const pv = selectedEngineLineData.pv || selectedEngineLineData.line || "";
+    const moves = pv.split(/\s+/).filter((m) => m.trim());
+
+    // Right arrow: advance to next move in the line (with boundary check)
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      setCurrentMoveIndex((prev) => {
+        const nextIndex = prev + 1;
+        if (nextIndex < moves.length) {
+          return nextIndex;
+        }
+        return prev;
+      });
+    }
+    // Left arrow: go back one move in the line (with boundary check)
+    else if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      setCurrentMoveIndex((prev) => {
+        if (prev > 0) {
+          return prev - 1;
+        }
+        return prev;
+      });
+    }
+  }, [selectedEngineLineIndex, selectedEngineLineData]);
+
+  useEffect(() => {
+    if (selectedEngineLineIndex === null) {
+      return;
+    }
+    document.addEventListener("keydown", handleKeyboardNavigation);
+    return () => {
+      document.removeEventListener("keydown", handleKeyboardNavigation);
+    };
+  }, [selectedEngineLineIndex, handleKeyboardNavigation]);
+
+  const applyLineMove = useCallback((moveIndex: number) => {
+    if (!selectedEngineLineData) {
+      return;
+    }
+    const pv = selectedEngineLineData.pv || selectedEngineLineData.line || "";
+    const moves = pv.split(/\s+/).filter((m) => m.trim());
+
+    if (moves.length === 0) {
+      return;
+    }
+
+    const chess = new Chess();
+    chess.load(currentFen);
+
+    try {
+      for (let i = 0; i <= moveIndex && i < moves.length; i++) {
+        const moveResult = chess.move(moves[i], { sloppy: true });
+        if (!moveResult) {
+          setStatusMessage(`Invalid move in line: ${moves[i]}`);
+          return;
+        }
+      }
+      const newFen = chess.fen();
+      setCurrentFen(newFen);
+    } catch (err) {
+      setStatusMessage("Error applying line move.");
+    }
+  }, [selectedEngineLineData, currentFen]);
+
+  useEffect(() => {
+    if (selectedEngineLineIndex !== null && selectedEngineLineData) {
+      applyLineMove(currentMoveIndex);
+    }
+  }, [currentMoveIndex, selectedEngineLineIndex, selectedEngineLineData, applyLineMove]);
 
   const applyPositions = useCallback(
     (positions: string[], message?: string): void => {
@@ -437,22 +599,31 @@ export default function App() {
       if (key === "ollamaModel") {
         userSelectedModelRef.current = true;
       }
-      setFormState((prev) => ({ ...prev, [key]: value }));
-      // Only call setOllamaModel for Ollama provider
-      if (key === "ollamaModel" && formState.llmProvider === "ollama" && electronAPI?.setOllamaModel) {
-        const selected = String(value) || DEFAULT_FORM.ollamaModel;
-        setStatusMessage(`Switching to ${selected}...`);
-        electronAPI
-          .setOllamaModel(selected)
-          .then(() => {
-            setStatusMessage(`Ollama model set to ${selected}.`);
-          })
-          .catch(() => {
-            setStatusMessage("Unable to start the selected Ollama model.");
-          });
+      setFormState((prev) => ({
+        ...prev,
+        [key]: value
+      }));
+
+      // Only call setOllamaModel for non-empty model changes on Ollama provider
+      if (key === "ollamaModel" && value && electronAPI?.setOllamaModel) {
+        setFormState((prev) => {
+          if (prev.llmProvider === "ollama") {
+            const selected = String(value);
+            setStatusMessage(`Switching to ${selected}...`);
+            electronAPI
+              .setOllamaModel(selected)
+              .then(() => {
+                setStatusMessage(`Ollama model set to ${selected}.`);
+              })
+              .catch(() => {
+                setStatusMessage("Unable to start the selected Ollama model.");
+              });
+          }
+          return prev;
+        });
       }
     },
-    [formState.llmProvider]
+    []
   );
 
   const handleDetect = useCallback(async (): Promise<void> => {
@@ -498,6 +669,40 @@ export default function App() {
     }
   }, [formState.selectedEngine]);
 
+  const handleDetectAllEngines = useCallback(async (): Promise<void> => {
+    if (!electronAPI?.detectEngine) {
+      setStatusMessage("Engine detection is unavailable.");
+      return;
+    }
+    setStatusMessage("Scanning for engines...");
+    try {
+      const results: Record<string, string> = {};
+      for (const engine of ["stockfish", "lc0"]) {
+        const result = await electronAPI.detectEngine({ engine });
+        if (result?.found && result?.path) {
+          results[engine] = result.path;
+          setStatusMessage(`${engine.toUpperCase()} found at ${result.path}`);
+        }
+      }
+      if (Object.keys(results).length > 0) {
+        setFormState((prev) => ({
+          ...prev,
+          stockfishPath: results.stockfish || prev.stockfishPath,
+          lc0Path: results.lc0 || prev.lc0Path
+        }));
+        setAvailableEngines([
+          ...(results.stockfish ? [{ name: "stockfish", path: results.stockfish, status: "installed" as const }] : []),
+          ...(results.lc0 ? [{ name: "lc0", path: results.lc0, status: "installed" as const }] : [])
+        ]);
+        setStatusMessage(`Detection complete: ${Object.keys(results).length} engine(s) found.`);
+      } else {
+        setStatusMessage("No engines were detected. Please browse manually.");
+      }
+    } catch (err) {
+      setStatusMessage("Engine detection failed.");
+    }
+  }, []);
+
   const handleSaveSettings = useCallback(async (): Promise<void> => {
     const selectedEngine = formState.selectedEngine || "lc0";
     const selectedPath = formState[`${selectedEngine}Path` as keyof AppSettings];
@@ -542,10 +747,15 @@ export default function App() {
         [`${selectedEngine}Path`]: String(selectedPath),
         settings: (configResult as any).settings
       }));
-      setStatusMessage(`Settings saved and ${selectedEngine.toUpperCase()} validated.`);
+      setSnackbarMessage(`Settings saved and ${selectedEngine.toUpperCase()} validated.`);
+      setSnackbarSeverity("success");
+      setSnackbarOpen(true);
+      setStatusMessage("");
       fetchSystemStatus();
     } catch (err) {
-      setStatusMessage("Unable to save settings.");
+      setSnackbarMessage("Unable to save settings.");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
     } finally {
       setSettingsSaving(false);
     }
@@ -610,8 +820,8 @@ export default function App() {
           fen: currentFen,
           lines: analysisLines,
           language: formState.explainLanguage,
-          model: formState.ollamaModel,
-          baseUrl: formState.ollamaBaseUrl,
+          model: getModelForProvider(formState.llmProvider, formState.ollamaModel),
+          baseUrl: getBaseUrlForProvider(formState.llmProvider, formState.ollamaBaseUrl),
           llmProvider: formState.llmProvider,
           llmApiKey: formState.llmApiKey
         });
@@ -629,15 +839,6 @@ export default function App() {
     },
     [analysisLines, currentFen, formState.explainLanguage, formState.ollamaBaseUrl, formState.ollamaModel, formState.llmProvider, formState.llmApiKey]
   );
-
-  const handleAnalysisIconClick = useCallback((): void => {
-    const selectedEntry = analysisEntries.find((entry) => entry.id === selectedAnalysisLineId);
-    if (!selectedEntry) {
-      setStatusMessage("Select an analysis line before showing the LLM output.");
-      return;
-    }
-    handleShowLine(selectedEntry);
-  }, [analysisEntries, handleShowLine, selectedAnalysisLineId]);
 
   const handlePlayLine = useCallback(
     (moves) => {
@@ -712,6 +913,31 @@ export default function App() {
       setStatusMessage("LLM question API unavailable.");
       return;
     }
+
+    // Detect if user mentioned a line in their question
+    const detectedLineNumFromQuestion = detectLineNumberInText(question);
+    if (detectedLineNumFromQuestion !== null) {
+      const lineIndex = detectedLineNumFromQuestion - 1;
+      if (lineIndex >= 0 && lineIndex < analysisLines.length) {
+        setSelectedEngineLineIndex(lineIndex);
+        setSelectedEngineLineData(analysisLines[lineIndex]);
+        setStatusMessage(`Line ${detectedLineNumFromQuestion} selected from your question.`);
+      }
+    }
+
+    // Validate LLM settings before making request
+    if (!isLlmSettingsValid(formState.llmProvider, formState.ollamaModel, formState.llmApiKey)) {
+      const provider = formState.llmProvider || "unknown";
+      if (provider !== "ollama" && !formState.llmApiKey) {
+        setStatusMessage(`${provider} provider requires an API key. Please configure it in settings.`);
+      } else if (!formState.ollamaModel) {
+        setStatusMessage("LLM model is not selected. Please configure it in settings.");
+      } else {
+        setStatusMessage("LLM is not properly configured. Please check settings.");
+      }
+      return;
+    }
+
     setQuestionLoading(true);
     setQuestionResponse(""); // Clear previous response
     try {
@@ -720,8 +946,8 @@ export default function App() {
         fen: currentFen,
         lines: analysisLines,
         language: formState.explainLanguage,
-        model: formState.ollamaModel,
-        baseUrl: formState.ollamaBaseUrl,
+        model: getModelForProvider(formState.llmProvider, formState.ollamaModel),
+        baseUrl: getBaseUrlForProvider(formState.llmProvider, formState.ollamaBaseUrl),
         llmProvider: formState.llmProvider,
         llmApiKey: formState.llmApiKey
       });
@@ -730,7 +956,19 @@ export default function App() {
         setQuestionResponse(`⚠️ Error: ${errorMsg}`);
         return;
       }
-      setQuestionResponse(response.answer || "No answer returned.");
+      const answer = response.answer || "No answer returned.";
+      setQuestionResponse(answer);
+
+      // Auto-detect if LLM mentions a specific line and select it
+      const detectedLineNum = detectLineNumberInText(answer);
+      if (detectedLineNum !== null) {
+        const lineIndex = detectedLineNum - 1;
+        if (lineIndex >= 0 && lineIndex < analysisLines.length) {
+          setSelectedEngineLineIndex(lineIndex);
+          setSelectedEngineLineData(analysisLines[lineIndex]);
+          setStatusMessage(`Line ${detectedLineNum} selected (detected from LLM response).`);
+        }
+      }
     } catch (err) {
       const errorMessage = (err as Error)?.message || "LLM question failed.";
       setQuestionResponse(`⚠️ Error: ${errorMessage}`);
@@ -751,6 +989,52 @@ export default function App() {
   const onOpenSettings = useCallback((): void => {
     setViewMode("settings");
   }, []);
+
+  const handleMoveSuggested = useCallback(
+    async (from: string, to: string): Promise<void> => {
+      if (!electronAPI?.validateMove) {
+        setMoveWarningMessage("Move validation API unavailable.");
+        setMoveWarningOpen(true);
+        return;
+      }
+
+      try {
+        const validation = await electronAPI.validateMove({ from, to });
+        if (!validation.valid) {
+          setMoveWarningMessage(`Invalid move: ${validation.reason || "Move is not legal in current position"}`);
+          setMoveWarningOpen(true);
+          return;
+        }
+
+        if (!electronAPI?.applyMove) {
+          setMoveWarningMessage("Move application API unavailable.");
+          setMoveWarningOpen(true);
+          return;
+        }
+
+        const result = await electronAPI.applyMove({ from, to });
+        if (!result.ok) {
+          setMoveWarningMessage(`Failed to apply move: ${result.error}`);
+          setMoveWarningOpen(true);
+          return;
+        }
+
+        if (!result.fen) {
+          setMoveWarningMessage("Move applied but FEN not returned.");
+          setMoveWarningOpen(true);
+          return;
+        }
+
+        setCurrentFen(result.fen);
+        setStatusMessage(`Move ${from}→${to} applied`);
+        runAnalysis(result.fen);
+      } catch (err) {
+        setMoveWarningMessage(`Error: ${(err as Error).message}`);
+        setMoveWarningOpen(true);
+      }
+    },
+    [runAnalysis]
+  );
 
   const boardSize = useMemo(() => {
     const width = windowSize.width || 1280;
@@ -823,6 +1107,7 @@ export default function App() {
               formState={formState}
               onFieldChange={handleFormChange}
               onDetect={handleDetect}
+              onDetectAll={handleDetectAllEngines}
               onBrowse={handleBrowse}
               onSaveSettings={handleSaveSettings}
               onSettingsComplete={handleSettingsComplete}
@@ -1069,36 +1354,44 @@ export default function App() {
                     runAnalysis={runAnalysis}
                     setStatusMessage={setStatusMessage}
                     size={boardSize}
+                    onStartAnalysis={handleStartAnalysis}
+                    onStopAnalysis={handleStopAnalysis}
+                    isAnalysisRunning={isAnalysisRunning}
                   />
                 </Box>
                 <Box sx={{ display: "flex", justifyContent: "space-between", pt: 1 }}>
                   <Stack direction="row" spacing={1}>
-                    <IconButton
-                      size="small"
-                      onClick={() => setImportDialogOpen(true)}
-                      color="primary"
-                      aria-label="open import controls"
-                    >
-                      <AddIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={handleAnalysisIconClick}
-                      color="primary"
-                      aria-label="show analysis"
-                      disabled={!selectedAnalysisLineId}
-                    >
-                      <InsightsIcon fontSize="small" />
-                    </IconButton>
+                    <Tooltip title="Import position">
+                      <IconButton
+                        size="small"
+                        onClick={() => setImportDialogOpen(true)}
+                        color="primary"
+                        aria-label="open import controls"
+                      >
+                        <AddIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title={isAnalysisRunning ? "Stop Analysis" : "Start Analysis"} disableInteractive={false}>
+                      <IconButton
+                        size="small"
+                        onClick={isAnalysisRunning ? handleStopAnalysis : handleStartAnalysis}
+                        color={isAnalysisRunning ? "error" : "success"}
+                        aria-label={isAnalysisRunning ? "stop analysis" : "start analysis"}
+                      >
+                        {isAnalysisRunning ? <StopIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
+                      </IconButton>
+                    </Tooltip>
                   </Stack>
-                  <IconButton
-                    size="small"
-                    onClick={() => setAnalysisMode("logs")}
-                    color="primary"
-                    aria-label="view logs"
-                  >
-                    <ListAltIcon fontSize="small" />
-                  </IconButton>
+                  <Tooltip title="View logs" disableInteractive={false}>
+                    <IconButton
+                      size="small"
+                      onClick={() => setAnalysisMode("logs")}
+                      color="primary"
+                      aria-label="view logs"
+                    >
+                      <ListAltIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
                 </Box>
               </Box>
               <Box
@@ -1125,6 +1418,12 @@ export default function App() {
                   onPlayLine={handlePlayLine}
                   selectedAnalysisId={selectedAnalysisLineId}
                   onLineSelect={handleSelectAnalysisLine}
+                  onMoveSuggested={handleMoveSuggested}
+                  llmProvider={formState.llmProvider}
+                  analysisLines={analysisLines}
+                  onSelectEngineLine={handleSelectEngineLine}
+                  selectedEngineLineIndex={selectedEngineLineIndex}
+                  currentMoveIndex={currentMoveIndex}
                   sx={{ flex: 1, minHeight: 0 }}
                 />
               </Box>
@@ -1132,6 +1431,21 @@ export default function App() {
           )}
         </Box>
       )}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={() => setSnackbarOpen(false)}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarSeverity} sx={{ width: "100%" }}>
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
+      <MoveWarningDialog
+        open={moveWarningOpen}
+        message={moveWarningMessage}
+        onClose={() => setMoveWarningOpen(false)}
+      />
       <input
         ref={importFileInput}
         type="file"

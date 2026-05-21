@@ -1,4 +1,6 @@
-module.exports = {
+import type { Config } from "jest";
+
+const config: Config = {
   testEnvironment: "node",
   testMatch: ["**/__tests__/**/*.test.{js,ts}", "**/*.test.{js,ts}"],
   transform: {
@@ -10,8 +12,10 @@ module.exports = {
     "!src/**/*.{jsx,tsx}",
     "!node_modules/**"
   ],
-  setupFilesAfterEnv: ["<rootDir>/jest.setup.js"],
+  setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1"
   }
 };
+
+export default config;

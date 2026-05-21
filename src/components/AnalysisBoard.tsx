@@ -16,7 +16,10 @@ export default function AnalysisBoard({
   runAnalysis,
   setStatusMessage,
   onBoardMove,
-  size
+  size,
+  onStartAnalysis,
+  onStopAnalysis,
+  isAnalysisRunning = false
 }: AnalysisBoardProps) {
   const boardRef = useRef<HTMLDivElement>(null);
   const boardInstance = useRef<any>(null);
@@ -71,7 +74,9 @@ export default function AnalysisBoard({
         }
         const nextFen = chess.current.fen();
         setCurrentFen(nextFen);
-        runAnalysis(nextFen);
+        if (isAnalysisRunning) {
+          runAnalysis(nextFen);
+        }
         if (typeof onBoardMove === "function") {
           onBoardMove(nextFen);
         }
@@ -82,7 +87,7 @@ export default function AnalysisBoard({
       boardInstance.current?.destroy();
       boardInstance.current = null;
     };
-  }, [ctor, currentFen, onBoardMove, runAnalysis, setCurrentFen]);
+  }, [ctor, currentFen, onBoardMove, setCurrentFen, isAnalysisRunning, runAnalysis]);
 
   useEffect(() => {
     if (!boardInstance.current) {

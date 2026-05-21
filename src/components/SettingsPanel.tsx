@@ -14,7 +14,7 @@ import {
   Typography,
   Link
 } from "@mui/material";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { SettingsPanelProps } from "../types";
 
 const PROVIDER_DOCS: Record<string, string> = {
@@ -22,6 +22,14 @@ const PROVIDER_DOCS: Record<string, string> = {
   grok: "https://console.x.ai",
   anthropic: "https://console.anthropic.com",
   gemini: "https://aistudio.google.com/app/apikey"
+};
+
+const PROVIDER_ENDPOINTS: Record<string, string> = {
+  ollama: "http://localhost:11434/api",
+  openai: "https://api.openai.com/v1",
+  grok: "https://api.x.ai/v1",
+  anthropic: "https://api.anthropic.com",
+  gemini: "https://generativelanguage.googleapis.com/v1beta"
 };
 
 const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
@@ -44,6 +52,7 @@ export default function SettingsPanel({
   formState,
   onFieldChange,
   onDetect,
+  onDetectAll,
   onBrowse,
   onSaveSettings,
   onSettingsComplete,
@@ -61,33 +70,32 @@ export default function SettingsPanel({
   const [modelsFetchLoading, setModelsFetchLoading] = useState(false);
   const [modelsFetchError, setModelsFetchError] = useState<string>("");
   const [apiKeyToTest, setApiKeyToTest] = useState<string>("");
+  const [hasAutoFetched, setHasAutoFetched] = useState(false);
 
-  const handleFetchModels = async () => {
+  const fetchModelsForProvider = async (apiKey: string, provider: string) => {
     const electronAPI = typeof window !== "undefined" ? (window as any).electronAPI : null;
     if (!electronAPI?.getAvailableModels) {
-      setModelsFetchError("API unavailable");
       return;
     }
 
-    const keyToUse = apiKeyToTest || formState.llmApiKey || "";
-    if (formState.llmProvider !== "ollama" && !keyToUse) {
-      setModelsFetchError("Please enter an API key");
+    if (!apiKey || provider === "ollama") {
       return;
     }
-
-    setModelsFetchLoading(true);
-    setModelsFetchError("");
 
     try {
+      setModelsFetchLoading(true);
+      setModelsFetchError("");
+      const baseUrl = PROVIDER_ENDPOINTS[provider];
       const result = await electronAPI.getAvailableModels({
-        provider: formState.llmProvider,
-        apiKey: keyToUse
+        provider,
+        apiKey,
+        baseUrl
       });
 
-      if (result.ok) {
-        setAvailableModels(result.models || []);
-        // Auto-select first model if available
-        if (result.models && result.models.length > 0 && !formState.ollamaModel) {
+      if (result.ok && result.models && result.models.length > 0) {
+        setAvailableModels(result.models);
+        // Auto-select first model if not already selected
+        if (!formState.ollamaModel) {
           onFieldChange("ollamaModel", result.models[0]);
         }
       } else {
@@ -99,6 +107,22 @@ export default function SettingsPanel({
       setModelsFetchLoading(false);
     }
   };
+
+  // Auto-fetch models on load if API key is available
+  useEffect(() => {
+    if (formState.llmProvider !== "ollama" && formState.llmApiKey && !hasAutoFetched) {
+      setHasAutoFetched(true);
+      fetchModelsForProvider(formState.llmApiKey, formState.llmProvider);
+    }
+  }, []);
+
+  // Auto-fetch models when provider changes if API key is available
+  useEffect(() => {
+    if (formState.llmProvider !== "ollama" && formState.llmApiKey) {
+      // Only fetch if provider changed and is not ollama
+      fetchModelsForProvider(formState.llmApiKey, formState.llmProvider);
+    }
+  }, [formState.llmProvider]);
   const systemChips = [
     { label: `Platform: ${systemStatus?.platform || "unknown"}`, color: "default" as const },
     {
@@ -171,6 +195,15 @@ export default function SettingsPanel({
           )}
         </FormControl>
 
+        <Button
+          variant="contained"
+          onClick={onDetectAll}
+          size="small"
+          sx={{ alignSelf: "flex-start", mb: 2 }}
+        >
+          Detect Both Engines
+        </Button>
+
         {!selectedEngineFound && (
           <>
             <TextField
@@ -182,7 +215,7 @@ export default function SettingsPanel({
             />
             <Stack direction="row" spacing={1}>
               <Button variant="outlined" onClick={onDetect} size="small">
-                Auto-detect
+                Auto-detect {selectedEngine?.toUpperCase()}
               </Button>
               <Button variant="outlined" onClick={onBrowse} size="small">
                 Browse
@@ -197,18 +230,22 @@ export default function SettingsPanel({
           <Select
             labelId="llm-provider-label"
             label="LLM Provider"
-            value={formState.llmProvider || "ollama"}
+            value={formState.llmProvider}
             onChange={(event) => {
-              const provider = event.target.value;
-              onFieldChange("llmProvider", provider);
+              const newProvider = String(event.target.value);
+
+              // Update provider immediately
+              onFieldChange("llmProvider", newProvider);
+
               // Only auto-set model for Ollama; for cloud providers, wait for user to fetch and select
-              if (provider === "ollama") {
-                const defaultModel = PROVIDER_DEFAULT_MODELS[provider] || "qwen3:8b";
+              if (newProvider === "ollama") {
+                const defaultModel = PROVIDER_DEFAULT_MODELS[newProvider] || "qwen3:8b";
                 onFieldChange("ollamaModel", defaultModel);
               } else {
                 // Clear model for cloud providers so user must fetch and select
                 onFieldChange("ollamaModel", "");
               }
+
               // Reset available models when provider changes
               setAvailableModels([]);
               setModelsFetchError("");
@@ -252,30 +289,23 @@ export default function SettingsPanel({
                 </span>
               }
             />
-            <Stack direction="row" spacing={1}>
+            {apiKeyToTest && (
               <Button
-                variant="outlined"
-                onClick={handleFetchModels}
+                variant="contained"
+                onClick={async () => {
+                  // Save the API key
+                  onFieldChange("llmApiKey", apiKeyToTest);
+                  // Fetch models for the current provider
+                  await fetchModelsForProvider(apiKeyToTest, formState.llmProvider);
+                  setApiKeyToTest("");
+                }}
                 disabled={modelsFetchLoading}
                 sx={{ flexShrink: 0 }}
               >
                 {modelsFetchLoading ? <CircularProgress size={20} sx={{ mr: 1 }} /> : null}
-                {modelsFetchLoading ? "Fetching..." : "Test & Fetch Models"}
+                {modelsFetchLoading ? "Saving & Fetching Models..." : "Save API Key"}
               </Button>
-              {apiKeyToTest && (
-                <Button
-                  variant="contained"
-                  onClick={() => {
-                    onFieldChange("llmApiKey", apiKeyToTest);
-                    setApiKeyToTest("");
-                    setModelsFetchError("");
-                  }}
-                  sx={{ flexShrink: 0 }}
-                >
-                  Save API Key
-                </Button>
-              )}
-            </Stack>
+            )}
             {modelsFetchError && (
               <Typography variant="body2" color="error">
                 {modelsFetchError}

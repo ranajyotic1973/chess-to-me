@@ -4,6 +4,7 @@ import { execSync } from "node:child_process";
 import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
 import ElectronStore from "electron-store";
 import { spawn, ChildProcess } from "node:child_process";
+import { Chess } from "chess.js";
 import type { AnalysisLine } from "../src/types";
 
 const Store = ElectronStore as any;
@@ -33,7 +34,39 @@ const PROVIDER_DOCS: Record<string, string> = {
   gemini: "https://aistudio.google.com/app/apikey"
 };
 
+const VALID_MODELS_BY_PROVIDER: Record<string, string[]> = {
+  ollama: ["qwen3:8b", "llama2", "mistral", "neural-chat", "qwen2:7b"],
+  openai: ["gpt-4o", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"],
+  grok: ["grok-3", "grok-beta", "grok-4-fast-reasoning", "grok-4.20-0309-reasoning"],
+  anthropic: ["claude-opus-4-7", "claude-sonnet-4-6", "claude-sonnet-4.5", "claude-3-haiku"],
+  gemini: ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"]
+};
+
+function getModelForProvider(provider: string, savedModel?: string): string {
+  // If a model is explicitly provided in payload, use it
+  // Otherwise, use the default for the provider (savedModel may be from a different provider)
+  if (provider === "ollama" && savedModel && savedModel.trim()) {
+    return savedModel;
+  }
+  return (PROVIDER_DEFAULT_MODELS as Record<string, string>)[provider] || PROVIDER_DEFAULT_MODELS.ollama;
+}
+
+function validateModelForProvider(provider: string, model: string): boolean {
+  if (!model || !model.trim()) return false;
+  const validModels = VALID_MODELS_BY_PROVIDER[provider] || [];
+  return validModels.some(m => m.toLowerCase() === model.toLowerCase());
+}
+
+function isModelRelevantForProvider(provider: string, model: string): boolean {
+  if (provider === "ollama") {
+    // For Ollama, any model with : in it is likely valid (e.g., "qwen3:8b")
+    return model.includes(":") || validateModelForProvider(provider, model);
+  }
+  return validateModelForProvider(provider, model);
+}
+
 const settings = new Store({
+  projectName: "chess-to-me",
   name: "settings",
   defaults: {
     stockfishPath: "",
@@ -717,6 +750,60 @@ class ProcessManager {
   }
 }
 
+class BoardStateManager {
+  private board: Chess;
+
+  constructor() {
+    this.board = new Chess();
+  }
+
+  getBoardFen(): string {
+    return this.board.fen();
+  }
+
+  setBoardFen(fen: string): boolean {
+    try {
+      this.board.load(fen);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  getLegalMoves(): string[] {
+    return this.board.moves({ verbose: false }) as string[];
+  }
+
+  validateMove(from: string, to: string): { valid: boolean; reason?: string } {
+    const move = this.board.move({ from, to, promotion: "q" });
+    if (move) {
+      this.board.undo();
+      return { valid: true };
+    }
+    return { valid: false, reason: "move is not legal in current position" };
+  }
+
+  applyMove(from: string, to: string): { ok: boolean; fen?: string; error?: string } {
+    const validation = this.validateMove(from, to);
+    if (!validation.valid) {
+      return { ok: false, error: validation.reason };
+    }
+    const move = this.board.move({ from, to, promotion: "q" });
+    if (!move) {
+      return { ok: false, error: "failed to apply move" };
+    }
+    return { ok: true, fen: this.board.fen() };
+  }
+
+  reset(fen: string = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"): void {
+    this.board.reset();
+    if (fen !== this.board.fen()) {
+      this.board.load(fen);
+    }
+  }
+}
+
+const boardManager = new BoardStateManager();
 const processManager = new ProcessManager({ settings });
 
 function isExecutableCandidate(fullPath: string): boolean {
@@ -1039,8 +1126,20 @@ async function createWindow(): Promise<void> {
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true
     }
+  });
+
+  win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    const isDev = process.env.ELECTRON_START_URL !== undefined;
+    const scriptSrc = isDev ? "'self' 'unsafe-inline'" : "'self'";
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        "Content-Security-Policy": [`default-src 'self'; script-src ${scriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:`]
+      }
+    });
   });
 
   const devUrl = process.env.ELECTRON_START_URL;
@@ -1052,6 +1151,7 @@ async function createWindow(): Promise<void> {
 }
 
 // IPC Handlers
+function registerIpcHandlers(): void {
 ipcMain.handle("detectEngine", async (_event, { engine }) => {
   return detectEngine(engine || "stockfish");
 });
@@ -1138,18 +1238,33 @@ ipcMain.handle("getEngineStatus", async () => {
   const stockfishValid = stockfishPath ? await verifyEnginePath(stockfishPath, "stockfish") : false;
   const lc0Valid = lc0Path ? await verifyEnginePath(lc0Path, "lc0") : false;
   const llmApiKey = settings.get("llmApiKey") || "";
+  const llmProvider = settings.get("llmProvider") || "ollama";
+  let llmModel = settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL;
+
+  // Validate that model is appropriate for the provider
+  if (!isModelRelevantForProvider(llmProvider, llmModel)) {
+    console.warn(`[getEngineStatus] Loaded model "${llmModel}" is not valid for provider "${llmProvider}". Using default.`);
+    llmModel = PROVIDER_DEFAULT_MODELS[llmProvider] || DEFAULT_OLLAMA_MODEL;
+  }
+
+  // Check if all LLM settings are properly configured
+  const llmConfigured = llmProvider !== "ollama"
+    ? (llmApiKey && llmApiKey.trim() && llmModel && llmModel.trim())
+    : true; // Ollama doesn't require API key
 
   return {
     selectedEngine,
     stockfishPath: stockfishValid ? stockfishPath : "",
     lc0Path: lc0Valid ? lc0Path : "",
     configured: (selectedEngine === "stockfish" && stockfishValid) || (selectedEngine === "lc0" && lc0Valid),
+    llmConfigured,
     settings: {
       analysisDepth: Number(settings.get("analysisDepth")) || 16,
       explainLanguage: settings.get("explainLanguage") || "English",
-      ollamaModel: settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL,
+      ollamaModel: llmModel,
       ollamaBaseUrl: settings.get("ollamaBaseUrl") || "http://localhost:11434/api",
-      llmProvider: settings.get("llmProvider") || "ollama",
+      llmProvider: llmProvider,
+      llmApiKey: llmApiKey,
       llmApiKeyLength: llmApiKey.length
     }
   };
@@ -1157,22 +1272,27 @@ ipcMain.handle("getEngineStatus", async () => {
 
 ipcMain.handle("app:update-settings", async (_event, payload) => {
   const nextDepth = Math.max(6, Math.min(30, Number(payload?.analysisDepth) || 16));
+  const nextProvider = payload?.llmProvider || settings.get("llmProvider") || "ollama";
+  let nextModel = payload?.ollamaModel || settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL;
+
+  // Validate model matches provider
+  if (!isModelRelevantForProvider(nextProvider, nextModel)) {
+    console.warn(`[settings] Model "${nextModel}" not valid for provider "${nextProvider}". Using default.`);
+    nextModel = PROVIDER_DEFAULT_MODELS[nextProvider] || DEFAULT_OLLAMA_MODEL;
+  }
+
   settings.set("analysisDepth", nextDepth);
   settings.set("explainLanguage", payload?.explainLanguage || "English");
-  settings.set("ollamaModel", payload?.ollamaModel || DEFAULT_OLLAMA_MODEL);
+  settings.set("ollamaModel", nextModel);
   settings.set("ollamaBaseUrl", payload?.ollamaBaseUrl || "http://localhost:11434/api");
   settings.set("selectedEngine", payload?.selectedEngine || settings.get("selectedEngine") || "lc0");
+  settings.set("llmProvider", nextProvider);
 
   if (payload?.stockfishPath) {
     settings.set("stockfishPath", payload.stockfishPath);
   }
   if (payload?.lc0Path) {
     settings.set("lc0Path", payload.lc0Path);
-  }
-
-  // Handle LLM provider and API key
-  if (payload?.llmProvider) {
-    settings.set("llmProvider", payload.llmProvider);
   }
 
   // Handle API key with mask detection
@@ -1187,7 +1307,7 @@ ipcMain.handle("app:update-settings", async (_event, payload) => {
   }
 
   try {
-    await processManager.setActiveModel(settings.get("ollamaModel"));
+    await processManager.setActiveModel(nextModel);
   } catch {
     // Already logged in the process manager.
   }
@@ -1197,9 +1317,9 @@ ipcMain.handle("app:update-settings", async (_event, payload) => {
     settings: {
       analysisDepth: nextDepth,
       explainLanguage: settings.get("explainLanguage"),
-      ollamaModel: settings.get("ollamaModel"),
+      ollamaModel: nextModel,
       ollamaBaseUrl: settings.get("ollamaBaseUrl"),
-      llmProvider: settings.get("llmProvider"),
+      llmProvider: nextProvider,
       llmApiKeyLength: (settings.get("llmApiKey") || "").length
     }
   };
@@ -1257,23 +1377,8 @@ ipcMain.handle("getAvailableModels", async (_event, payload) => {
     if (!apiKey) {
       return { ok: false, error: "API key is required for Grok." };
     }
-    try {
-      const response = await fetch("https://api.x.ai/v1/models", {
-        headers: { Authorization: `Bearer ${apiKey}` }
-      });
-      if (!response.ok) {
-        return { ok: false, error: `Grok API error: ${response.statusText}` };
-      }
-      const data = await response.json() as any;
-      const models = (data.data || [])
-        .map((m: any) => m.id)
-        .filter((id: string) => id.includes("grok")) // Only show grok models
-        .sort()
-        .reverse(); // Newest first
-      return { ok: true, models };
-    } catch (err) {
-      return { ok: false, error: "Failed to fetch Grok models." };
-    }
+    // Grok doesn't provide a reliable model listing API, return known models
+    return { ok: true, models: ["grok-3", "grok-beta", "grok-4-fast-reasoning", "grok-4.20-0309-reasoning", "grok-latest"] };
   }
 
   if (provider === "anthropic") {
@@ -1388,6 +1493,107 @@ function normalizeEvaluation(score: any, engineType = "stockfish"): any {
   return { description: "unknown", raw: score, confidence: "low" };
 }
 
+function getLlmToolDefinitions(): Array<{
+  name: string;
+  description: string;
+  inputSchema?: { type: string; properties: Record<string, any>; required?: string[] };
+}> {
+  return [
+    {
+      name: "validate_move",
+      description:
+        "Validates whether a move is legal in the current chess position. Returns true if the move is legal, false otherwise.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          from: { type: "string", description: "Source square in algebraic notation (e.g., 'e2')" },
+          to: { type: "string", description: "Destination square in algebraic notation (e.g., 'e4')" }
+        },
+        required: ["from", "to"]
+      }
+    },
+    {
+      name: "apply_move",
+      description:
+        "Applies a move to the board and returns the new position FEN. Use this after validating a move with validate_move.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          from: { type: "string", description: "Source square in algebraic notation (e.g., 'e2')" },
+          to: { type: "string", description: "Destination square in algebraic notation (e.g., 'e4')" }
+        },
+        required: ["from", "to"]
+      }
+    },
+    {
+      name: "get_board_fen",
+      description: "Returns the current board position in FEN notation.",
+      inputSchema: { type: "object", properties: {} }
+    },
+    {
+      name: "get_legal_moves",
+      description: "Returns a list of all legal moves in the current position in algebraic notation.",
+      inputSchema: { type: "object", properties: {} }
+    },
+    {
+      name: "analyze_position",
+      description:
+        "Analyzes a chess position using the engine. Returns the best continuation and evaluation. Can analyze any position by providing a FEN.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          fen: { type: "string", description: "Position FEN (optional, uses current position if not provided)" },
+          depth: { type: "number", description: "Analysis depth (optional, uses settings default if not provided)" }
+        },
+        required: []
+      }
+    }
+  ];
+}
+
+async function executeTool(toolName: string, args: Record<string, any>): Promise<string> {
+  console.log(`[Tool] Executing: ${toolName} | args: ${JSON.stringify(args)}`);
+
+  try {
+    let result: any;
+    switch (toolName) {
+      case "validate_move":
+        result = boardManager.validateMove(args.from, args.to);
+        break;
+      case "apply_move":
+        result = boardManager.applyMove(args.from, args.to);
+        break;
+      case "get_board_fen":
+        result = { fen: boardManager.getBoardFen() };
+        break;
+      case "get_legal_moves":
+        result = { moves: boardManager.getLegalMoves() };
+        break;
+      case "analyze_position":
+        try {
+          const analysisResult = await performAnalysis(
+            "stockfish",
+            args.fen || boardManager.getBoardFen(),
+            args.depth || (settings.get("analysisDepth") as number) || 16,
+            4
+          );
+          result = analysisResult;
+        } catch (err) {
+          result = { ok: false, error: (err as Error).message };
+        }
+        break;
+      default:
+        throw new Error(`Unknown tool: ${toolName}`);
+    }
+    console.log(`[Tool] ✓ Executed: ${toolName}`);
+    return JSON.stringify(result);
+  } catch (err) {
+    const errorMsg = (err as Error).message;
+    console.error(`[Tool] ✗ Execution failed: ${toolName} | ${errorMsg}`);
+    return JSON.stringify({ error: errorMsg, ok: false });
+  }
+}
+
 function buildPrompt(params: {
   language: string;
   fen?: string;
@@ -1407,27 +1613,38 @@ function buildPrompt(params: {
     "- Checks and checkmate: + indicates check, # indicates checkmate\n" +
     "- Promotions: =Q means promotion to queen (e.g., e8=Q)";
 
+  const toolDefinitions = getLlmToolDefinitions();
   const toolsInfo = `
 Available Chess Analysis Tools:
-You can use these functions to verify moves and understand the position better:
-- is_move_legal(from, to): Check if a move is legal (e.g., is_move_legal("e2", "e4"))
-- get_legal_moves(): List all legal moves in the position
-- get_position_fen(): Get the current position in FEN notation
-- get_board_ascii(): Get ASCII visualization of the board
-- get_move_san(from, to): Get standard algebraic notation for a move
-- get_piece_at(square): Identify the piece on a square
-- is_check(): Check if the current side is in check
-- is_checkmate(): Check if it's checkmate
-- is_stalemate(): Check if it's stalemate
-- get_game_status(): Get game status (turn, check, game over status, etc.)
+You have access to the following tools to interact with the chess board:
 
-When analyzing, use these tools to verify legal moves and understand the position.
+${toolDefinitions.map((tool) => `- ${tool.name}: ${tool.description}`).join("\n")}
+
+Instructions for using tools:
+1. When asked about hypothetical moves (e.g., "what if I move e5?"), use validate_move to check legality
+2. If the move is legal, use apply_move to apply it and get_board_fen to see the new position
+3. Use analyze_position to get engine analysis of any position
+4. Format tool calls as: TOOL_NAME(param1="value1", param2="value2")
+
+Example: If user asks "what if I move e2 to e4?":
+1. validate_move(from="e2", to="e4")  → checks if legal
+2. If valid: apply_move(from="e2", to="e4")  → applies move, returns new FEN
+3. analyze_position(fen="<new-fen>")  → analyzes the resulting position
+
+Always validate moves before applying them.
 `;
 
   const defaultSystemPrompt = [
     "You are a chess grandmaster analyzing positions with expert-level insight.",
     "Use deep strategic and tactical understanding to explain positions, evaluate moves, and compare analysis lines.",
     "Your role is to help club-level players understand the ideas behind moves, not to act as a computer engine.",
+    "",
+    "Engine-Provided Analysis:",
+    "The chess engine has already analyzed the position and provided the top lines.",
+    "Your job is to EXPLAIN these engine-provided lines - why they are strong, what ideas they contain, and how they compare.",
+    "Do NOT suggest alternative moves or lines - the engine analysis is the source of truth for move suggestions.",
+    "When the user asks about moves, explain why the engine-recommended lines are best.",
+    "When reporting on multiple lines in your analysis, format them as a numbered list (1. Line 1 explanation, 2. Line 2 explanation, etc.)",
     "",
     "Piece Notation:",
     "Always use piece glyphs and algebraic notation in your analysis:",
@@ -1445,10 +1662,12 @@ When analyzing, use these tools to verify legal moves and understand the positio
     "- Centipawn (cp) evaluations: +100 cp means white is better by about one pawn; negative values favor black",
     "- Win probability from neural networks: 75% means the neural net expects white to win 75% of the time from random play",
     "",
-    "When analyzing multiple lines, compare them strategically:",
-    "- Explain why Line 1 is superior (better position, safer, clearer advantage)",
-    "- Highlight key differences between lines (different plans, pawn structures, piece activity)",
-    "- Focus on concrete ideas and tactical motifs, not abstract concepts",
+    "When analyzing multiple lines, compare them strategically using a numbered list format:",
+    "1. Line 1: Explain why it's superior (better position, safer, clearer advantage)",
+    "2. Line 2: Highlight key differences from Line 1 (different plans, pawn structures, piece activity)",
+    "3. Line 3: (if discussing) Key tactical/strategic differences",
+    "4. Line 4: (if discussing) Position assessment and viability",
+    "Focus on concrete ideas and tactical motifs, not abstract concepts.",
     "",
     "For move-by-move explanations: break down the line move by move, explaining each move's:",
     "- Tactical purpose (captures, attacks, defensive moves) using algebraic notation",
@@ -1518,8 +1737,31 @@ async function runLlmChat(params: {
   timeoutMs?: number;
 }): Promise<string> {
   const { provider, baseUrl, model, apiKey, messages, timeoutMs = 120000 } = params;
+
+  // Validate required fields
+  if (!provider || !model?.trim() || !baseUrl?.trim()) {
+    throw new Error(`Invalid LLM configuration: provider=${provider}, model=${model}, baseUrl=${baseUrl}`);
+  }
+
+  if (!messages || messages.length === 0) {
+    throw new Error("No messages provided for LLM chat");
+  }
+
+  // Validate model matches provider
+  if (!isModelRelevantForProvider(provider, model)) {
+    const validModels = VALID_MODELS_BY_PROVIDER[provider] || [];
+    throw new Error(`Model "${model}" is not valid for provider "${provider}". Expected one of: ${validModels.join(", ") || "unknown"}`);
+  }
+
+  // Validate API key for non-Ollama providers
+  if (provider !== "ollama" && (!apiKey || !apiKey.trim())) {
+    throw new Error(`API key is required for ${provider} provider`);
+  }
+
   const estimatedTokens = estimateContextTokens(messages);
   const contextTruncated = truncateContextIfNeeded(messages, 6000);
+
+  console.log(`[LLM] Chat request started | Provider: ${provider} | Model: ${model} | Tokens: ~${estimatedTokens}`);
 
   if (contextTruncated) {
     processManager?.recordOllamaLog?.({
@@ -1541,19 +1783,23 @@ async function runLlmChat(params: {
       model
     });
 
+    let result: string;
     if (provider === "ollama") {
-      return await runOllamaChatInternal(baseUrl, model, messages, controller.signal);
+      result = await runOllamaChatInternal(baseUrl, model, messages, controller.signal);
     } else if (provider === "openai" || provider === "grok") {
-      return await runOpenAICompatibleChat(baseUrl, model, apiKey, messages, controller.signal);
+      result = await runOpenAICompatibleChat(provider, baseUrl, model, apiKey, messages, controller.signal, true);
     } else if (provider === "anthropic") {
-      return await runAnthropicChat(baseUrl, model, apiKey, messages, controller.signal);
+      result = await runAnthropicChat(baseUrl, model, apiKey, messages, controller.signal, true);
     } else if (provider === "gemini") {
-      return await runGeminiChat(baseUrl, model, apiKey, messages, controller.signal);
+      result = await runGeminiChat(baseUrl, model, apiKey, messages, controller.signal);
     } else {
       throw new Error(`Unknown LLM provider: ${provider}`);
     }
+    console.log(`[LLM] ✓ Chat request completed | Provider: ${provider} | Model: ${model} | Response length: ${result.length}`);
+    return result;
   } catch (err) {
     if ((err as any).name === "AbortError") {
+      console.error(`[LLM] ✗ Chat request timed out (${timeoutMs}ms) | Provider: ${provider}`);
       processManager?.recordOllamaLog?.({
         text: `LLM request timed out after ${timeoutMs}ms.`,
         stream: "stderr",
@@ -1562,6 +1808,7 @@ async function runLlmChat(params: {
       });
       throw new Error(`LLM request timed out (${timeoutMs}ms).`);
     }
+    console.error(`[LLM] ✗ Chat request failed | Provider: ${provider} | Error: ${(err as Error).message}`);
     throw err;
   } finally {
     clearTimeout(timeoutId);
@@ -1585,60 +1832,200 @@ async function runOllamaChatInternal(baseUrl: string, model: string, messages: A
   return String(data?.message?.content || "").trim();
 }
 
-async function runOpenAICompatibleChat(baseUrl: string, model: string, apiKey: string | undefined, messages: Array<{ role: string; content: string }>, signal: AbortSignal): Promise<string> {
+async function runOpenAICompatibleChat(provider: string, baseUrl: string, model: string, apiKey: string | undefined, messages: Array<{ role: string; content: string }>, signal: AbortSignal, includeTools: boolean = true): Promise<string> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (apiKey) {
     headers["Authorization"] = `Bearer ${apiKey}`;
   }
 
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ model, messages }),
-    signal
-  });
+  const conversationMessages = [...messages];
+  let finalResponse = "";
 
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`OpenAI-compatible request failed (${response.status}): ${text}`);
+  // Tool calling loop - handle up to 3 rounds of tool calls
+  for (let round = 0; round < 3; round++) {
+    const requestBody: Record<string, any> = { model, messages: conversationMessages };
+
+    if (includeTools) {
+      const toolDefs = getLlmToolDefinitions();
+      requestBody.tools = toolDefs.map((tool) => ({
+        type: "function",
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.inputSchema || { type: "object", properties: {} }
+        }
+      }));
+      requestBody.tool_choice = "auto";
+    }
+
+    // Both Grok and OpenAI use the OpenAI-compatible /chat/completions endpoint
+    const endpoint = `${baseUrl}/chat/completions`;
+
+    console.log(`[LLM] HTTP Request Details:`, {
+      provider,
+      endpoint,
+      method: "POST",
+      headers: {
+        "Content-Type": headers["Content-Type"],
+        "Authorization": headers["Authorization"] ? "Bearer [REDACTED]" : "none"
+      },
+      bodyKeys: Object.keys(requestBody)
+    });
+
+    const requestBodyString = JSON.stringify(requestBody);
+    console.log(`[LLM] Request body (first 500 chars):`, requestBodyString.substring(0, 500));
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: requestBodyString,
+      signal
+    });
+
+    const responseText = await response.text();
+    console.log(`[LLM] HTTP Response:`, {
+      status: response.status,
+      statusText: response.statusText,
+      contentType: response.headers.get("content-type"),
+      bodyPreview: responseText.substring(0, 500)
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI-compatible request failed (${response.status}): ${responseText}`);
+    }
+
+    const data = JSON.parse(responseText) as any;
+    const message = data?.choices?.[0]?.message;
+    finalResponse = message?.content || "";
+
+    // Check for tool calls
+    if (message?.tool_calls && message.tool_calls.length > 0) {
+      console.log(`[LLM] Tool calls detected: ${message.tool_calls.length}`);
+
+      // Add assistant message with tool calls
+      conversationMessages.push({
+        role: "assistant",
+        content: finalResponse,
+        tool_calls: message.tool_calls
+      } as any);
+
+      // Execute tools and collect results
+      const toolResults = [];
+      for (const toolCall of message.tool_calls) {
+        const toolResult = await executeTool(toolCall.function.name, toolCall.function.arguments || {});
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: toolCall.id,
+          content: toolResult
+        });
+      }
+
+      // Add tool results to conversation
+      conversationMessages.push({
+        role: "user",
+        content: JSON.stringify(toolResults)
+      });
+    } else {
+      // No tool calls, return the response
+      break;
+    }
   }
 
-  const data = await response.json() as any;
-  return String(data?.choices?.[0]?.message?.content || "").trim();
+  return finalResponse;
 }
 
-async function runAnthropicChat(baseUrl: string, model: string, apiKey: string | undefined, messages: Array<{ role: string; content: string }>, signal: AbortSignal): Promise<string> {
+async function runAnthropicChat(baseUrl: string, model: string, apiKey: string | undefined, messages: Array<{ role: string; content: string }>, signal: AbortSignal, includeTools: boolean = true): Promise<string> {
   if (!apiKey) {
     throw new Error("Anthropic API requires an API key.");
   }
 
   // Extract system message from messages array
   const systemMessage = messages.find(m => m.role === "system")?.content || "";
-  const otherMessages = messages.filter(m => m.role !== "system");
+  const conversationMessages = messages.filter(m => m.role !== "system").map(m => ({ ...m }));
 
-  const response = await fetch(`${baseUrl}/messages`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01"
-    },
-    body: JSON.stringify({
+  let finalResponse = "";
+
+  // Tool calling loop - handle up to 3 rounds of tool calls
+  for (let round = 0; round < 3; round++) {
+    const requestBody: Record<string, any> = {
       model,
       max_tokens: 4096,
       ...(systemMessage && { system: systemMessage }),
-      messages: otherMessages
-    }),
-    signal
-  });
+      messages: conversationMessages
+    };
 
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`Anthropic request failed (${response.status}): ${text}`);
+    if (includeTools) {
+      const toolDefs = getLlmToolDefinitions();
+      requestBody.tools = toolDefs.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        input_schema: tool.inputSchema || { type: "object", properties: {} }
+      }));
+    }
+
+    const response = await fetch(`${baseUrl}/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify(requestBody),
+      signal
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`Anthropic request failed (${response.status}): ${text}`);
+    }
+
+    const data = await response.json() as any;
+
+    // Check for tool use blocks
+    const hasToolUse = data?.content?.some((block: any) => block.type === "tool_use");
+
+    if (hasToolUse) {
+      console.log(`[LLM] Tool calls detected in Anthropic response`);
+
+      // Add assistant message to conversation
+      conversationMessages.push({
+        role: "assistant",
+        content: JSON.stringify(data.content)
+      });
+
+      // Execute tools and collect results
+      const toolResults = [];
+      for (const block of data.content) {
+        if (block.type === "tool_use") {
+          const toolResult = await executeTool(block.name, block.input || {});
+          toolResults.push({
+            type: "tool_result",
+            tool_use_id: block.id,
+            content: toolResult
+          });
+        } else if (block.type === "text") {
+          finalResponse = block.text;
+        }
+      }
+
+      // Add tool results to conversation
+      conversationMessages.push({
+        role: "user",
+        content: JSON.stringify(toolResults)
+      });
+    } else {
+      // No tool calls, extract text and return
+      for (const block of data?.content || []) {
+        if (block.type === "text") {
+          finalResponse = block.text;
+          break;
+        }
+      }
+      break;
+    }
   }
 
-  const data = await response.json() as any;
-  return String(data?.content?.[0]?.text || "").trim();
+  return finalResponse;
 }
 
 async function runGeminiChat(baseUrl: string, model: string, apiKey: string | undefined, messages: Array<{ role: string; content: string }>, signal: AbortSignal): Promise<string> {
@@ -1681,12 +2068,14 @@ ipcMain.handle("ollama:explain-lines", async (_event, payload) => {
   const language = payload?.language || settings.get("explainLanguage") || "English";
   const llmProvider = payload?.llmProvider || settings.get("llmProvider") || "ollama";
   const llmApiKey = payload?.llmApiKey || settings.get("llmApiKey") || "";
-  const model = payload?.model || settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL;
-  const baseUrl = (payload?.baseUrl || settings.get("ollamaBaseUrl") || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
+  const model = payload?.model || getModelForProvider(llmProvider, settings.get("ollamaModel"));
+  const baseUrl = (payload?.baseUrl || (llmProvider === "ollama" ? settings.get("ollamaBaseUrl") : null) || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
 
   if (!lines.length) {
     return { ok: true, explanations: [] };
   }
+
+  console.log(`[LLM] Explaining ${lines.length} lines | Provider: ${llmProvider} | Model: ${model} | Language: ${language}`);
 
   try {
     const explanations = await Promise.all(
@@ -1699,9 +2088,12 @@ ipcMain.handle("ollama:explain-lines", async (_event, payload) => {
         };
       })
     );
+    console.log(`[LLM] ✓ Explained ${explanations.length} lines successfully`);
     return { ok: true, explanations };
   } catch (err) {
-    return { ok: false, error: (err as Error)?.message || "LLM explanation failed." };
+    const errorMsg = (err as Error)?.message || "LLM explanation failed.";
+    console.error(`[LLM] ✗ Explanation failed: ${errorMsg}`);
+    return { ok: false, error: errorMsg };
   }
 });
 
@@ -1744,8 +2136,12 @@ ipcMain.handle("ollama:ask-question", async (_event, payload) => {
   const language = payload?.language || settings.get("explainLanguage") || "English";
   const llmProvider = payload?.llmProvider || settings.get("llmProvider") || "ollama";
   const llmApiKey = payload?.llmApiKey || settings.get("llmApiKey") || "";
-  const model = payload?.model || settings.get("ollamaModel") || "qwen3";
-  const baseUrl = (payload?.baseUrl || settings.get("ollamaBaseUrl") || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
+  const model = payload?.model || getModelForProvider(llmProvider, settings.get("ollamaModel"));
+  const baseUrl = (payload?.baseUrl || (llmProvider === "ollama" ? settings.get("ollamaBaseUrl") : null) || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
+
+  const shortQuestion = question.substring(0, 80) + (question.length > 80 ? "..." : "");
+  console.log(`[LLM] Payload received | Provider from payload: ${payload?.llmProvider} | Saved provider: ${settings.get("llmProvider")}`);
+  console.log(`[LLM] Question from user | Provider: ${llmProvider} | Model: ${model} | Q: "${shortQuestion}"`);
 
   try {
     const messages = buildPrompt({
@@ -1757,19 +2153,79 @@ ipcMain.handle("ollama:ask-question", async (_event, payload) => {
       systemPrompt: payload?.systemPrompt
     });
     const answer = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
+    console.log(`[LLM] ✓ Question answered (${lines.length} lines used) | Provider: ${llmProvider}`);
     return { ok: true, answer: answer || "No response returned.", linesUsed: lines.length };
   } catch (err) {
-    return { ok: false, error: (err as Error)?.message || "LLM question failed." };
+    const errorMsg = (err as Error)?.message || "LLM question failed.";
+    console.error(`[LLM] ✗ Question failed: ${errorMsg} | Provider: ${llmProvider}`);
+    return { ok: false, error: errorMsg };
   }
 });
 
+// ============================================================================
+// LLM Chess Tools IPC Handlers
+// ============================================================================
+
+ipcMain.handle("validateMove", (_event, { from, to }: { from: string; to: string }) => {
+  console.log(`[Tool] validateMove | from: ${from} to: ${to}`);
+  const result = boardManager.validateMove(from, to);
+  return result;
+});
+
+ipcMain.handle("applyMove", (_event, { from, to }: { from: string; to: string }) => {
+  console.log(`[Tool] applyMove | from: ${from} to: ${to}`);
+  const result = boardManager.applyMove(from, to);
+  if (result.ok) {
+    console.log(`[Tool] ✓ Move applied | new FEN: ${result.fen}`);
+  } else {
+    console.log(`[Tool] ✗ Move failed | reason: ${result.error}`);
+  }
+  return result;
+});
+
+ipcMain.handle("getBoardFen", () => {
+  const fen = boardManager.getBoardFen();
+  console.log(`[Tool] getBoardFen | FEN: ${fen}`);
+  return { fen };
+});
+
+ipcMain.handle("getLegalMoves", () => {
+  const moves = boardManager.getLegalMoves();
+  console.log(`[Tool] getLegalMoves | count: ${moves.length}`);
+  return { moves };
+});
+
+ipcMain.handle("analyzeBoardPosition", async (_event, { fen, depth }: { fen?: string; depth?: number }) => {
+  const targetFen = fen || boardManager.getBoardFen();
+  const analyzeDepth = depth || (settings.get("analysisDepth") as number) || 16;
+  console.log(`[Tool] analyzeBoardPosition | FEN: ${targetFen.substring(0, 30)}... | depth: ${analyzeDepth}`);
+
+  try {
+    const result = await performAnalysis("stockfish", targetFen, analyzeDepth, 4);
+    if (result?.ok) {
+      console.log(`[Tool] ✓ Position analyzed | best move: ${result.analysis?.lines[0]?.pv?.split(" ")[0] || "N/A"}`);
+    } else {
+      console.log(`[Tool] ✗ Analysis failed`);
+    }
+    return result;
+  } catch (err) {
+    const errorMsg = (err as Error)?.message || "analysis failed";
+    console.error(`[Tool] ✗ Position analysis error: ${errorMsg}`);
+    return { ok: false, error: errorMsg };
+  }
+});
+}
+
 app.whenReady().then(async () => {
+  registerIpcHandlers();
   await createWindow();
+
   try {
     await processManager.init();
   } catch (err) {
-    // Initialization errors already logged in ProcessManager.
+    console.error("[electron] ProcessManager init error:", err);
   }
+
   app.on("activate", async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       await createWindow();

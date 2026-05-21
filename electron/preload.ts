@@ -38,6 +38,18 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getAvailableModels: (payload: IpcPayloads["getAvailableModels"]) =>
     ipcRenderer.invoke("getAvailableModels", payload) as Promise<IpcResponses["getAvailableModels"]>,
 
+  // LLM Chess Tools
+  validateMove: (options: IpcPayloads["validateMove"]) =>
+    ipcRenderer.invoke("validateMove", options) as Promise<IpcResponses["validateMove"]>,
+  applyMove: (options: IpcPayloads["applyMove"]) =>
+    ipcRenderer.invoke("applyMove", options) as Promise<IpcResponses["applyMove"]>,
+  getBoardFen: () =>
+    ipcRenderer.invoke("getBoardFen") as Promise<IpcResponses["getBoardFen"]>,
+  getLegalMoves: () =>
+    ipcRenderer.invoke("getLegalMoves") as Promise<IpcResponses["getLegalMoves"]>,
+  analyzeBoardPosition: (options: IpcPayloads["analyzeBoardPosition"]) =>
+    ipcRenderer.invoke("analyzeBoardPosition", options) as Promise<IpcResponses["analyzeBoardPosition"]>,
+
   // Logging and state
   getProcessLogs: () =>
     ipcRenderer.invoke("process:get-logs") as Promise<IpcResponses["getProcessLogs"]>,

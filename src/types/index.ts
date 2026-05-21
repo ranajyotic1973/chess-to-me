@@ -99,6 +99,7 @@ export interface EngineStatus {
     ollamaModel: string;
     ollamaBaseUrl: string;
     llmProvider: "ollama" | "openai" | "anthropic" | "gemini" | "grok";
+    llmApiKey?: string;
     llmApiKeyLength: number;
   };
 }
@@ -153,6 +154,47 @@ export interface OllamaChatResponse {
 }
 
 // ============================================================================
+// LLM Tool Calling Types
+// ============================================================================
+
+export interface MoveValidationResult {
+  valid: boolean;
+  reason?: string;
+}
+
+export interface BoardAnalysisResult extends AnalysisResult {
+  fen: string;
+}
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  arguments?: Record<string, any>;
+}
+
+export interface ToolResult {
+  tool_use_id?: string;
+  toolName?: string;
+  type: "tool_result";
+  content: string | Record<string, any>;
+}
+
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: {
+    type: "object";
+    properties: Record<string, any>;
+    required?: string[];
+  };
+}
+
+export interface LLMToolCall {
+  toolName: string;
+  arguments: Record<string, any>;
+}
+
+// ============================================================================
 // Electron IPC Types
 // ============================================================================
 
@@ -192,6 +234,11 @@ export interface IpcPayloads {
     apiKey?: string;
     baseUrl?: string;
   };
+  validateMove: { from: string; to: string };
+  applyMove: { from: string; to: string };
+  getBoardFen: Record<string, never>;
+  getLegalMoves: Record<string, never>;
+  analyzeBoardPosition: { fen?: string; depth?: number };
 }
 
 export interface IpcResponses {
@@ -208,6 +255,11 @@ export interface IpcResponses {
   openExternalUrl: { ok: boolean };
   getSystemStatus: SystemStatus;
   getAvailableModels: { ok: boolean; models?: string[]; error?: string };
+  validateMove: { valid: boolean; reason?: string };
+  applyMove: { ok: boolean; fen?: string; error?: string };
+  getBoardFen: { fen: string };
+  getLegalMoves: { moves: string[] };
+  analyzeBoardPosition: { ok: boolean; analysis?: AnalysisResult; error?: string };
 }
 
 // ============================================================================
@@ -221,6 +273,9 @@ export interface AnalysisBoardProps {
   setStatusMessage: (msg: string) => void;
   onBoardMove?: (fen: string) => void;
   size?: { width: number; height: number };
+  onStartAnalysis?: () => void;
+  onStopAnalysis?: () => void;
+  isAnalysisRunning?: boolean;
 }
 
 export interface StatusBannerProps {
@@ -242,6 +297,12 @@ export interface ChatPanelProps {
   onPlayLine?: (moves: Move[]) => void;
   selectedAnalysisId: string | null;
   onLineSelect?: (entry: AnalysisEntry) => void;
+  onMoveSuggested?: (from: string, to: string) => void;
+  llmProvider?: string;
+  analysisLines?: AnalysisLine[];
+  onSelectEngineLine?: (lineIndex: number, line: AnalysisLine) => void;
+  selectedEngineLineIndex?: number | null;
+  currentMoveIndex?: number;
   sx?: any;
 }
 
@@ -249,6 +310,7 @@ export interface SettingsPanelProps {
   formState: FormState;
   onFieldChange: (key: string, value: string | number) => void;
   onDetect: () => void;
+  onDetectAll: () => void;
   onBrowse: () => void;
   onSaveSettings: () => void;
   onSettingsComplete: () => void;
@@ -336,6 +398,13 @@ export interface ElectronAPI {
   // System
   openExternalUrl(url: string): Promise<{ ok: boolean }>;
   getSystemStatus(): Promise<SystemStatus>;
+
+  // LLM Chess Tools
+  validateMove(options: { from: string; to: string }): Promise<MoveValidationResult>;
+  applyMove(options: { from: string; to: string }): Promise<{ ok: boolean; fen?: string; error?: string }>;
+  getBoardFen(): Promise<{ fen: string }>;
+  getLegalMoves(): Promise<{ moves: string[] }>;
+  analyzeBoardPosition(options: { fen?: string; depth?: number }): Promise<{ ok: boolean; analysis?: AnalysisResult; error?: string }>;
 }
 
 declare global {
