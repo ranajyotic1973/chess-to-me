@@ -140,6 +140,33 @@ export interface ProcessLogs {
 // LLM Types
 // ============================================================================
 
+export type ResponseType = "Analysis" | "Puzzle" | "Position" | "Game";
+
+export interface ConversationMessage {
+  role: "user" | "assistant";
+  message: string;
+  timestamp: number;
+}
+
+export interface GameMemoryEntry {
+  pgn: string;
+  annotations: Record<number, "!!" | "!" | "*" | "!?" | "??">;
+  timestamp: number;
+}
+
+export interface LLMResponse {
+  ok: boolean;
+  response_type?: ResponseType;
+  type?: ResponseType;
+  answer?: string;
+  explanation?: string;
+  fen?: string;
+  hidden_solution?: boolean;
+  lines?: AnalysisLine[];
+  annotations?: Record<number, "!!" | "!" | "*" | "!?" | "??">;
+  error?: string;
+}
+
 export interface OllamaMessage {
   role: "system" | "user" | "assistant";
   content: string;
@@ -227,6 +254,8 @@ export interface IpcPayloads {
     systemPrompt?: string;
     llmProvider?: "ollama" | "openai" | "anthropic" | "gemini" | "grok";
     llmApiKey?: string;
+    responseType?: ResponseType;
+    conversationHistory?: ConversationMessage[];
   };
   setOllamaModel: string;
   getAvailableModels: {
@@ -303,6 +332,10 @@ export interface ChatPanelProps {
   onSelectEngineLine?: (lineIndex: number, line: AnalysisLine) => void;
   selectedEngineLineIndex?: number | null;
   currentMoveIndex?: number;
+  responseType?: ResponseType;
+  responseData?: Record<string, any>;
+  showSolution?: boolean;
+  onShowSolution?: () => void;
   sx?: any;
 }
 

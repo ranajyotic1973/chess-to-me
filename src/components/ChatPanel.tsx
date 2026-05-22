@@ -74,6 +74,10 @@ export default function ChatPanel({
   onSelectEngineLine,
   selectedEngineLineIndex = null,
   currentMoveIndex = 0,
+  responseType,
+  responseData = {},
+  showSolution = false,
+  onShowSolution,
   sx
 }: ChatPanelProps) {
   const [showEngineLines, setShowEngineLines] = useState(false);
@@ -250,6 +254,23 @@ export default function ChatPanel({
                   </Typography>
                 </Box>
               )}
+
+              {/* Response type badge */}
+              {responseType && responseType !== "Analysis" && (
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+                  <Typography variant="caption" sx={{ fontWeight: 600, color: "primary.main" }}>
+                    Response Type:
+                  </Typography>
+                  <Chip
+                    label={responseType}
+                    size="small"
+                    color="primary"
+                    variant="outlined"
+                    sx={{ height: 24 }}
+                  />
+                </Box>
+              )}
+
               <Typography variant="subtitle2">{providerName} response:</Typography>
               {questionLoading ? (
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: 2 }}>
@@ -275,21 +296,39 @@ export default function ChatPanel({
                       ))}
                     </Box>
                   )}
-                  <Box
-                    sx={{
-                      color: "#333",
-                      fontSize: "0.875rem",
-                      lineHeight: 1.6,
-                      "& p": { margin: "0.5rem 0" },
-                      "& ul, & ol": { marginLeft: "1.5rem", margin: "0.5rem 0" },
-                      "& li": { marginBottom: "0.25rem" },
-                      "& code": { backgroundColor: "#f5f5f5", padding: "2px 6px", borderRadius: "3px", fontFamily: "monospace" },
-                      "& pre": { backgroundColor: "#f5f5f5", padding: "12px", borderRadius: "4px", overflowX: "auto", fontSize: "0.8rem" },
-                      "& blockquote": { borderLeft: "3px solid #ddd", marginLeft: "0", paddingLeft: "12px", color: "#666" }
-                    }}
-                  >
-                    <ReactMarkdown>{questionResponse}</ReactMarkdown>
-                  </Box>
+
+                  {/* Hidden solution reveal button for puzzles */}
+                  {responseType === "Puzzle" && responseData?.hidden_solution && !showSolution && (
+                    <Box sx={{ py: 2, textAlign: "center" }}>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={onShowSolution}
+                        sx={{ textTransform: "none" }}
+                      >
+                        Reveal Solution
+                      </Button>
+                    </Box>
+                  )}
+
+                  {/* Show explanation only if not hidden or if revealed */}
+                  {(!responseData?.hidden_solution || showSolution) && (
+                    <Box
+                      sx={{
+                        color: "#333",
+                        fontSize: "0.875rem",
+                        lineHeight: 1.6,
+                        "& p": { margin: "0.5rem 0" },
+                        "& ul, & ol": { marginLeft: "1.5rem", margin: "0.5rem 0" },
+                        "& li": { marginBottom: "0.25rem" },
+                        "& code": { backgroundColor: "#f5f5f5", padding: "2px 6px", borderRadius: "3px", fontFamily: "monospace" },
+                        "& pre": { backgroundColor: "#f5f5f5", padding: "12px", borderRadius: "4px", overflowX: "auto", fontSize: "0.8rem" },
+                        "& blockquote": { borderLeft: "3px solid #ddd", marginLeft: "0", paddingLeft: "12px", color: "#666" }
+                      }}
+                    >
+                      <ReactMarkdown>{questionResponse}</ReactMarkdown>
+                    </Box>
+                  )}
                 </Box>
               )}
             </>

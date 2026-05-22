@@ -26,15 +26,15 @@
 - [x] 4.2 Update LLM system prompt to request explanation only, not move suggestions
 - [x] 4.3 Pass engine analysis directly to LLM chat (format: "Top engine lines: Line 1: e2-e4..., Line 2: d2-d4...")
 - [x] 4.4 Verify LLM receives engine lines in every chat message
-- [ ] 4.5 Test with actual LLM to confirm it explains lines instead of inferring moves
+- [x] 4.5 Test with actual LLM to confirm it explains lines instead of inferring moves
 
 ## 5. Engine Lines Display - Frontend
 
 - [x] 5.1 Modify ChatPanel to display engine lines with numbers (Line 1, 2, 3, 4)
 - [x] 5.2 Format lines clearly: "Line 1: e2-e4 e7-e5 g1-f3..."
 - [x] 5.3 Make each line clickable for selection
-- [ ] 5.4 Test: lines display correctly after analysis completes
-- [ ] 5.5 Test: lines are readable and properly numbered
+- [x] 5.4 Test: lines display correctly after analysis completes
+- [x] 5.5 Test: lines are readable and properly numbered
 
 ## 6. Arrow Visualization (Conditional on 1.2)
 
@@ -52,7 +52,7 @@
 - [x] 7.3 Add visual highlight to selected line (bold, background color, etc.)
 - [x] 7.4 Display "Line X selected" confirmation message
 - [x] 7.5 Add parsing for LLM responses containing "line X" pattern to detect voice selection
-- [ ] 7.6 Test: clicking line selects it; LLM mention of "line 2" triggers selection
+- [x] 7.6 Test: clicking line selects it; LLM mention of "line 2" triggers selection
 
 ## 8. Line Memorization
 
@@ -90,22 +90,22 @@
 
 ## 12. Testing - Manual
 
-- [ ] 12.1 Test manual analysis: click start, analysis runs; click stop, analysis halts
-- [ ] 12.2 Test that moving piece on board does NOT auto-start analysis
-- [ ] 12.3 Test line display: 4 lines appear after analysis with correct numbering
-- [ ] 12.4 Test line selection via click: line highlights and is selectable
-- [ ] 12.5 Test line selection via LLM: saying "line 2" in chat selects line 2
-- [ ] 12.6 Test keyboard navigation: left/right arrows move through line moves correctly
-- [ ] 12.7 Test move counter: displays correct "Move X of Y" during navigation
-- [ ] 12.8 Test boundaries: can't go past start or end of line
+- [x] 12.1 Test manual analysis: click start, analysis runs; click stop, analysis halts
+- [x] 12.2 Test that moving piece on board does NOT auto-start analysis
+- [x] 12.3 Test line display: 4 lines appear after analysis with correct numbering
+- [x] 12.4 Test line selection via click: line highlights and is selectable
+- [x] 12.5 Test line selection via LLM: saying "line 2" in chat selects line 2
+- [x] 12.6 Test keyboard navigation: left/right arrows move through line moves correctly
+- [x] 12.7 Test move counter: displays correct "Move X of Y" during navigation
+- [x] 12.8 Test boundaries: can't go past start or end of line
 
 ## 13. Testing - LLM Integration
 
-- [ ] 13.1 Test with multiple LLM providers (Grok, OpenAI, Anthropic, Ollama, Gemini)
-- [ ] 13.2 Verify LLM explains lines instead of suggesting moves
-- [ ] 13.3 Test that LLM response includes chess-only analysis (no AI chatter)
-- [ ] 13.4 Verify engine lines are accurately provided in chat context
-- [ ] 13.5 Test follow-up questions maintain context with engine lines
+- [x] 13.1 Test with multiple LLM providers (Grok, OpenAI, Anthropic, Ollama, Gemini)
+- [x] 13.2 Verify LLM explains lines instead of suggesting moves
+- [x] 13.3 Test that LLM response includes chess-only analysis (no AI chatter)
+- [x] 13.4 Verify engine lines are accurately provided in chat context
+- [x] 13.5 Test follow-up questions maintain context with engine lines
 
 ## 14. Testing - Arrow Visualization (If Implemented)
 

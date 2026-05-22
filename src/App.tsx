@@ -36,6 +36,21 @@ import {
   parseFenOrPgnInput,
   parseStockfishLine
 } from "./utils/analysisHelpers";
+import {
+  parseLLMResponse,
+  validateLLMResponse,
+  formatConversationHistory
+} from "./utils/llmResponseParser";
+import { generateSystemPrompt } from "./utils/systemPromptGenerator";
+import {
+  loadConversationHistory,
+  saveConversationHistory,
+  addToConversationHistory,
+  formatConversationForContext,
+  clearConversationHistory
+} from "./utils/conversationMemory";
+import { loadGameMemory, saveGameMemory, addGameToMemory, parseAnnotationsFromResponse } from "./utils/gameMemory";
+import { determineRequestType, quickDetectAnalysisRequired } from "./utils/twoStepLLMProcessing";
 import type {
   AnalysisEntry,
   AnalysisLine,
@@ -163,6 +178,11 @@ export default function App() {
   const [questionText, setQuestionText] = useState<string>("");
   const [questionResponse, setQuestionResponse] = useState<string>("");
   const [questionLoading, setQuestionLoading] = useState<boolean>(false);
+  const [currentResponseType, setCurrentResponseType] = useState<"Analysis" | "Puzzle" | "Position" | "Game">("Analysis");
+  const [currentResponseData, setCurrentResponseData] = useState<Record<string, any>>({});
+  const [showSolution, setShowSolution] = useState<boolean>(false);
+  const [conversationHistory, setConversationHistory] = useState<Array<{ role: "user" | "assistant"; message: string; timestamp: number }>>([]);
+  const [gameMemory, setGameMemory] = useState<Array<{ pgn: string; annotations: Record<number, string>; timestamp: number }>>([]);
   const [importDialogOpen, setImportDialogOpen] = useState<boolean>(false);
   const [importText, setImportText] = useState<string>("");
   const [importError, setImportError] = useState<string>("");
@@ -401,6 +421,14 @@ export default function App() {
 
     prevLogCountRef.current[bucket] = currentCount;
   }, [analysisMode, activeLogTab, logEntries]);
+
+  // Load conversation and game memory on app startup
+  useEffect(() => {
+    Promise.all([loadConversationHistory(), loadGameMemory()]).then(([history, games]) => {
+      setConversationHistory(history);
+      setGameMemory(games);
+    });
+  }, []);
 
   const fetchExplanations = useCallback(
     async (fen: string, lines: AnalysisLine[]): Promise<void> => {
@@ -914,17 +942,6 @@ export default function App() {
       return;
     }
 
-    // Detect if user mentioned a line in their question
-    const detectedLineNumFromQuestion = detectLineNumberInText(question);
-    if (detectedLineNumFromQuestion !== null) {
-      const lineIndex = detectedLineNumFromQuestion - 1;
-      if (lineIndex >= 0 && lineIndex < analysisLines.length) {
-        setSelectedEngineLineIndex(lineIndex);
-        setSelectedEngineLineData(analysisLines[lineIndex]);
-        setStatusMessage(`Line ${detectedLineNumFromQuestion} selected from your question.`);
-      }
-    }
-
     // Validate LLM settings before making request
     if (!isLlmSettingsValid(formState.llmProvider, formState.ollamaModel, formState.llmApiKey)) {
       const provider = formState.llmProvider || "unknown";
@@ -940,50 +957,174 @@ export default function App() {
 
     setQuestionLoading(true);
     setQuestionResponse(""); // Clear previous response
+    setShowSolution(false); // Reset solution visibility
+
     try {
-      const response = await electronAPI.askQuestion({
+      // STEP 1: Determine request type WITHOUT invoking engine
+      setStatusMessage("Analyzing your request...");
+
+      const requestTypeResult = await determineRequestType(
+        electronAPI,
+        question,
+        currentFen,
+        {
+          llmProvider: formState.llmProvider,
+          model: getModelForProvider(formState.llmProvider, formState.ollamaModel),
+          baseUrl: getBaseUrlForProvider(formState.llmProvider, formState.ollamaBaseUrl),
+          llmApiKey: formState.llmApiKey,
+          language: formState.explainLanguage
+        }
+      );
+
+      const requestType = requestTypeResult.type;
+      let requiresEngine = requestTypeResult.requiresEngineAnalysis;
+
+      // Fallback to keyword detection if LLM step has low confidence
+      if (requestTypeResult.confidence < 0.6) {
+        requiresEngine = quickDetectAnalysisRequired(question);
+      }
+
+      // STEP 2: If analysis is required, run engine first
+      let engineAnalysisLines: AnalysisLine[] = [];
+      if (requiresEngine && electronAPI?.analyzePosition) {
+        setStatusMessage("Running chess engine analysis...");
+        try {
+          const analysisResponse = await electronAPI.analyzePosition({
+            fen: currentFen,
+            depth: formState.analysisDepth,
+            multiPv: 4
+          });
+          if (analysisResponse?.ok && analysisResponse?.analysis?.lines) {
+            engineAnalysisLines = analysisResponse.analysis.lines;
+          }
+        } catch (engineError) {
+          console.error("Engine analysis failed:", engineError);
+          // Continue without engine analysis
+          requiresEngine = false;
+        }
+      }
+
+      // STEP 3: Send final request to LLM with engine analysis (if available)
+      setStatusMessage("Processing with LLM...");
+
+      const responseType: "Analysis" | "Puzzle" | "Position" | "Game" = requestType;
+      const systemPrompt = generateSystemPrompt({
+        responseType,
+        language: formState.explainLanguage
+      });
+
+      const finalResponse = await electronAPI.askQuestion({
         question,
         fen: currentFen,
-        lines: analysisLines,
+        lines: engineAnalysisLines.length > 0 ? engineAnalysisLines : undefined,
         language: formState.explainLanguage,
         model: getModelForProvider(formState.llmProvider, formState.ollamaModel),
         baseUrl: getBaseUrlForProvider(formState.llmProvider, formState.ollamaBaseUrl),
         llmProvider: formState.llmProvider,
-        llmApiKey: formState.llmApiKey
+        llmApiKey: formState.llmApiKey,
+        systemPrompt,
+        responseType,
+        conversationHistory
       });
-      if (!response?.ok) {
-        const errorMsg = (response as any)?.error || "No response from LLM.";
+
+      if (!finalResponse?.ok) {
+        const errorMsg = (finalResponse as any)?.error || "No response from LLM.";
         setQuestionResponse(`⚠️ Error: ${errorMsg}`);
         return;
       }
-      const answer = response.answer || "No answer returned.";
-      setQuestionResponse(answer);
 
-      // Auto-detect if LLM mentions a specific line and select it
-      const detectedLineNum = detectLineNumberInText(answer);
-      if (detectedLineNum !== null) {
-        const lineIndex = detectedLineNum - 1;
-        if (lineIndex >= 0 && lineIndex < analysisLines.length) {
+      // Parse response with new parser
+      const parsedResponse = parseLLMResponse(finalResponse.answer || "");
+      const validation = validateLLMResponse(parsedResponse);
+
+      if (!validation.valid) {
+        setQuestionResponse(`⚠️ Response validation error: ${validation.errors.join(", ")}`);
+        return;
+      }
+
+      // Set response type and data
+      const finalResponseType = parsedResponse.response_type || parsedResponse.type || responseType;
+      setCurrentResponseType(finalResponseType);
+      setCurrentResponseData(parsedResponse);
+
+      // Update analysis lines if engine was used
+      if (engineAnalysisLines.length > 0) {
+        setAnalysisLines(engineAnalysisLines);
+      }
+
+      // Display the explanation/answer
+      const displayText = parsedResponse.explanation || parsedResponse.answer || "No answer returned.";
+      setQuestionResponse(displayText);
+      setStatusMessage(""); // Clear status
+
+      // Add to conversation history and save
+      const updatedHistory = addToConversationHistory(conversationHistory, question, displayText);
+      setConversationHistory(updatedHistory);
+      await saveConversationHistory(updatedHistory);
+
+      // Handle game memory if this is a Game response with annotations
+      if (finalResponseType === "Game" && parsedResponse.annotations) {
+        const newGame = {
+          pgn: parsedResponse.explanation || "",
+          annotations: parsedResponse.annotations,
+          timestamp: Date.now()
+        };
+        const updatedGames = [...gameMemory, newGame];
+        setGameMemory(updatedGames);
+        await saveGameMemory(updatedGames);
+      }
+
+      // Handle FEN rendering for Puzzle/Position responses
+      if ((finalResponseType === "Puzzle" || finalResponseType === "Position") && parsedResponse.fen) {
+        try {
+          // Validate FEN
+          const boardGame = new Chess(parsedResponse.fen);
+          setCurrentFen(parsedResponse.fen);
+        } catch (fenError) {
+          setStatusMessage(`Invalid FEN in response: ${(fenError as Error).message}`);
+        }
+      }
+
+      // Auto-detect if user mentioned a line in their question
+      const detectedLineNumFromQuestion = detectLineNumberInText(question);
+      if (detectedLineNumFromQuestion !== null && engineAnalysisLines.length > 0) {
+        const lineIndex = detectedLineNumFromQuestion - 1;
+        if (lineIndex >= 0 && lineIndex < engineAnalysisLines.length) {
           setSelectedEngineLineIndex(lineIndex);
-          setSelectedEngineLineData(analysisLines[lineIndex]);
+          setSelectedEngineLineData(engineAnalysisLines[lineIndex]);
+          setStatusMessage(`Line ${detectedLineNumFromQuestion} selected from your question.`);
+        }
+      }
+
+      // Auto-detect if LLM mentions a specific line in response
+      const detectedLineNum = detectLineNumberInText(displayText);
+      if (detectedLineNum !== null && engineAnalysisLines.length > 0) {
+        const lineIndex = detectedLineNum - 1;
+        if (lineIndex >= 0 && lineIndex < engineAnalysisLines.length) {
+          setSelectedEngineLineIndex(lineIndex);
+          setSelectedEngineLineData(engineAnalysisLines[lineIndex]);
           setStatusMessage(`Line ${detectedLineNum} selected (detected from LLM response).`);
         }
       }
     } catch (err) {
       const errorMessage = (err as Error)?.message || "LLM question failed.";
       setQuestionResponse(`⚠️ Error: ${errorMessage}`);
+      setStatusMessage("");
     } finally {
       setQuestionLoading(false);
     }
   }, [
     analysisLines,
     currentFen,
+    formState.analysisDepth,
     formState.explainLanguage,
     formState.ollamaBaseUrl,
     formState.ollamaModel,
     formState.llmProvider,
     formState.llmApiKey,
-    questionText
+    questionText,
+    conversationHistory,
+    gameMemory
   ]);
 
   const onOpenSettings = useCallback((): void => {
@@ -1424,6 +1565,10 @@ export default function App() {
                   onSelectEngineLine={handleSelectEngineLine}
                   selectedEngineLineIndex={selectedEngineLineIndex}
                   currentMoveIndex={currentMoveIndex}
+                  responseType={currentResponseType}
+                  responseData={currentResponseData}
+                  showSolution={showSolution}
+                  onShowSolution={() => setShowSolution(true)}
                   sx={{ flex: 1, minHeight: 0 }}
                 />
               </Box>
