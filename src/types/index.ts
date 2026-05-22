@@ -74,6 +74,7 @@ export interface AppSettings {
   ollamaBaseUrl: string;
   llmProvider: "ollama" | "openai" | "anthropic" | "gemini" | "grok";
   llmApiKey: string;
+  llmModel?: string; // For non-Ollama providers (openai, anthropic, gemini, grok)
 }
 
 export type FormState = AppSettings;
@@ -101,6 +102,7 @@ export interface EngineStatus {
     llmProvider: "ollama" | "openai" | "anthropic" | "gemini" | "grok";
     llmApiKey?: string;
     llmApiKeyLength: number;
+    llmModel?: string; // For non-Ollama providers
   };
 }
 

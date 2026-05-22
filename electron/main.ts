@@ -1239,7 +1239,15 @@ ipcMain.handle("getEngineStatus", async () => {
   const lc0Valid = lc0Path ? await verifyEnginePath(lc0Path, "lc0") : false;
   const llmApiKey = settings.get("llmApiKey") || "";
   const llmProvider = settings.get("llmProvider") || "ollama";
-  let llmModel = settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL;
+
+  // Load the appropriate model based on provider
+  let llmModel: string;
+  if (llmProvider === "ollama") {
+    llmModel = settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL;
+  } else {
+    // For non-Ollama providers, use llmModel field, fall back to ollamaModel for backward compatibility
+    llmModel = settings.get("llmModel") || settings.get("ollamaModel") || PROVIDER_DEFAULT_MODELS[llmProvider] || DEFAULT_OLLAMA_MODEL;
+  }
 
   // Validate that model is appropriate for the provider
   if (!isModelRelevantForProvider(llmProvider, llmModel)) {
@@ -1261,11 +1269,12 @@ ipcMain.handle("getEngineStatus", async () => {
     settings: {
       analysisDepth: Number(settings.get("analysisDepth")) || 16,
       explainLanguage: settings.get("explainLanguage") || "English",
-      ollamaModel: llmModel,
+      ollamaModel: settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL,
       ollamaBaseUrl: settings.get("ollamaBaseUrl") || "http://localhost:11434/api",
       llmProvider: llmProvider,
       llmApiKey: llmApiKey,
-      llmApiKeyLength: llmApiKey.length
+      llmApiKeyLength: llmApiKey.length,
+      llmModel: llmModel // Include the provider-specific model
     }
   };
 });
@@ -1273,7 +1282,14 @@ ipcMain.handle("getEngineStatus", async () => {
 ipcMain.handle("app:update-settings", async (_event, payload) => {
   const nextDepth = Math.max(6, Math.min(30, Number(payload?.analysisDepth) || 16));
   const nextProvider = payload?.llmProvider || settings.get("llmProvider") || "ollama";
-  let nextModel = payload?.ollamaModel || settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL;
+
+  // Get the model from the appropriate field based on provider
+  let nextModel: string;
+  if (nextProvider === "ollama") {
+    nextModel = payload?.ollamaModel || settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL;
+  } else {
+    nextModel = payload?.llmModel || payload?.model || settings.get("llmModel") || PROVIDER_DEFAULT_MODELS[nextProvider] || DEFAULT_OLLAMA_MODEL;
+  }
 
   // Validate model matches provider
   if (!isModelRelevantForProvider(nextProvider, nextModel)) {
@@ -1283,10 +1299,16 @@ ipcMain.handle("app:update-settings", async (_event, payload) => {
 
   settings.set("analysisDepth", nextDepth);
   settings.set("explainLanguage", payload?.explainLanguage || "English");
-  settings.set("ollamaModel", nextModel);
   settings.set("ollamaBaseUrl", payload?.ollamaBaseUrl || "http://localhost:11434/api");
   settings.set("selectedEngine", payload?.selectedEngine || settings.get("selectedEngine") || "lc0");
   settings.set("llmProvider", nextProvider);
+
+  // Save model to the appropriate field based on provider
+  if (nextProvider === "ollama") {
+    settings.set("ollamaModel", nextModel);
+  } else {
+    settings.set("llmModel", nextModel);
+  }
 
   if (payload?.stockfishPath) {
     settings.set("stockfishPath", payload.stockfishPath);
@@ -1317,10 +1339,11 @@ ipcMain.handle("app:update-settings", async (_event, payload) => {
     settings: {
       analysisDepth: nextDepth,
       explainLanguage: settings.get("explainLanguage"),
-      ollamaModel: nextModel,
+      ollamaModel: settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL,
       ollamaBaseUrl: settings.get("ollamaBaseUrl"),
       llmProvider: nextProvider,
-      llmApiKeyLength: (settings.get("llmApiKey") || "").length
+      llmApiKeyLength: (settings.get("llmApiKey") || "").length,
+      llmModel: nextModel
     }
   };
 });
@@ -2068,7 +2091,17 @@ ipcMain.handle("ollama:explain-lines", async (_event, payload) => {
   const language = payload?.language || settings.get("explainLanguage") || "English";
   const llmProvider = payload?.llmProvider || settings.get("llmProvider") || "ollama";
   const llmApiKey = payload?.llmApiKey || settings.get("llmApiKey") || "";
-  const model = payload?.model || getModelForProvider(llmProvider, settings.get("ollamaModel"));
+
+  // Get the correct model from settings based on provider, or use payload override
+  let model = payload?.model;
+  if (!model) {
+    if (llmProvider === "ollama") {
+      model = settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL;
+    } else {
+      model = settings.get("llmModel") || getModelForProvider(llmProvider);
+    }
+  }
+
   const baseUrl = (payload?.baseUrl || (llmProvider === "ollama" ? settings.get("ollamaBaseUrl") : null) || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
 
   if (!lines.length) {
@@ -2136,7 +2169,17 @@ ipcMain.handle("ollama:ask-question", async (_event, payload) => {
   const language = payload?.language || settings.get("explainLanguage") || "English";
   const llmProvider = payload?.llmProvider || settings.get("llmProvider") || "ollama";
   const llmApiKey = payload?.llmApiKey || settings.get("llmApiKey") || "";
-  const model = payload?.model || getModelForProvider(llmProvider, settings.get("ollamaModel"));
+
+  // Get the correct model from settings based on provider, or use payload override
+  let model = payload?.model;
+  if (!model) {
+    if (llmProvider === "ollama") {
+      model = settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL;
+    } else {
+      model = settings.get("llmModel") || getModelForProvider(llmProvider);
+    }
+  }
+
   const baseUrl = (payload?.baseUrl || (llmProvider === "ollama" ? settings.get("ollamaBaseUrl") : null) || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
 
   const shortQuestion = question.substring(0, 80) + (question.length > 80 ? "..." : "");

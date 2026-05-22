@@ -73,16 +73,19 @@ const DEFAULT_FORM: AppSettings = {
   ollamaModel: "qwen3:8b",
   ollamaBaseUrl: "http://localhost:11434/api",
   llmProvider: "ollama" as const,
-  llmApiKey: ""
+  llmApiKey: "",
+  llmModel: "grok-3" // Default model for non-Ollama providers
 };
 
 const VALID_PROVIDERS = ["ollama", "openai", "anthropic", "gemini", "grok"] as const;
 
 const normalizeModelName = (value: string | null | undefined): string => String(value || "").trim();
 
-const getModelForProvider = (provider: string, savedModel: string): string => {
-  // Only send saved model for Ollama; for other providers let backend use defaults
-  return provider === "ollama" ? savedModel : "";
+const getModelForProvider = (provider: string, ollamaModel: string, llmModel?: string): string => {
+  if (provider === "ollama") {
+    return ollamaModel;
+  }
+  return llmModel || ""; // Send saved model for other providers, or empty to use backend default
 };
 
 const getBaseUrlForProvider = (provider: string, ollamaBaseUrl: string): string => {
@@ -269,7 +272,8 @@ export default function App() {
           ollamaModel: status.settings?.ollamaModel || prev.ollamaModel,
           ollamaBaseUrl: status.settings?.ollamaBaseUrl || prev.ollamaBaseUrl,
           llmProvider: validProvider,
-          llmApiKey: status.settings?.llmApiKey || prev.llmApiKey || ""
+          llmApiKey: status.settings?.llmApiKey || prev.llmApiKey || "",
+          llmModel: status.settings?.llmModel || prev.llmModel
         };
       });
       userSelectedModelRef.current = Boolean(status.settings?.ollamaModel);
@@ -440,7 +444,7 @@ export default function App() {
           fen,
           lines,
           language: formState.explainLanguage,
-          model: getModelForProvider(formState.llmProvider, formState.ollamaModel),
+          model: getModelForProvider(formState.llmProvider, formState.ollamaModel, formState.llmModel),
           baseUrl: getBaseUrlForProvider(formState.llmProvider, formState.ollamaBaseUrl),
           llmProvider: formState.llmProvider,
           llmApiKey: formState.llmApiKey
@@ -848,7 +852,7 @@ export default function App() {
           fen: currentFen,
           lines: analysisLines,
           language: formState.explainLanguage,
-          model: getModelForProvider(formState.llmProvider, formState.ollamaModel),
+          model: getModelForProvider(formState.llmProvider, formState.ollamaModel, formState.llmModel),
           baseUrl: getBaseUrlForProvider(formState.llmProvider, formState.ollamaBaseUrl),
           llmProvider: formState.llmProvider,
           llmApiKey: formState.llmApiKey
@@ -969,7 +973,7 @@ export default function App() {
         currentFen,
         {
           llmProvider: formState.llmProvider,
-          model: getModelForProvider(formState.llmProvider, formState.ollamaModel),
+          model: getModelForProvider(formState.llmProvider, formState.ollamaModel, formState.llmModel),
           baseUrl: getBaseUrlForProvider(formState.llmProvider, formState.ollamaBaseUrl),
           llmApiKey: formState.llmApiKey,
           language: formState.explainLanguage
