@@ -965,8 +965,6 @@ export default function App() {
 
     try {
       // STEP 1: Determine request type WITHOUT invoking engine
-      setStatusMessage("Analyzing your request...");
-
       const requestTypeResult = await determineRequestType(
         electronAPI,
         question,
@@ -991,7 +989,6 @@ export default function App() {
       // STEP 2: If analysis is required, run engine first
       let engineAnalysisLines: AnalysisLine[] = [];
       if (requiresEngine && electronAPI?.analyzePosition) {
-        setStatusMessage("Running chess engine analysis...");
         try {
           const analysisResponse = await electronAPI.analyzePosition({
             fen: currentFen,
@@ -1009,8 +1006,6 @@ export default function App() {
       }
 
       // STEP 3: Send final request to LLM with engine analysis (if available)
-      setStatusMessage("Processing with LLM...");
-
       const responseType: "Analysis" | "Puzzle" | "Position" | "Game" = requestType;
       const systemPrompt = generateSystemPrompt({
         responseType,
@@ -1059,7 +1054,6 @@ export default function App() {
       // Display the explanation/answer
       const displayText = parsedResponse.explanation || parsedResponse.answer || "No answer returned.";
       setQuestionResponse(displayText);
-      setStatusMessage(""); // Clear status
 
       // Add to conversation history and save
       const updatedHistory = addToConversationHistory(conversationHistory, question, displayText);
@@ -1113,7 +1107,6 @@ export default function App() {
     } catch (err) {
       const errorMessage = (err as Error)?.message || "LLM question failed.";
       setQuestionResponse(`⚠️ Error: ${errorMessage}`);
-      setStatusMessage("");
     } finally {
       setQuestionLoading(false);
     }

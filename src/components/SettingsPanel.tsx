@@ -379,8 +379,8 @@ export default function SettingsPanel({
                   <InputLabel>Model</InputLabel>
                   <Select
                     label="Model"
-                    value={formState.ollamaModel || ""}
-                    onChange={(event) => onFieldChange("ollamaModel", event.target.value)}
+                    value={formState.llmModel || ""}
+                    onChange={(event) => onFieldChange("llmModel", event.target.value)}
                   >
                     {availableModels.map((model) => (
                       <MenuItem key={model} value={model}>
@@ -392,8 +392,8 @@ export default function SettingsPanel({
               ) : (
                 <TextField
                   label="Model"
-                  value={formState.ollamaModel}
-                  onChange={(event) => onFieldChange("ollamaModel", event.target.value)}
+                  value={formState.llmModel || ""}
+                  onChange={(event) => onFieldChange("llmModel", event.target.value)}
                   fullWidth
                   helperText="Enter model name or fetch available models with API key"
                 />
