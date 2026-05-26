@@ -76,9 +76,15 @@ export default function BoardPositionEditor({
 
   function detectChessboardConstructor() {
     if (typeof window === "undefined") {
+      console.log("[BoardEditor] Window is undefined");
       return null;
     }
-    return (window as any).Chessboard || (window as any).ChessBoard || null;
+    const ctor = (window as any).Chessboard || (window as any).ChessBoard;
+    console.log("[BoardEditor] ChessboardJS detected:", !!ctor);
+    if (!ctor) {
+      console.log("[BoardEditor] Available window props:", Object.keys((window as any)).filter(k => k.includes('Chess') || k.includes('chess')));
+    }
+    return ctor || null;
   }
 
   useEffect(() => {
@@ -107,6 +113,7 @@ export default function BoardPositionEditor({
   }, [ctor]);
 
   useEffect(() => {
+    console.log("[BoardEditor] useEffect - open:", open, "ctor:", !!ctor, "boardRef:", !!boardRef.current);
     if (!ctor || !boardRef.current || !open) {
       return undefined;
     }
@@ -116,6 +123,7 @@ export default function BoardPositionEditor({
     chess.current = new Chess(normalizedFen);
 
     try {
+      console.log("[BoardEditor] Creating board with ctor:", typeof ctor);
       boardInstance.current = ctor(boardRef.current, {
         draggable: true,
         pieceTheme: pieceThemePath,
@@ -123,11 +131,14 @@ export default function BoardPositionEditor({
         onDrop: handleBoardDrop
       });
 
+      console.log("[BoardEditor] Board created:", !!boardInstance.current);
+
       // Resize the board after creation and on the next frame to ensure proper sizing
       if (boardInstance.current?.resize) {
         boardInstance.current.resize();
         setTimeout(() => {
           boardInstance.current?.resize?.();
+          console.log("[BoardEditor] Board resized");
         }, 100);
       }
     } catch (err) {
@@ -240,7 +251,7 @@ export default function BoardPositionEditor({
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { minHeight: "85vh", maxHeight: "85vh" } }}>
       <DialogTitle>Board Setup</DialogTitle>
-      <DialogContent dividers sx={{ display: "flex", flexDirection: "column", gap: 2, flex: 1, minHeight: 0, overflow: "auto" }}>
+      <DialogContent dividers sx={{ display: "flex", flexDirection: "column", gap: 2, flex: 1, minHeight: 0, overflow: "auto", backgroundColor: "#fafafa" }}>
         <Box
           onDragOver={handleBoardDragOver}
           onDrop={handleBoardDropFromList}
@@ -250,7 +261,11 @@ export default function BoardPositionEditor({
             mx: "auto",
             mb: 2,
             position: "relative",
-            aspectRatio: "1"
+            aspectRatio: "1",
+            minHeight: 300,
+            backgroundColor: "white",
+            border: "2px solid #ddd",
+            borderRadius: 1
           }}
           ref={boardRef}
         />
@@ -278,12 +293,14 @@ export default function BoardPositionEditor({
                   backgroundSize: "contain",
                   backgroundRepeat: "no-repeat",
                   backgroundPosition: "center",
+                  backgroundColor: "#f0f0f0",
                   cursor: "grab",
                   "&:active": { cursor: "grabbing" },
-                  border: "none",
+                  border: "1px solid #ccc",
                   borderRadius: 1,
-                  opacity: 0.9,
-                  "&:hover": { opacity: 1 }
+                  opacity: 0.95,
+                  "&:hover": { opacity: 1, backgroundColor: "#e8e8e8" },
+                  flexShrink: 0
                 }}
                 title={piece.name}
               />
@@ -308,12 +325,14 @@ export default function BoardPositionEditor({
                   backgroundSize: "contain",
                   backgroundRepeat: "no-repeat",
                   backgroundPosition: "center",
+                  backgroundColor: "#f0f0f0",
                   cursor: "grab",
                   "&:active": { cursor: "grabbing" },
-                  border: "none",
+                  border: "1px solid #ccc",
                   borderRadius: 1,
-                  opacity: 0.9,
-                  "&:hover": { opacity: 1 }
+                  opacity: 0.95,
+                  "&:hover": { opacity: 1, backgroundColor: "#e8e8e8" },
+                  flexShrink: 0
                 }}
                 title={piece.name}
               />
