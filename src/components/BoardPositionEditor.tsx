@@ -100,11 +100,6 @@ export default function BoardPositionEditor({
     }
     const pieceThemePath = "chesspieces/wikipedia/{piece}.png";
 
-    // Clear the board ref before creating a new board
-    if (boardRef.current) {
-      boardRef.current.innerHTML = "";
-    }
-
     boardInstance.current?.destroy?.();
     chess.current = new Chess(normalizedFen);
 
@@ -115,6 +110,11 @@ export default function BoardPositionEditor({
         position: normalizedFen,
         onDrop: handleBoardDrop
       });
+
+      // Resize the board after creation
+      if (boardInstance.current?.resize) {
+        boardInstance.current.resize();
+      }
     } catch (err) {
       console.error("Failed to create board:", err);
     }
