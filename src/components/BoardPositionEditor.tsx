@@ -251,102 +251,92 @@ export default function BoardPositionEditor({
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { minHeight: "85vh", maxHeight: "85vh" } }}>
       <DialogTitle>Board Setup</DialogTitle>
-      <DialogContent dividers sx={{ display: "flex", flexDirection: "column", gap: 2, flex: 1, minHeight: 0, overflow: "auto", backgroundColor: "#fafafa" }}>
-        <Box
-          onDragOver={handleBoardDragOver}
-          onDrop={handleBoardDropFromList}
-          sx={{
-            width: "100%",
-            maxWidth: 400,
-            mx: "auto",
-            mb: 2,
-            position: "relative",
-            aspectRatio: "1",
-            minHeight: 300,
-            backgroundColor: "white",
-            border: "2px solid #ddd",
-            borderRadius: 1
-          }}
-          ref={boardRef}
-        />
+      <DialogContent dividers sx={{ display: "flex", flexDirection: "row", gap: 2, flex: 1, minHeight: 0, overflow: "auto", backgroundColor: "#fafafa", alignItems: "flex-start", justifyContent: "center" }}>
+        {/* White Pieces - Left Side */}
+        <Stack direction="column" spacing={1} sx={{ flexShrink: 0, paddingTop: 1 }}>
+          {PIECE_SYMBOLS.white.map((piece) => (
+            <Box
+              key={piece.fen}
+              draggable
+              onDragStart={(e) => handlePieceDragStart(e, piece.fen)}
+              sx={{
+                width: 50,
+                height: 50,
+                backgroundImage: `url('${getPieceImageUrl(piece.piece)}')`,
+                backgroundSize: "contain",
+                backgroundRepeat: "no-repeat",
+                backgroundPosition: "center",
+                backgroundColor: "#f0f0f0",
+                cursor: "grab",
+                "&:active": { cursor: "grabbing" },
+                border: "1px solid #ccc",
+                borderRadius: 1,
+                opacity: 0.95,
+                "&:hover": { opacity: 1, backgroundColor: "#e8e8e8" },
+                flexShrink: 0
+              }}
+              title={piece.name}
+            />
+          ))}
+        </Stack>
 
-        {errorMessage && (
-          <Alert severity="error" sx={{ animation: "fadeInOut 3s ease-in-out" }}>
-            {errorMessage}
-          </Alert>
-        )}
+        {/* Board and Controls - Center */}
+        <Stack direction="column" spacing={2} sx={{ flexShrink: 0, alignItems: "center" }}>
+          <Box
+            onDragOver={handleBoardDragOver}
+            onDrop={handleBoardDropFromList}
+            sx={{
+              width: 400,
+              height: 400,
+              position: "relative",
+              aspectRatio: "1",
+              backgroundColor: "white",
+              border: "2px solid #ddd",
+              borderRadius: 1
+            }}
+            ref={boardRef}
+          />
 
-        <Box>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>
-            WHITE PIECES
-          </Typography>
-          <Stack direction="row" spacing={1}>
-            {PIECE_SYMBOLS.white.map((piece) => (
-              <Box
-                key={piece.fen}
-                draggable
-                onDragStart={(e) => handlePieceDragStart(e, piece.fen)}
-                sx={{
-                  width: 50,
-                  height: 50,
-                  backgroundImage: `url('${getPieceImageUrl(piece.piece)}')`,
-                  backgroundSize: "contain",
-                  backgroundRepeat: "no-repeat",
-                  backgroundPosition: "center",
-                  backgroundColor: "#f0f0f0",
-                  cursor: "grab",
-                  "&:active": { cursor: "grabbing" },
-                  border: "1px solid #ccc",
-                  borderRadius: 1,
-                  opacity: 0.95,
-                  "&:hover": { opacity: 1, backgroundColor: "#e8e8e8" },
-                  flexShrink: 0
-                }}
-                title={piece.name}
-              />
-            ))}
-          </Stack>
-        </Box>
+          {errorMessage && (
+            <Alert severity="error" sx={{ animation: "fadeInOut 3s ease-in-out", width: "100%" }}>
+              {errorMessage}
+            </Alert>
+          )}
 
-        <Box>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>
-            BLACK PIECES
-          </Typography>
-          <Stack direction="row" spacing={1}>
-            {PIECE_SYMBOLS.black.map((piece) => (
-              <Box
-                key={piece.fen}
-                draggable
-                onDragStart={(e) => handlePieceDragStart(e, piece.fen)}
-                sx={{
-                  width: 50,
-                  height: 50,
-                  backgroundImage: `url('${getPieceImageUrl(piece.piece)}')`,
-                  backgroundSize: "contain",
-                  backgroundRepeat: "no-repeat",
-                  backgroundPosition: "center",
-                  backgroundColor: "#f0f0f0",
-                  cursor: "grab",
-                  "&:active": { cursor: "grabbing" },
-                  border: "1px solid #ccc",
-                  borderRadius: 1,
-                  opacity: 0.95,
-                  "&:hover": { opacity: 1, backgroundColor: "#e8e8e8" },
-                  flexShrink: 0
-                }}
-                title={piece.name}
-              />
-            ))}
-          </Stack>
-        </Box>
-
-        <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
           <Tooltip title="Reset to starting position">
             <IconButton onClick={handleReset} size="small">
               <RefreshIcon />
             </IconButton>
           </Tooltip>
-        </Box>
+        </Stack>
+
+        {/* Black Pieces - Right Side */}
+        <Stack direction="column" spacing={1} sx={{ flexShrink: 0, paddingTop: 1 }}>
+          {PIECE_SYMBOLS.black.map((piece) => (
+            <Box
+              key={piece.fen}
+              draggable
+              onDragStart={(e) => handlePieceDragStart(e, piece.fen)}
+              sx={{
+                width: 50,
+                height: 50,
+                backgroundImage: `url('${getPieceImageUrl(piece.piece)}')`,
+                backgroundSize: "contain",
+                backgroundRepeat: "no-repeat",
+                backgroundPosition: "center",
+                backgroundColor: "#f0f0f0",
+                cursor: "grab",
+                "&:active": { cursor: "grabbing" },
+                border: "1px solid #ccc",
+                borderRadius: 1,
+                opacity: 0.95,
+                "&:hover": { opacity: 1, backgroundColor: "#e8e8e8" },
+                flexShrink: 0
+              }}
+              title={piece.name}
+            />
+          ))}
+        </Stack>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
