@@ -24,6 +24,7 @@ interface BoardPositionEditorProps {
 }
 
 const STARTING_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+const EMPTY_FEN = "8/8/8/8/8/8/8/8 w KQkq - 0 1";
 
 const normalizeFen = (fen?: string): string => {
   if (!fen || fen === "start") {
@@ -69,7 +70,7 @@ export default function BoardPositionEditor({
   const normalizedFen = normalizeFen(initialFen);
   const boardRef = useRef<HTMLDivElement>(null);
   const boardInstance = useRef<any>(null);
-  const chess = useRef<Chess>(new Chess(normalizedFen));
+  const chess = useRef<Chess>(new Chess(EMPTY_FEN));
   const [ctor, setCtor] = useState(() => detectChessboardConstructor());
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [draggedPiece, setDraggedPiece] = useState<string | null>(null);
@@ -120,14 +121,14 @@ export default function BoardPositionEditor({
     const pieceThemePath = "chesspieces/wikipedia/{piece}.png";
 
     boardInstance.current?.destroy?.();
-    chess.current = new Chess(normalizedFen);
+    chess.current = new Chess(EMPTY_FEN);
 
     try {
       console.log("[BoardEditor] Creating board with ctor:", typeof ctor);
       boardInstance.current = ctor(boardRef.current, {
         draggable: true,
         pieceTheme: pieceThemePath,
-        position: normalizedFen,
+        position: EMPTY_FEN,
         onDrop: handleBoardDrop
       });
 
