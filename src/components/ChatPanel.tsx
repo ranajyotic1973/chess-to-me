@@ -8,9 +8,11 @@ import {
   Stack,
   TextField,
   Typography,
-  Chip
+  Chip,
+  Tooltip
 } from "@mui/material";
 import SettingsIcon from "@mui/icons-material/Settings";
+import ClearIcon from "@mui/icons-material/Clear";
 import ReactMarkdown from "react-markdown";
 import { useState, useEffect } from "react";
 import type { ChatPanelProps } from "../types";
@@ -344,12 +346,19 @@ export default function ChatPanel({
             placeholder="e.g. What plans should White consider here?"
             value={questionText}
             onChange={(event) => onQuestionChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                onAskQuestion();
+                onClearQuestion();
+              }
+            }}
             fullWidth
           />
         </Box>
 
         {/* Buttons */}
-        <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+        <Stack direction="row" spacing={1} sx={{ flexShrink: 0, alignItems: "center" }}>
           <Button
             variant="contained"
             onClick={() => {
@@ -360,9 +369,15 @@ export default function ChatPanel({
           >
             Ask {providerName}
           </Button>
-          <Button variant="outlined" onClick={onClearQuestion}>
-            Clear
-          </Button>
+          <Tooltip title="Clear">
+            <IconButton
+              size="small"
+              onClick={onClearQuestion}
+              aria-label="clear chat"
+            >
+              <ClearIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         </Stack>
       </Box>
     </Paper>

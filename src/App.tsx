@@ -27,10 +27,12 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ListAltIcon from "@mui/icons-material/ListAlt";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import StopIcon from "@mui/icons-material/Stop";
+import EditIcon from "@mui/icons-material/Edit";
 import SettingsPanel from "./components/SettingsPanel";
 import AnalysisBoard from "./components/AnalysisBoard";
 import ChatPanel from "./components/ChatPanel";
 import StatusBanner from "./components/StatusBanner";
+import BoardPositionEditor from "./components/BoardPositionEditor";
 import {
   deriveFenSequence,
   parseFenOrPgnInput,
@@ -200,6 +202,7 @@ export default function App() {
   const [snackbarSeverity, setSnackbarSeverity] = useState<"success" | "error" | "info">("info");
   const [moveWarningOpen, setMoveWarningOpen] = useState<boolean>(false);
   const [moveWarningMessage, setMoveWarningMessage] = useState<string>("");
+  const [isPositionEditorOpen, setIsPositionEditorOpen] = useState<boolean>(false);
   const importFileInput = useRef<HTMLInputElement>(null);
   const userSelectedModelRef = useRef<boolean>(false);
 
@@ -818,6 +821,12 @@ export default function App() {
     setAnalysisStatus("");
     applyPositions(["start"], "Start position loaded.");
   }, [applyPositions]);
+
+  const handlePositionConfirm = useCallback((fen: string): void => {
+    setCurrentFen(fen);
+    setStatusMessage("Position updated.");
+    runAnalysis(fen);
+  }, [runAnalysis]);
 
   const handleLineDialogClose = useCallback((): void => {
     setLineDialogOpen(false);
@@ -1509,6 +1518,16 @@ export default function App() {
                         <AddIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
+                    <Tooltip title="Edit board">
+                      <IconButton
+                        size="small"
+                        onClick={() => setIsPositionEditorOpen(true)}
+                        color="primary"
+                        aria-label="open board editor"
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                     <Tooltip title={isAnalysisRunning ? "Stop Analysis" : "Start Analysis"} disableInteractive={false}>
                       <IconButton
                         size="small"
@@ -1680,6 +1699,12 @@ export default function App() {
           <Button onClick={handleLineDialogClose}>Close</Button>
         </DialogActions>
       </Dialog>
+      <BoardPositionEditor
+        open={isPositionEditorOpen}
+        onClose={() => setIsPositionEditorOpen(false)}
+        onPositionConfirm={handlePositionConfirm}
+        initialFen={currentFen}
+      />
     </Box>
   );
 }
