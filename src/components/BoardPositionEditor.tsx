@@ -58,6 +58,10 @@ const getPieceImageUrl = (piece: string): string => {
     bK: "k", bQ: "q", bR: "r", bB: "b", bN: "n", bP: "p"
   };
   const key = mapping[piece];
+  if (!key) {
+    console.warn("[BoardEditor] Unknown piece:", piece);
+    return "";
+  }
   return `/chesspieces/wikipedia/${key}.png`;
 };
 
@@ -193,14 +197,25 @@ export default function BoardPositionEditor({
       return "snapback";
     }
 
-    // Try to move from existing piece on source square
-    const move = chess.current.move({ from: source, to: target, promotion: "q" });
-    if (!move) {
+    // Check if there's already a piece on the source square
+    const board = chess.current.board();
+    const sourcePiece = board[8 - parseInt(source[1])][source.charCodeAt(0) - 97];
+
+    if (!sourcePiece) {
+      // No piece to move from this square - snap back
       return "snapback";
     }
 
+    // Try to move from existing piece on source square
+    const move = chess.current.move({ from: source, to: target, promotion: "q" });
+    if (!move) {
+      // Invalid move - snap back
+      return "snapback";
+    }
+
+    // Valid move - update display and allow the piece to stay
     updateBoardDisplay();
-    return undefined;
+    return "drop";
   };
 
   const handlePieceDragStart = (e: React.DragEvent<HTMLButtonElement>, piece: string) => {
@@ -292,10 +307,9 @@ export default function BoardPositionEditor({
               sx={{
                 width: 50,
                 height: 50,
-                backgroundImage: `url('${getPieceImageUrl(piece.piece)}')`,
-                backgroundSize: "contain",
-                backgroundRepeat: "no-repeat",
-                backgroundPosition: "center",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
                 backgroundColor: "#f0f0f0",
                 cursor: "grab",
                 "&:active": { cursor: "grabbing" },
@@ -303,10 +317,22 @@ export default function BoardPositionEditor({
                 borderRadius: 1,
                 opacity: 0.95,
                 "&:hover": { opacity: 1, backgroundColor: "#e8e8e8" },
-                flexShrink: 0
+                flexShrink: 0,
+                overflow: "hidden"
               }}
               title={piece.name}
-            />
+            >
+              <img
+                src={getPieceImageUrl(piece.piece)}
+                alt={piece.name}
+                style={{
+                  width: "80%",
+                  height: "80%",
+                  objectFit: "contain"
+                }}
+                draggable={false}
+              />
+            </Box>
           ))}
         </Stack>
 
@@ -363,10 +389,9 @@ export default function BoardPositionEditor({
               sx={{
                 width: 50,
                 height: 50,
-                backgroundImage: `url('${getPieceImageUrl(piece.piece)}')`,
-                backgroundSize: "contain",
-                backgroundRepeat: "no-repeat",
-                backgroundPosition: "center",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
                 backgroundColor: "#f0f0f0",
                 cursor: "grab",
                 "&:active": { cursor: "grabbing" },
@@ -374,10 +399,22 @@ export default function BoardPositionEditor({
                 borderRadius: 1,
                 opacity: 0.95,
                 "&:hover": { opacity: 1, backgroundColor: "#e8e8e8" },
-                flexShrink: 0
+                flexShrink: 0,
+                overflow: "hidden"
               }}
               title={piece.name}
-            />
+            >
+              <img
+                src={getPieceImageUrl(piece.piece)}
+                alt={piece.name}
+                style={{
+                  width: "80%",
+                  height: "80%",
+                  objectFit: "contain"
+                }}
+                draggable={false}
+              />
+            </Box>
           ))}
         </Stack>
       </DialogContent>
