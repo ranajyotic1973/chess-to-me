@@ -125,49 +125,55 @@ export default function BoardPositionEditor({
 
   useEffect(() => {
     console.log("[BoardEditor] useEffect - open:", open, "ctor:", !!ctor, "boardRef:", !!boardRef.current);
-    if (!ctor || !boardRef.current || !open) {
+    if (!ctor || !open) {
       return undefined;
     }
-    const pieceThemePath = "chesspieces/wikipedia/{piece}.png";
 
-    boardInstance.current?.destroy?.();
-    chess.current.reset();
-    const startingBoardFen = chess.current.fen();
-
-    try {
-      console.log("[BoardEditor] Creating board with ctor:", typeof ctor, "boardRef:", !!boardRef.current);
-
+    // Wait for boardRef to be available
+    const initializeBoard = () => {
       if (!boardRef.current) {
-        console.error("[BoardEditor] boardRef.current is null!");
-        setErrorMessage("Board container not found");
+        console.log("[BoardEditor] boardRef not ready yet, retrying...");
+        setTimeout(initializeBoard, 100);
         return;
       }
 
-      boardInstance.current = ctor(boardRef.current, {
-        draggable: true,
-        pieceTheme: pieceThemePath,
-        position: startingBoardFen,
-        onDrop: handleBoardDrop
-      });
+      const pieceThemePath = "chesspieces/wikipedia/{piece}.png";
 
-      console.log("[BoardEditor] Board created:", !!boardInstance.current);
+      boardInstance.current?.destroy?.();
+      chess.current.reset();
+      const startingBoardFen = chess.current.fen();
 
-      // Resize the board after creation and on the next frame to ensure proper sizing
-      if (boardInstance.current?.resize) {
-        boardInstance.current.resize();
-        setBoardLoaded(true);
-        setTimeout(() => {
-          boardInstance.current?.resize?.();
-          console.log("[BoardEditor] Board resized");
-        }, 100);
-      } else {
-        console.warn("[BoardEditor] Board instance has no resize method");
+      try {
+        console.log("[BoardEditor] Creating board with ctor:", typeof ctor, "boardRef:", !!boardRef.current);
+
+        boardInstance.current = ctor(boardRef.current, {
+          draggable: true,
+          pieceTheme: pieceThemePath,
+          position: startingBoardFen,
+          onDrop: handleBoardDrop
+        });
+
+        console.log("[BoardEditor] Board created:", !!boardInstance.current);
+
+        // Resize the board after creation and on the next frame to ensure proper sizing
+        if (boardInstance.current?.resize) {
+          boardInstance.current.resize();
+          setBoardLoaded(true);
+          setTimeout(() => {
+            boardInstance.current?.resize?.();
+            console.log("[BoardEditor] Board resized");
+          }, 100);
+        } else {
+          console.warn("[BoardEditor] Board instance has no resize method");
+        }
+      } catch (err) {
+        console.error("[BoardEditor] Failed to create board:", err);
+        setErrorMessage(`Failed to initialize board: ${err instanceof Error ? err.message : String(err)}`);
+        setBoardLoaded(false);
       }
-    } catch (err) {
-      console.error("[BoardEditor] Failed to create board:", err);
-      setErrorMessage(`Failed to initialize board: ${err instanceof Error ? err.message : String(err)}`);
-      setBoardLoaded(false);
-    }
+    };
+
+    initializeBoard();
 
     return () => {
       if (boardInstance.current?.destroy) {
@@ -175,7 +181,7 @@ export default function BoardPositionEditor({
       }
       boardInstance.current = null;
     };
-  }, [ctor, normalizedFen, open]);
+  }, [ctor, open]);
 
   const handleBoardDrop = (source: string, target: string) => {
     const isValidSquare = /^[a-h][1-8]$/.test(target);
