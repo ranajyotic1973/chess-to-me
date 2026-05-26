@@ -1145,9 +1145,20 @@ async function createWindow(): Promise<void> {
   const devUrl = process.env.ELECTRON_START_URL;
   if (devUrl) {
     await win.loadURL(devUrl);
+    win.webContents.openDevTools();
   } else {
     await win.loadFile(path.join(__dirname, "..", "dist", "index.html"));
   }
+
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.control && input.shift && input.key.toLowerCase() === "i") {
+      if (win.webContents.isDevToolsOpened()) {
+        win.webContents.closeDevTools();
+      } else {
+        win.webContents.openDevTools();
+      }
+    }
+  });
 }
 
 // IPC Handlers

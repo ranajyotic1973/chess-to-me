@@ -120,12 +120,16 @@ export default function BoardPositionEditor({
         onDrop: handleBoardDrop
       });
 
-      // Resize the board after creation
+      // Resize the board after creation and on the next frame to ensure proper sizing
       if (boardInstance.current?.resize) {
         boardInstance.current.resize();
+        setTimeout(() => {
+          boardInstance.current?.resize?.();
+        }, 100);
       }
     } catch (err) {
       console.error("Failed to create board:", err);
+      setErrorMessage("Failed to initialize board. Please refresh and try again.");
     }
 
     return () => {
