@@ -31,21 +31,30 @@ const normalizeFen = (fen?: string): string => {
 
 const PIECE_SYMBOLS = {
   white: [
-    { symbol: "♔", name: "King", fen: "K" },
-    { symbol: "♕", name: "Queen", fen: "Q" },
-    { symbol: "♖", name: "Rook", fen: "R" },
-    { symbol: "♗", name: "Bishop", fen: "B" },
-    { symbol: "♘", name: "Knight", fen: "N" },
-    { symbol: "♙", name: "Pawn", fen: "P" }
+    { name: "King", fen: "K", piece: "wK" },
+    { name: "Queen", fen: "Q", piece: "wQ" },
+    { name: "Rook", fen: "R", piece: "wR" },
+    { name: "Bishop", fen: "B", piece: "wB" },
+    { name: "Knight", fen: "N", piece: "wN" },
+    { name: "Pawn", fen: "P", piece: "wP" }
   ],
   black: [
-    { symbol: "♚", name: "King", fen: "k" },
-    { symbol: "♛", name: "Queen", fen: "q" },
-    { symbol: "♜", name: "Rook", fen: "r" },
-    { symbol: "♝", name: "Bishop", fen: "b" },
-    { symbol: "♞", name: "Knight", fen: "n" },
-    { symbol: "♟", name: "Pawn", fen: "p" }
+    { name: "King", fen: "k", piece: "bK" },
+    { name: "Queen", fen: "q", piece: "bQ" },
+    { name: "Rook", fen: "r", piece: "bR" },
+    { name: "Bishop", fen: "b", piece: "bB" },
+    { name: "Knight", fen: "n", piece: "bN" },
+    { name: "Pawn", fen: "p", piece: "bP" }
   ]
+};
+
+const getPieceImageUrl = (piece: string): string => {
+  const mapping: Record<string, string> = {
+    wK: "K", wQ: "Q", wR: "R", wB: "B", wN: "N", wP: "P",
+    bK: "k", bQ: "q", bR: "r", bB: "b", bN: "n", bP: "p"
+  };
+  const key = mapping[piece];
+  return `chesspieces/wikipedia/${key}.png`;
 };
 
 export default function BoardPositionEditor({
@@ -228,9 +237,9 @@ export default function BoardPositionEditor({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { minHeight: "85vh", maxHeight: "85vh" } }}>
       <DialogTitle>Board Setup</DialogTitle>
-      <DialogContent dividers sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <DialogContent dividers sx={{ display: "flex", flexDirection: "column", gap: 2, flex: 1, minHeight: 0, overflow: "auto" }}>
         <Box
           onDragOver={handleBoardDragOver}
           onDrop={handleBoardDropFromList}
@@ -257,21 +266,26 @@ export default function BoardPositionEditor({
           </Typography>
           <Stack direction="row" spacing={1}>
             {PIECE_SYMBOLS.white.map((piece) => (
-              <Button
+              <Box
                 key={piece.fen}
                 draggable
                 onDragStart={(e) => handlePieceDragStart(e, piece.fen)}
-                variant="outlined"
                 sx={{
-                  p: 1,
-                  minWidth: "auto",
-                  fontSize: "1.5rem",
+                  width: 50,
+                  height: 50,
+                  backgroundImage: `url('${getPieceImageUrl(piece.piece)}')`,
+                  backgroundSize: "contain",
+                  backgroundRepeat: "no-repeat",
+                  backgroundPosition: "center",
                   cursor: "grab",
-                  "&:active": { cursor: "grabbing" }
+                  "&:active": { cursor: "grabbing" },
+                  border: "none",
+                  borderRadius: 1,
+                  opacity: 0.9,
+                  "&:hover": { opacity: 1 }
                 }}
-              >
-                {piece.symbol}
-              </Button>
+                title={piece.name}
+              />
             ))}
           </Stack>
         </Box>
@@ -282,21 +296,26 @@ export default function BoardPositionEditor({
           </Typography>
           <Stack direction="row" spacing={1}>
             {PIECE_SYMBOLS.black.map((piece) => (
-              <Button
+              <Box
                 key={piece.fen}
                 draggable
                 onDragStart={(e) => handlePieceDragStart(e, piece.fen)}
-                variant="outlined"
                 sx={{
-                  p: 1,
-                  minWidth: "auto",
-                  fontSize: "1.5rem",
+                  width: 50,
+                  height: 50,
+                  backgroundImage: `url('${getPieceImageUrl(piece.piece)}')`,
+                  backgroundSize: "contain",
+                  backgroundRepeat: "no-repeat",
+                  backgroundPosition: "center",
                   cursor: "grab",
-                  "&:active": { cursor: "grabbing" }
+                  "&:active": { cursor: "grabbing" },
+                  border: "none",
+                  borderRadius: 1,
+                  opacity: 0.9,
+                  "&:hover": { opacity: 1 }
                 }}
-              >
-                {piece.symbol}
-              </Button>
+                title={piece.name}
+              />
             ))}
           </Stack>
         </Box>
