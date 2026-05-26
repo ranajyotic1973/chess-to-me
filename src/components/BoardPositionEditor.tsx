@@ -70,7 +70,18 @@ export default function BoardPositionEditor({
   const normalizedFen = normalizeFen(initialFen);
   const boardRef = useRef<HTMLDivElement>(null);
   const boardInstance = useRef<any>(null);
-  const chess = useRef<Chess>(new Chess(EMPTY_FEN));
+  const chess = useRef<Chess>(new Chess());
+
+  // Initialize with empty board (valid FEN with just kings in corners for chess.js validation)
+  useEffect(() => {
+    try {
+      chess.current.clear();
+      chess.current.put({ type: 'K', color: 'w' }, 'a1');
+      chess.current.put({ type: 'k', color: 'b' }, 'h8');
+    } catch (err) {
+      console.error("[BoardEditor] Failed to initialize empty board:", err);
+    }
+  }, []);
   const [ctor, setCtor] = useState(() => detectChessboardConstructor());
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [draggedPiece, setDraggedPiece] = useState<string | null>(null);
@@ -121,14 +132,18 @@ export default function BoardPositionEditor({
     const pieceThemePath = "chesspieces/wikipedia/{piece}.png";
 
     boardInstance.current?.destroy?.();
-    chess.current = new Chess(EMPTY_FEN);
+    // Initialize with an empty board (valid FEN with just kings in corners for chess.js validation)
+    chess.current.clear();
+    chess.current.put({ type: 'K', color: 'w' }, 'a1');
+    chess.current.put({ type: 'k', color: 'b' }, 'h8');
+    const emptyBoardFen = chess.current.fen();
 
     try {
       console.log("[BoardEditor] Creating board with ctor:", typeof ctor);
       boardInstance.current = ctor(boardRef.current, {
         draggable: true,
         pieceTheme: pieceThemePath,
-        position: EMPTY_FEN,
+        position: emptyBoardFen,
         onDrop: handleBoardDrop
       });
 
