@@ -667,15 +667,15 @@ export default function App() {
       setStatusMessage("Auto-detect is unavailable.");
       return;
     }
-    setStatusMessage(`Scanning for ${selectedEngine.toUpperCase()}...`);
+    setStatusMessage("Scanning for chess engine...");
     try {
       const result = await electronAPI.detectEngine({ engine: selectedEngine });
       if (result?.found && result?.path) {
         setFormState((prev) => ({ ...prev, [`${selectedEngine}Path`]: result.path }));
-        setStatusMessage(`${selectedEngine.toUpperCase()} path auto-detected.`);
+        setStatusMessage("Chess engine path auto-detected.");
         return;
       }
-      setStatusMessage(`${selectedEngine.toUpperCase()} could not be detected automatically.`);
+      setStatusMessage("Chess engine could not be detected automatically.");
     } catch (err) {
       setStatusMessage("Auto-detection failed.");
     }
@@ -694,13 +694,13 @@ export default function App() {
         return;
       }
       if (!response.valid) {
-        setStatusMessage("Selected file is not a valid engine.");
+        setStatusMessage("Selected file is not a valid chess engine.");
         return;
       }
       setFormState((prev) => ({ ...prev, [`${selectedEngine}Path`]: response.path || prev[`${selectedEngine}Path` as keyof AppSettings] }));
-      setStatusMessage(`${selectedEngine.toUpperCase()} executable selected.`);
+      setStatusMessage("Chess engine executable selected.");
     } catch (err) {
-      setStatusMessage(`Unable to browse for ${selectedEngine.toUpperCase()}.`);
+      setStatusMessage("Unable to browse for chess engine.");
     }
   }, [formState.selectedEngine]);
 
@@ -743,7 +743,7 @@ export default function App() {
     const selectedPath = formState[`${selectedEngine}Path` as keyof AppSettings];
 
     if (!selectedPath) {
-      setStatusMessage(`Please provide a ${selectedEngine.toUpperCase()} executable path.`);
+      setStatusMessage("Please provide a chess engine executable path.");
       return;
     }
     if (!electronAPI?.setEnginePath || !electronAPI?.updateAppSettings) {
@@ -758,7 +758,7 @@ export default function App() {
         path: String(selectedPath)
       });
       if (!pathResult?.ok) {
-        setStatusMessage(`${selectedEngine.toUpperCase()} path validation failed.`);
+        setStatusMessage("Chess engine path validation failed.");
         return;
       }
       const configResult = await electronAPI.updateAppSettings({
@@ -782,7 +782,7 @@ export default function App() {
         [`${selectedEngine}Path`]: String(selectedPath),
         settings: (configResult as any).settings
       }));
-      setSnackbarMessage(`Settings saved and ${selectedEngine.toUpperCase()} validated.`);
+      setSnackbarMessage("Settings saved and chess engine validated.");
       setSnackbarSeverity("success");
       setSnackbarOpen(true);
       setStatusMessage("");
@@ -805,16 +805,15 @@ export default function App() {
   }, []);
 
   const handleSettingsComplete = useCallback((): void => {
-    const selectedEngine = formState.selectedEngine || "lc0";
     if (!engineStatus?.configured) {
-      setStatusMessage(`Please configure ${selectedEngine.toUpperCase()} before entering the analysis view.`);
+      setStatusMessage("Please configure a chess engine before entering the analysis view.");
       return;
     }
     setViewMode("analysis");
     if (typeof window !== "undefined") {
       window.localStorage.setItem(SETTINGS_FLAG, "true");
     }
-  }, [engineStatus, formState.selectedEngine]);
+  }, [engineStatus]);
 
   const handleResetToStart = useCallback((): void => {
     setImportText("start");
@@ -1229,7 +1228,7 @@ export default function App() {
           <Typography variant="h6">Loading application…</Typography>
         </Stack>
       </Backdrop>
-      {viewMode === "settings" ? (
+      {viewMode === "settings" || !engineStatus?.configured ? (
         <Box
           sx={{
             height: "100%",

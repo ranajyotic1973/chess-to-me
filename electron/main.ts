@@ -1,13 +1,40 @@
 import path from "node:path";
 import fs from "node:fs";
 import { execSync } from "node:child_process";
-import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from "electron";
-import ElectronStore from "electron-store";
 import { spawn, ChildProcess } from "node:child_process";
 import { Chess } from "chess.js";
 import type { AnalysisLine } from "../src/types";
+import { settings } from "./settings";
 
-const Store = ElectronStore as any;
+// Lazy load electron - will be available when running under Electron
+let app: any;
+let BrowserWindow: any;
+let ipcMain: any;
+let dialog: any;
+let shell: any;
+let Menu: any;
+
+// Function to initialize Electron APIs when available
+function initializeElectronApis() {
+  try {
+    const electronModule = require("electron");
+    app = electronModule.app;
+    BrowserWindow = electronModule.BrowserWindow;
+    ipcMain = electronModule.ipcMain;
+    dialog = electronModule.dialog;
+    shell = electronModule.shell;
+    Menu = electronModule.Menu;
+
+    if (!app) {
+      console.error("[electron] Electron module loaded but APIs unavailable");
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[electron] Failed to initialize Electron APIs:", err);
+    return false;
+  }
+}
 
 const DEFAULT_OLLAMA_MODEL = "qwen3:8b";
 
@@ -65,21 +92,6 @@ function isModelRelevantForProvider(provider: string, model: string): boolean {
   return validateModelForProvider(provider, model);
 }
 
-const settings = new Store({
-  projectName: "chess-to-me",
-  name: "settings",
-  defaults: {
-    stockfishPath: "",
-    lc0Path: "",
-    selectedEngine: "lc0",
-    analysisDepth: 16,
-    explainLanguage: "English",
-    ollamaModel: DEFAULT_OLLAMA_MODEL,
-    ollamaBaseUrl: "http://localhost:11434/api",
-    llmProvider: "ollama",
-    llmApiKey: ""
-  }
-});
 
 const ENGINE_VERIFY_TIMEOUT_MS = 5000;
 const ANALYZE_TIMEOUT_MS = 30000;
@@ -426,10 +438,16 @@ class ProcessManager {
       stockfish: [],
       ollama: []
     };
-    this.activeModel = this.normalizeModel(settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL);
+    // Don't call settings.get() during initialization - defer until after app is ready
+    this.activeModel = DEFAULT_OLLAMA_MODEL;
 
     this.engineRunners.stockfish.setLogCallback((entry) => this.recordEngineLog("stockfish", entry));
     this.engineRunners.lc0.setLogCallback((entry) => this.recordEngineLog("lc0", entry));
+  }
+
+  // Call this after app is ready to initialize activeModel from settings
+  initializeFromSettings(): void {
+    this.activeModel = this.normalizeModel(this.settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL);
   }
 
   get engineRunner(): EngineRunner {
@@ -467,10 +485,12 @@ class ProcessManager {
       return;
     }
     this.appendLog("stockfish", {
-      text,
+      text: `[${engineName.toUpperCase()}] ${text}`,
       stream: entry.stream || "stdout",
       context: entry.context || "analysis",
-      engine: engineName
+      engine: engineName,
+      id: `${engineName}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      timestamp: new Date().toISOString()
     });
   }
 
@@ -1769,7 +1789,9 @@ async function runLlmChat(params: {
   messages: Array<{ role: string; content: string }>;
   timeoutMs?: number;
 }): Promise<string> {
-  const { provider, baseUrl, model, apiKey, messages, timeoutMs = 120000 } = params;
+  // Use shorter timeout for Ollama (it's usually fast), longer for cloud providers
+  const defaultTimeout = params.provider === "ollama" ? 60000 : 120000;
+  const { provider, baseUrl, model, apiKey, messages, timeoutMs = defaultTimeout } = params;
 
   // Validate required fields
   if (!provider || !model?.trim() || !baseUrl?.trim()) {
@@ -2140,6 +2162,65 @@ ipcMain.handle("ollama:explain-lines", async (_event, payload) => {
   }
 });
 
+// Classification endpoint - determine request type
+ipcMain.handle("ollama:classify-question", async (_event, payload) => {
+  const question = String(payload?.question || "").trim();
+  if (!question) {
+    return { ok: false, error: "Question is empty." };
+  }
+
+  const llmProvider = payload?.llmProvider || settings.get("llmProvider") || "ollama";
+  const llmApiKey = payload?.llmApiKey || settings.get("llmApiKey") || "";
+  let model = payload?.model;
+  if (!model) {
+    if (llmProvider === "ollama") {
+      model = settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL;
+    } else {
+      model = settings.get("llmModel") || getModelForProvider(llmProvider);
+    }
+  }
+  const baseUrl = (payload?.baseUrl || (llmProvider === "ollama" ? settings.get("ollamaBaseUrl") : null) || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
+
+  const classificationPrompt = [
+    {
+      role: "system",
+      content: `You are a chess question classifier. Classify the user's question into ONE category:
+- ANALYSIS: User asks to analyze a position, best move, or evaluate moves
+- PUZZLE: User presents a chess puzzle or tactical problem
+- POSITION: User wants to set up or discuss a specific position
+- GAME: User discusses a game or wants game-related content
+- OTHER: Anything else
+
+Respond with ONLY the category name, nothing else.`
+    },
+    {
+      role: "user",
+      content: question
+    }
+  ];
+
+  try {
+    const classification = await runLlmChat({
+      provider: llmProvider,
+      baseUrl,
+      model,
+      apiKey: llmApiKey,
+      messages: classificationPrompt,
+      timeoutMs: 30000
+    });
+
+    const type = classification.trim().toUpperCase() as "ANALYSIS" | "PUZZLE" | "POSITION" | "GAME" | "OTHER";
+    const validTypes = ["ANALYSIS", "PUZZLE", "POSITION", "GAME", "OTHER"];
+    const responseType = validTypes.includes(type) ? type : "OTHER";
+
+    console.log(`[LLM] Classification: "${question.substring(0, 60)}..." → ${responseType}`);
+    return { ok: true, type: responseType };
+  } catch (err) {
+    console.error(`[LLM] Classification failed: ${(err as Error).message}`);
+    return { ok: false, error: (err as Error).message || "Classification failed." };
+  }
+});
+
 ipcMain.handle("ollama:ask-question", async (_event, payload) => {
   const question = String(payload?.question || "").trim();
   if (!question) {
@@ -2148,31 +2229,81 @@ ipcMain.handle("ollama:ask-question", async (_event, payload) => {
 
   let fen = String(payload?.fen || "").trim();
   let lines = Array.isArray(payload?.lines) ? payload.lines.slice(0, 4) : [];
+  let requestType = payload?.responseType || "ANALYSIS";
 
   if (!fen && payload?.boardFen) {
     fen = String(payload.boardFen).trim();
   }
 
-  if (fen && !lines.length) {
-    const cachedLines = getCachedAnalysis(fen);
-    if (cachedLines) {
-      lines = cachedLines;
+  // Step 1: Classify the question if not provided
+  if (!payload?.responseType) {
+    const llmProvider = payload?.llmProvider || settings.get("llmProvider") || "ollama";
+    const llmApiKey = payload?.llmApiKey || settings.get("llmApiKey") || "";
+    let model = payload?.model;
+    if (!model) {
+      if (llmProvider === "ollama") {
+        model = settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL;
+      } else {
+        model = settings.get("llmModel") || getModelForProvider(llmProvider);
+      }
+    }
+    const baseUrl = (payload?.baseUrl || (llmProvider === "ollama" ? settings.get("ollamaBaseUrl") : null) || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
+
+    try {
+      const classificationMessages = [
+        {
+          role: "system" as const,
+          content: `You are a chess question classifier. Classify into: ANALYSIS, PUZZLE, POSITION, GAME, or OTHER. Respond with ONLY the category.`
+        },
+        {
+          role: "user" as const,
+          content: question
+        }
+      ];
+
+      const classification = await runLlmChat({
+        provider: llmProvider,
+        baseUrl,
+        model,
+        apiKey: llmApiKey,
+        messages: classificationMessages,
+        timeoutMs: 30000
+      });
+
+      const classified = classification.trim().toUpperCase();
+      if (["ANALYSIS", "PUZZLE", "POSITION", "GAME", "OTHER"].includes(classified)) {
+        requestType = classified as "ANALYSIS" | "PUZZLE" | "POSITION" | "GAME" | "OTHER";
+      }
+      console.log(`[LLM] Step 1 Classification: "${question.substring(0, 50)}..." → ${requestType}`);
+    } catch (err) {
+      console.warn("[LLM] Classification failed, defaulting to ANALYSIS");
+      requestType = "ANALYSIS";
     }
   }
 
-  if (fen && !lines.length) {
-    try {
-      const engineType = payload?.engine || settings.get("selectedEngine") || "stockfish";
-      const depth = payload?.depth || settings.get("analysisDepth") || 16;
+  // Step 2: Run engine analysis if needed
+  if (fen && !lines.length && (requestType === "ANALYSIS" || requestType === "PUZZLE")) {
+    const cachedLines = getCachedAnalysis(fen);
+    if (cachedLines) {
+      lines = cachedLines;
+      console.log(`[LLM] Using cached analysis for FEN`);
+    } else {
+      try {
+        const engineType = payload?.engine || settings.get("selectedEngine") || "stockfish";
+        const depth = Math.min(20, payload?.depth || settings.get("analysisDepth") || 16);
 
-      const analysisResult = await performAnalysis(engineType, fen, depth, 4);
+        console.log(`[LLM] Step 2 Running ${engineType.toUpperCase()} analysis (depth ${depth})`);
+        const analysisResult = await performAnalysis(engineType, fen, depth, 2);
 
-      if (analysisResult?.ok && analysisResult?.analysis?.lines) {
-        lines = analysisResult.analysis.lines.slice(0, 4);
-        updateAnalysisCache(fen, lines);
+        if (analysisResult?.ok && analysisResult?.analysis?.lines) {
+          lines = analysisResult.analysis.lines.slice(0, 2);
+          updateAnalysisCache(fen, lines);
+          console.log(`[LLM] Engine analysis complete: ${lines.length} lines`);
+        }
+      } catch (err) {
+        console.error(`[LLM] Engine analysis failed: ${(err as Error).message}`);
+        // Continue without engine analysis
       }
-    } catch (err) {
-      // Silently continue without auto-analysis if engine fails
     }
   }
 
@@ -2197,20 +2328,56 @@ ipcMain.handle("ollama:ask-question", async (_event, payload) => {
   console.log(`[LLM] Question from user | Provider: ${llmProvider} | Model: ${model} | Q: "${shortQuestion}"`);
 
   try {
-    const messages = buildPrompt({
-      language,
-      fen,
-      lines,
-      question,
-      userMessage: payload?.userMessage,
-      systemPrompt: payload?.systemPrompt
-    });
+    console.log(`[LLM] Step 3 Building messages for chess agent | Type: ${requestType} | Lines available: ${lines.length}`);
+
+    // Build messages with proper context
+    let messages: Array<{ role: string; content: string }>;
+
+    if (lines.length > 0) {
+      // Engine analysis available - structure as AI message for chess agent
+      const engineAnalysis = lines
+        .map((l) => {
+          const lineNum = l.rank || "?";
+          const pv = l.pv || l.line || "";
+          const score = l.score
+            ? `${l.score.type === "cp" ? "+" : ""}${(l.score.value / 100).toFixed(1)}`
+            : "?";
+          return `Line ${lineNum}: ${pv} (Score: ${score})`;
+        })
+        .join("\n");
+
+      messages = [
+        {
+          role: "system",
+          content: payload?.systemPrompt || `You are a chess expert analyzing positions using engine analysis. The engine has already analyzed this position. Explain the lines clearly.`
+        },
+        {
+          role: "assistant",
+          content: `I've analyzed this position. Here's what the chess engine found:\n\n${engineAnalysis}`
+        },
+        {
+          role: "user",
+          content: question
+        }
+      ];
+    } else {
+      // No engine analysis - use standard prompt building
+      messages = buildPrompt({
+        language,
+        fen,
+        lines: [],
+        question,
+        userMessage: payload?.userMessage,
+        systemPrompt: payload?.systemPrompt
+      });
+    }
+
     const answer = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
-    console.log(`[LLM] ✓ Question answered (${lines.length} lines used) | Provider: ${llmProvider}`);
+    console.log(`[LLM] Step 3 Complete ✓ (${lines.length} lines used) | Provider: ${llmProvider}`);
     return { ok: true, answer: answer || "No response returned.", linesUsed: lines.length };
   } catch (err) {
     const errorMsg = (err as Error)?.message || "LLM question failed.";
-    console.error(`[LLM] ✗ Question failed: ${errorMsg} | Provider: ${llmProvider}`);
+    console.error(`[LLM] ✗ Step 3 failed: ${errorMsg} | Provider: ${llmProvider}`);
     return { ok: false, error: errorMsg };
   }
 });
@@ -2269,7 +2436,15 @@ ipcMain.handle("analyzeBoardPosition", async (_event, { fen, depth }: { fen?: st
 });
 }
 
+// Initialize Electron APIs
+if (!initializeElectronApis()) {
+  console.error("[electron] Failed to initialize Electron APIs");
+  process.exit(1);
+}
+
 app.whenReady().then(async () => {
+  // Initialize processManager's settings after app is ready
+  processManager.initializeFromSettings();
   registerIpcHandlers();
   Menu.setApplicationMenu(null);
   await createWindow();
