@@ -85,6 +85,7 @@ export default function BoardPositionEditor({
   const [ctor, setCtor] = useState(() => detectChessboardConstructor());
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [draggedPiece, setDraggedPiece] = useState<string | null>(null);
+  const [boardLoaded, setBoardLoaded] = useState(false);
 
   function detectChessboardConstructor() {
     if (typeof window === "undefined") {
@@ -139,7 +140,14 @@ export default function BoardPositionEditor({
     const emptyBoardFen = chess.current.fen();
 
     try {
-      console.log("[BoardEditor] Creating board with ctor:", typeof ctor);
+      console.log("[BoardEditor] Creating board with ctor:", typeof ctor, "boardRef:", !!boardRef.current);
+
+      if (!boardRef.current) {
+        console.error("[BoardEditor] boardRef.current is null!");
+        setErrorMessage("Board container not found");
+        return;
+      }
+
       boardInstance.current = ctor(boardRef.current, {
         draggable: true,
         pieceTheme: pieceThemePath,
@@ -152,14 +160,18 @@ export default function BoardPositionEditor({
       // Resize the board after creation and on the next frame to ensure proper sizing
       if (boardInstance.current?.resize) {
         boardInstance.current.resize();
+        setBoardLoaded(true);
         setTimeout(() => {
           boardInstance.current?.resize?.();
           console.log("[BoardEditor] Board resized");
         }, 100);
+      } else {
+        console.warn("[BoardEditor] Board instance has no resize method");
       }
     } catch (err) {
-      console.error("Failed to create board:", err);
-      setErrorMessage("Failed to initialize board. Please refresh and try again.");
+      console.error("[BoardEditor] Failed to create board:", err);
+      setErrorMessage(`Failed to initialize board: ${err instanceof Error ? err.message : String(err)}`);
+      setBoardLoaded(false);
     }
 
     return () => {
@@ -308,10 +320,24 @@ export default function BoardPositionEditor({
               aspectRatio: "1",
               backgroundColor: "white",
               border: "2px solid #ddd",
-              borderRadius: 1
+              borderRadius: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
             }}
             ref={boardRef}
-          />
+          >
+            {!boardLoaded && !ctor && (
+              <Typography variant="body2" color="textSecondary" sx={{ textAlign: "center", px: 2 }}>
+                Loading chessboard library...
+              </Typography>
+            )}
+            {!boardLoaded && ctor && (
+              <Typography variant="body2" color="error" sx={{ textAlign: "center", px: 2 }}>
+                Failed to initialize board
+              </Typography>
+            )}
+          </Box>
 
           {errorMessage && (
             <Alert severity="error" sx={{ animation: "fadeInOut 3s ease-in-out", width: "100%" }}>
