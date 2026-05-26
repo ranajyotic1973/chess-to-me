@@ -95,23 +95,37 @@ export default function BoardPositionEditor({
   }, [ctor]);
 
   useEffect(() => {
-    if (!ctor || !boardRef.current) {
+    if (!ctor || !boardRef.current || !open) {
       return undefined;
     }
     const pieceThemePath = "chesspieces/wikipedia/{piece}.png";
-    boardInstance.current?.destroy();
+
+    // Clear the board ref before creating a new board
+    if (boardRef.current) {
+      boardRef.current.innerHTML = "";
+    }
+
+    boardInstance.current?.destroy?.();
     chess.current = new Chess(normalizedFen);
-    boardInstance.current = ctor(boardRef.current, {
-      draggable: true,
-      pieceTheme: pieceThemePath,
-      position: normalizedFen,
-      onDrop: handleBoardDrop
-    });
+
+    try {
+      boardInstance.current = ctor(boardRef.current, {
+        draggable: true,
+        pieceTheme: pieceThemePath,
+        position: normalizedFen,
+        onDrop: handleBoardDrop
+      });
+    } catch (err) {
+      console.error("Failed to create board:", err);
+    }
+
     return () => {
-      boardInstance.current?.destroy();
+      if (boardInstance.current?.destroy) {
+        boardInstance.current.destroy();
+      }
       boardInstance.current = null;
     };
-  }, [ctor, normalizedFen]);
+  }, [ctor, normalizedFen, open]);
 
   const handleBoardDrop = (source: string, target: string) => {
     const isValidSquare = /^[a-h][1-8]$/.test(target);
@@ -225,17 +239,11 @@ export default function BoardPositionEditor({
             maxWidth: 400,
             mx: "auto",
             mb: 2,
-            position: "relative"
+            position: "relative",
+            aspectRatio: "1"
           }}
-        >
-          <Box
-            ref={boardRef}
-            sx={{
-              width: "100%",
-              aspectRatio: "1"
-            }}
-          />
-        </Box>
+          ref={boardRef}
+        />
 
         {errorMessage && (
           <Alert severity="error" sx={{ animation: "fadeInOut 3s ease-in-out" }}>
