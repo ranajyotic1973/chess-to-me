@@ -1,7 +1,7 @@
 import path from "node:path";
 import fs from "node:fs";
 import { execSync } from "node:child_process";
-import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from "electron";
 import ElectronStore from "electron-store";
 import { spawn, ChildProcess } from "node:child_process";
 import { Chess } from "chess.js";
@@ -2261,6 +2261,7 @@ ipcMain.handle("analyzeBoardPosition", async (_event, { fen, depth }: { fen?: st
 
 app.whenReady().then(async () => {
   registerIpcHandlers();
+  Menu.setApplicationMenu(null);
   await createWindow();
 
   try {
