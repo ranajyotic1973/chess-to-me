@@ -8,8 +8,11 @@ import {
   DialogTitle,
   Stack,
   Typography,
-  Alert
+  Alert,
+  IconButton,
+  Tooltip
 } from "@mui/material";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import { Chess } from "chess.js";
 import type { AnalysisBoardProps } from "../types";
 
@@ -54,7 +57,7 @@ const getPieceImageUrl = (piece: string): string => {
     bK: "k", bQ: "q", bR: "r", bB: "b", bN: "n", bP: "p"
   };
   const key = mapping[piece];
-  return `chesspieces/wikipedia/${key}.png`;
+  return `/chesspieces/wikipedia/${key}.png`;
 };
 
 export default function BoardPositionEditor({
@@ -208,14 +211,8 @@ export default function BoardPositionEditor({
     }
   };
 
-  const handleClearBoard = () => {
-    chess.current.clear();
-    updateBoardDisplay();
-    setErrorMessage("");
-  };
-
-  const handleResetToStart = () => {
-    chess.current.load("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+  const handleReset = () => {
+    chess.current.reset();
     updateBoardDisplay();
     setErrorMessage("");
   };
@@ -324,14 +321,13 @@ export default function BoardPositionEditor({
           </Stack>
         </Box>
 
-        <Stack direction="row" spacing={1}>
-          <Button variant="outlined" onClick={handleClearBoard} fullWidth>
-            Clear Board
-          </Button>
-          <Button variant="outlined" onClick={handleResetToStart} fullWidth>
-            Reset to Start
-          </Button>
-        </Stack>
+        <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+          <Tooltip title="Reset to starting position">
+            <IconButton onClick={handleReset} size="small">
+              <RefreshIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
