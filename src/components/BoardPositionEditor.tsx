@@ -20,6 +20,15 @@ interface BoardPositionEditorProps {
   initialFen?: string;
 }
 
+const STARTING_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+const normalizeFen = (fen?: string): string => {
+  if (!fen || fen === "start") {
+    return STARTING_FEN;
+  }
+  return fen;
+};
+
 const PIECE_SYMBOLS = {
   white: [
     { symbol: "♔", name: "King", fen: "K" },
@@ -43,11 +52,12 @@ export default function BoardPositionEditor({
   open,
   onClose,
   onPositionConfirm,
-  initialFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+  initialFen
 }: BoardPositionEditorProps) {
+  const normalizedFen = normalizeFen(initialFen);
   const boardRef = useRef<HTMLDivElement>(null);
   const boardInstance = useRef<any>(null);
-  const chess = useRef<Chess>(new Chess(initialFen));
+  const chess = useRef<Chess>(new Chess(normalizedFen));
   const [ctor, setCtor] = useState(() => detectChessboardConstructor());
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [draggedPiece, setDraggedPiece] = useState<string | null>(null);
@@ -90,18 +100,18 @@ export default function BoardPositionEditor({
     }
     const pieceThemePath = "chesspieces/wikipedia/{piece}.png";
     boardInstance.current?.destroy();
-    chess.current = new Chess(initialFen);
+    chess.current = new Chess(normalizedFen);
     boardInstance.current = ctor(boardRef.current, {
       draggable: true,
       pieceTheme: pieceThemePath,
-      position: initialFen,
+      position: normalizedFen,
       onDrop: handleBoardDrop
     });
     return () => {
       boardInstance.current?.destroy();
       boardInstance.current = null;
     };
-  }, [ctor, initialFen]);
+  }, [ctor, normalizedFen]);
 
   const handleBoardDrop = (source: string, target: string) => {
     const isValidSquare = /^[a-h][1-8]$/.test(target);
