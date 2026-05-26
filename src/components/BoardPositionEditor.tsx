@@ -312,6 +312,16 @@ export default function BoardPositionEditor({
 
         {/* Board and Controls - Center */}
         <Stack direction="column" spacing={2} sx={{ flexShrink: 0, alignItems: "center" }}>
+          {!boardLoaded && !ctor && (
+            <Typography variant="body2" color="textSecondary" sx={{ textAlign: "center", px: 2 }}>
+              Loading chessboard library...
+            </Typography>
+          )}
+          {!boardLoaded && ctor && (
+            <Typography variant="body2" color="error" sx={{ textAlign: "center", px: 2 }}>
+              Failed to initialize board
+            </Typography>
+          )}
           <Box
             onDragOver={handleBoardDragOver}
             onDrop={handleBoardDropFromList}
@@ -328,18 +338,7 @@ export default function BoardPositionEditor({
               justifyContent: "center"
             }}
             ref={boardRef}
-          >
-            {!boardLoaded && !ctor && (
-              <Typography variant="body2" color="textSecondary" sx={{ textAlign: "center", px: 2 }}>
-                Loading chessboard library...
-              </Typography>
-            )}
-            {!boardLoaded && ctor && (
-              <Typography variant="body2" color="error" sx={{ textAlign: "center", px: 2 }}>
-                Failed to initialize board
-              </Typography>
-            )}
-          </Box>
+          />
 
           {errorMessage && (
             <Alert severity="error" sx={{ animation: "fadeInOut 3s ease-in-out", width: "100%" }}>
