@@ -333,6 +333,7 @@ export default function App() {
     }
   }, [formState.llmProvider, formState.ollamaModel, formState.ollamaBaseUrl]);
 
+  // Bootstrap: Load settings on initial mount only
   useEffect(() => {
     let cancelled = false;
     const bootstrap = async () => {
@@ -340,13 +341,6 @@ export default function App() {
       try {
         // Load engine status from settings (including saved engine paths)
         await loadEngineStatus();
-        // Warm up Ollama after settings are loaded
-        // Use setTimeout to ensure state is updated before calling warmupOllama
-        setTimeout(() => {
-          if (!cancelled) {
-            warmupOllama();
-          }
-        }, 500);
       } catch (err) {
         setStatusMessage("Unable to initialize the platform.");
       } finally {
@@ -359,7 +353,12 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [loadEngineStatus, warmupOllama]);
+  }, [loadEngineStatus]);
+
+  // Separate effect: Warm up Ollama when provider or model changes (after settings are loaded)
+  useEffect(() => {
+    warmupOllama();
+  }, [formState.llmProvider, formState.ollamaModel, formState.ollamaBaseUrl, warmupOllama]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
