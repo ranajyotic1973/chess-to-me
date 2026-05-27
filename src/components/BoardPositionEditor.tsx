@@ -333,7 +333,8 @@ export default function BoardPositionEditor({
               borderRadius: 1,
               display: "flex",
               alignItems: "center",
-              justifyContent: "center"
+              justifyContent: "center",
+              zIndex: 10
             }}
             ref={boardRef}
           />
@@ -416,6 +417,12 @@ export default function BoardPositionEditor({
 
 // Convert position object to FEN
 function positionToFen(position: Record<string, string>): string {
+  // Map piece notation from board format (wK, bP) to FEN format (K, k, P, p)
+  const pieceMap: Record<string, string> = {
+    wK: "K", wQ: "Q", wR: "R", wB: "B", wN: "N", wP: "P",
+    bK: "k", bQ: "q", bR: "r", bB: "b", bN: "n", bP: "p"
+  };
+
   let fen = "";
 
   for (let rank = 8; rank >= 1; rank--) {
@@ -430,7 +437,12 @@ function positionToFen(position: Record<string, string>): string {
           fen += emptyCount;
           emptyCount = 0;
         }
-        fen += piece;
+        // Convert piece notation to FEN format
+        const fenPiece = pieceMap[piece];
+        if (!fenPiece) {
+          throw new Error(`Invalid piece notation: ${piece}`);
+        }
+        fen += fenPiece;
       } else {
         emptyCount++;
       }
