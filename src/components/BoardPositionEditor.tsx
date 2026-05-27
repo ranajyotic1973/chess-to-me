@@ -436,11 +436,17 @@ export default function BoardPositionEditor({
           10%, 90% { opacity: 1; }
         }
 
-        /* Ensure dragged piece ghost image stays on top of dialog */
+        /* Ensure popup has lower z-index than dragging pieces */
+        .MuiDialog-root {
+          z-index: 100 !important;
+        }
+
+        /* Ensure dragged piece ghost image stays on top - use fixed positioning to escape stacking context */
         body .ui-draggable-dragging,
         body .chessboard-1-piece-dragging,
         body div[class*="piece-"] {
           z-index: 9999 !important;
+          position: fixed !important;
         }
       `}</style>
     </Dialog>
