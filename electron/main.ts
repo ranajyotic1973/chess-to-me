@@ -255,20 +255,25 @@ class EngineRunner {
         }
       };
       const onStderr = (chunk: Buffer) => {
+        const text = chunk?.toString?.() || "";
+        console.log(`[${this.engineName}] STDERR: ${text}`);
         this.emitLog({
-          text: chunk?.toString?.() || "",
+          text,
           stream: "stderr",
           context: "uci-init"
         });
       };
       const onData = (chunk: Buffer) => {
         const text = chunk?.toString?.() || "";
+        console.log(`[${this.engineName}] INIT OUTPUT: ${text}`);
         this.emitLog({ text, stream: "stdout", context: "uci-init" });
         buffer += text;
         if (buffer.includes("uciok")) {
+          console.log(`[${this.engineName}] ✓ Received uciok, sending isready...`);
           proc.stdin.write("isready\n");
         }
         if (buffer.includes("readyok")) {
+          console.log(`[${this.engineName}] ✓ Received readyok, engine ready!`);
           succeed();
         }
       };
@@ -377,13 +382,18 @@ class EngineRunner {
         const rank = mpvMatch ? Number(mpvMatch[1]) : 1;
         const existing = linesByRank.get(rank) || { score: null, pv: "" };
 
+        // Log parsing details to console
+        console.log(`[${this.engineName}] Parsing info line | depth: ${depth}, rank: ${rank}`);
+
         // Set score based on engine type
         if (scoreCp) {
           // Stockfish: centipawn evaluation
           existing.score = { type: "cp", value: Number(scoreCp[1]), depth };
+          console.log(`[${this.engineName}] ✓ Parsed CP score: ${scoreCp[1]} cp (depth ${depth})`);
         } else if (scoreMate) {
           // Stockfish: mate in X moves
           existing.score = { type: "mate", value: Number(scoreMate[1]), depth };
+          console.log(`[${this.engineName}] ✓ Parsed MATE score: mate in ${scoreMate[1]} (depth ${depth})`);
         } else if (scoreWdl) {
           // LC0: win-draw-loss probabilities
           const wins = Number(scoreWdl[1]);
@@ -392,27 +402,43 @@ class EngineRunner {
           const total = wins + draws + losses;
           const winProb = total > 0 ? wins / total : 0;
           existing.score = { winProb, depth };
+          console.log(`[${this.engineName}] ✓ Parsed WDL score: ${wins}/${draws}/${losses} = ${(winProb * 100).toFixed(1)}% win prob (depth ${depth})`);
+        } else {
+          console.log(`[${this.engineName}] ⚠ No score found in line`);
         }
 
         if (pv) {
           existing.pv = pv[1];
+          console.log(`[${this.engineName}] ✓ Parsed PV: ${pv[1]}`);
         }
         linesByRank.set(rank, existing);
       };
 
       const onData = (chunk: Buffer) => {
-        buffer += chunk.toString();
+        const chunkText = chunk.toString();
+        console.log(`[${this.engineName}] Raw output received (${chunkText.length} bytes): ${chunkText.substring(0, 100)}`);
+
+        buffer += chunkText;
         const lines = buffer.split(/\r?\n/);
         buffer = lines.pop() || "";
 
         for (const line of lines) {
+          if (!line.trim()) continue;
+
+          // Log raw output to UI
           this.emitLog({ text: line, stream: "stdout", context: "analysis" });
+          console.log(`[${this.engineName}] RAW OUTPUT: ${line}`);
+
           if (line.startsWith("info ")) {
+            console.log(`[${this.engineName}] Processing info line...`);
             parseInfo(line);
           } else if (line.startsWith("bestmove ")) {
             bestMove = line.split(" ")[1] || "";
+            console.log(`[${this.engineName}] ✓ Analysis complete | best move: ${bestMove}`);
             finish();
             return;
+          } else {
+            console.log(`[${this.engineName}] Other output: ${line}`);
           }
         }
       };
