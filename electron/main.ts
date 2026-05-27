@@ -361,25 +361,37 @@ class EngineRunner {
       };
 
       const parseInfo = (line: string) => {
+        // Extract depth (provided by both Stockfish and LC0)
+        const depthMatch = line.match(/\bdepth\s(\d+)/);
+        const depth = depthMatch ? Number(depthMatch[1]) : undefined;
+
+        // Score parsing: engines are mutually exclusive
+        // Stockfish outputs: "score cp <value>" or "score mate <value>"
+        // LC0 outputs: "score wdl <wins> <draws> <losses>"
         const scoreCp = line.match(/score cp (-?\d+)/);
         const scoreMate = line.match(/score mate (-?\d+)/);
         const scoreWdl = line.match(/score wdl (\d+) (\d+) (\d+)/);
+
         const pv = line.match(/\spv\s(.+)$/);
         const mpvMatch = line.match(/\bmultipv\s(\d+)/);
         const rank = mpvMatch ? Number(mpvMatch[1]) : 1;
         const existing = linesByRank.get(rank) || { score: null, pv: "" };
 
+        // Set score based on engine type
         if (scoreCp) {
-          existing.score = { type: "cp", value: Number(scoreCp[1]) };
+          // Stockfish: centipawn evaluation
+          existing.score = { type: "cp", value: Number(scoreCp[1]), depth };
         } else if (scoreMate) {
-          existing.score = { type: "mate", value: Number(scoreMate[1]) };
+          // Stockfish: mate in X moves
+          existing.score = { type: "mate", value: Number(scoreMate[1]), depth };
         } else if (scoreWdl) {
+          // LC0: win-draw-loss probabilities
           const wins = Number(scoreWdl[1]);
           const draws = Number(scoreWdl[2]);
           const losses = Number(scoreWdl[3]);
           const total = wins + draws + losses;
           const winProb = total > 0 ? wins / total : 0;
-          existing.score = { winProb, depth: undefined };
+          existing.score = { winProb, depth };
         }
 
         if (pv) {
