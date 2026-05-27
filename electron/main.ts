@@ -363,6 +363,7 @@ class EngineRunner {
       const parseInfo = (line: string) => {
         const scoreCp = line.match(/score cp (-?\d+)/);
         const scoreMate = line.match(/score mate (-?\d+)/);
+        const scoreWdl = line.match(/score wdl (\d+) (\d+) (\d+)/);
         const pv = line.match(/\spv\s(.+)$/);
         const mpvMatch = line.match(/\bmultipv\s(\d+)/);
         const rank = mpvMatch ? Number(mpvMatch[1]) : 1;
@@ -372,6 +373,13 @@ class EngineRunner {
           existing.score = { type: "cp", value: Number(scoreCp[1]) };
         } else if (scoreMate) {
           existing.score = { type: "mate", value: Number(scoreMate[1]) };
+        } else if (scoreWdl) {
+          const wins = Number(scoreWdl[1]);
+          const draws = Number(scoreWdl[2]);
+          const losses = Number(scoreWdl[3]);
+          const total = wins + draws + losses;
+          const winProb = total > 0 ? wins / total : 0;
+          existing.score = { winProb, depth: undefined };
         }
 
         if (pv) {
