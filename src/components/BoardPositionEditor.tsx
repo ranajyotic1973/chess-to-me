@@ -435,6 +435,13 @@ export default function BoardPositionEditor({
           0%, 100% { opacity: 0; }
           10%, 90% { opacity: 1; }
         }
+
+        /* Ensure dragged piece ghost image stays on top of dialog */
+        body .ui-draggable-dragging,
+        body .chessboard-1-piece-dragging,
+        body div[class*="piece-"] {
+          z-index: 9999 !important;
+        }
       `}</style>
     </Dialog>
   );
