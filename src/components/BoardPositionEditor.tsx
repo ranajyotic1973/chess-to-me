@@ -275,33 +275,24 @@ export default function BoardPositionEditor({
         sx: {
           minHeight: "85vh",
           maxHeight: "85vh",
-          position: "relative",
-          zIndex: 1300
-        }
-      }}
-      slotProps={{
-        backdrop: {
-          style: {
-            zIndex: 1299
-          }
+          display: "flex",
+          flexDirection: "column"
         }
       }}
     >
       <DialogTitle>Board Setup</DialogTitle>
       <DialogContent
-        dividers
         sx={{
           display: "flex",
           flexDirection: "row",
           gap: 2,
           flex: 1,
           minHeight: 0,
-          overflow: "auto",
           backgroundColor: "#fafafa",
           alignItems: "flex-start",
           justifyContent: "center",
-          position: "relative",
-          zIndex: 0
+          overflowX: "hidden",
+          overflowY: "auto"
         }}
       >
         {/* White Pieces - Left Side */}
@@ -368,12 +359,7 @@ export default function BoardPositionEditor({
               borderRadius: 1,
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              zIndex: 100,
-              "& img[draggable]": {
-                zIndex: "9999 !important",
-                position: "relative !important"
-              }
+              justifyContent: "center"
             }}
             ref={boardRef}
           />
@@ -448,34 +434,6 @@ export default function BoardPositionEditor({
         @keyframes fadeInOut {
           0%, 100% { opacity: 0; }
           10%, 90% { opacity: 1; }
-        }
-
-        /* Ensure dragged pieces stay on top of the board and dialog */
-        .chessboard-1 {
-          position: relative;
-          z-index: 10;
-        }
-
-        /* Chessboard.js dragging overlay - ensure it's on top */
-        [data-testid="chessboard-dragging"],
-        .chessboard-dragging,
-        .piece-dragging {
-          z-index: 9999 !important;
-          position: fixed !important;
-        }
-
-        /* Generic dragging piece styling for any chessboard implementation */
-        img[draggable="true"],
-        img[draggable="true"][style*="position"],
-        img[draggable="true"][style*="transform"] {
-          z-index: 9999 !important;
-        }
-
-        /* Ensure board squares don't cover dragged pieces */
-        .square-55d63,
-        .square-40854 {
-          position: relative;
-          z-index: 1;
         }
       `}</style>
     </Dialog>
