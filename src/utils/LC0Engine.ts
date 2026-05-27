@@ -12,14 +12,7 @@ export class LC0Engine extends IChessEngine {
   }
 
   async init(): Promise<void> {
-    if (!electronAPI?.ensureEngineRunning) {
-      throw new Error("Engine initialization API unavailable");
-    }
-    try {
-      await electronAPI.ensureEngineRunning({ engine: "lc0", path: this.path });
-    } catch (err) {
-      throw new Error(`Failed to initialize LC0: ${err instanceof Error ? err.message : String(err)}`);
-    }
+    // Engine is lazily initialized on first analysis call
   }
 
   async analyze(fen: string, depth: number = 16, multiPv: number = 4): Promise<AnalysisResult> {
@@ -44,14 +37,7 @@ export class LC0Engine extends IChessEngine {
   }
 
   async stop(): Promise<void> {
-    if (!electronAPI?.stopEngine) {
-      return;
-    }
-    try {
-      await electronAPI.stopEngine({ engine: "lc0" });
-    } catch {
-      // swallow errors
-    }
+    // Engine lifecycle is managed by the main process
   }
 
   async destroy(): Promise<void> {

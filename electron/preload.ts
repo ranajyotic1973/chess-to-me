@@ -53,6 +53,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Logging and state
   getProcessLogs: () =>
     ipcRenderer.invoke("process:get-logs") as Promise<IpcResponses["getProcessLogs"]>,
+  onLogEntry: (callback: (data: { bucket: string; entry: any }) => void) => {
+    const handler = (_event: any, data: { bucket: string; entry: any }) => callback(data);
+    ipcRenderer.on("process:log-entry", handler);
+    return () => ipcRenderer.removeListener("process:log-entry", handler);
+  },
   setOllamaModel: (model: string) =>
     ipcRenderer.invoke("process:set-model", model) as Promise<IpcResponses["setOllamaModel"]>,
 

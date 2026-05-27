@@ -403,9 +403,20 @@ export default function App() {
     if (analysisMode !== "logs") {
       return undefined;
     }
+    // Fetch existing buffered history on first open
     loadLogs();
-    const interval = setInterval(loadLogs, 2500);
-    return () => clearInterval(interval);
+
+    // Subscribe to real-time push events
+    if (!electronAPI?.onLogEntry) return undefined;
+    const unsub = electronAPI.onLogEntry(({ bucket, entry }) => {
+      setLogEntries(prev => {
+        const existing = prev[bucket as "stockfish" | "ollama"];
+        // Deduplicate by ID
+        if (existing.some(e => e.id === entry.id)) return prev;
+        return { ...prev, [bucket]: [...existing, entry] };
+      });
+    });
+    return unsub;
   }, [analysisMode, loadLogs]);
 
   useEffect(() => {
