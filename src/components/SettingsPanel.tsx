@@ -302,6 +302,17 @@ export default function SettingsPanel({
             />
           </Grid>
           <Grid item xs={12} sm={6}>
+            <TextField
+              label="Engine timeout (seconds)"
+              type="number"
+              inputProps={{ min: 5, max: 300 }}
+              value={Math.round((formState.engineTimeoutMs ?? 120000) / 1000)}
+              onChange={(event) => onFieldChange("engineTimeoutMs", Number(event.target.value) * 1000)}
+              fullWidth
+              helperText="5–300s — engine stops after timeout"
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>
             <FormControl fullWidth>
               <InputLabel id="language-label">Language</InputLabel>
               <Select

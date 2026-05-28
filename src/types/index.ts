@@ -348,6 +348,7 @@ export interface ChatPanelProps {
   responseData?: Record<string, any>;
   showSolution?: boolean;
   onShowSolution?: () => void;
+  agentStatuses?: AgentProgressEvent[];
   sx?: any;
 }
 

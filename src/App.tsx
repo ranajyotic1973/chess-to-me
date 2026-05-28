@@ -57,6 +57,7 @@ import type {
   AnalysisEntry,
   AnalysisLine,
   AppSettings,
+  AgentProgressEvent,
   EngineInfo,
   EngineStatus,
   LogEntry,
@@ -71,6 +72,7 @@ const DEFAULT_FORM: AppSettings = {
   lc0Path: "",
   selectedEngine: "lc0",
   analysisDepth: 16,
+  engineTimeoutMs: 120000, // 2 minutes default
   explainLanguage: "English",
   ollamaModel: "qwen3:8b",
   ollamaBaseUrl: "http://localhost:11434/api",
@@ -183,6 +185,7 @@ export default function App() {
   const [questionText, setQuestionText] = useState<string>("");
   const [questionResponse, setQuestionResponse] = useState<string>("");
   const [questionLoading, setQuestionLoading] = useState<boolean>(false);
+  const [agentStatuses, setAgentStatuses] = useState<AgentProgressEvent[]>([]);
   const [currentResponseType, setCurrentResponseType] = useState<"Analysis" | "Puzzle" | "Position" | "Game">("Analysis");
   const [currentResponseData, setCurrentResponseData] = useState<Record<string, any>>({});
   const [showSolution, setShowSolution] = useState<boolean>(false);
@@ -372,6 +375,26 @@ export default function App() {
     return () => {
       window.removeEventListener("resize", handleResize);
     };
+  }, []);
+
+  // Subscribe to agent progress events
+  useEffect(() => {
+    if (!electronAPI?.onAgentProgress) return;
+
+    const unsub = electronAPI.onAgentProgress((event: AgentProgressEvent) => {
+      setAgentStatuses((prev) => {
+        const updated = [...prev];
+        const existingIdx = updated.findIndex((a) => a.agentId === event.agentId);
+        if (existingIdx >= 0) {
+          updated[existingIdx] = event;
+        } else {
+          updated.push(event);
+        }
+        return updated;
+      });
+    });
+
+    return unsub;
   }, []);
 
   useEffect(() => {
@@ -775,6 +798,7 @@ export default function App() {
         selectedEngine: selectedEngine as "stockfish" | "lc0",
         [`${selectedEngine}Path`]: String(selectedPath),
         analysisDepth: Number(formState.analysisDepth),
+        engineTimeoutMs: Number(formState.engineTimeoutMs),
         explainLanguage: formState.explainLanguage,
         ollamaModel: formState.ollamaModel,
         ollamaBaseUrl: formState.ollamaBaseUrl,
@@ -964,6 +988,9 @@ export default function App() {
       setStatusMessage("LLM question API unavailable.");
       return;
     }
+
+    // Clear previous agent statuses for new question
+    setAgentStatuses([]);
 
     // Validate LLM settings before making request
     if (!isLlmSettingsValid(formState.llmProvider, formState.ollamaModel, formState.llmApiKey)) {
@@ -1595,6 +1622,7 @@ export default function App() {
                   responseData={currentResponseData}
                   showSolution={showSolution}
                   onShowSolution={() => setShowSolution(true)}
+                  agentStatuses={agentStatuses}
                   sx={{ flex: 1, minHeight: 0 }}
                 />
               </Box>

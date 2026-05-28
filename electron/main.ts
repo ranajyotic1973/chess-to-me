@@ -419,11 +419,55 @@ class EngineRunner {
 
       this.proc!.stdout?.on("data", onData);
 
-      // Use longer timeout for LC0 since it's slower than Stockfish
-      const timeoutMs = this.engineName.toLowerCase() === "lc0" ? LC0_ANALYZE_TIMEOUT_MS : ANALYZE_TIMEOUT_MS;
-      const timer = setTimeout(() => {
-        fail(new Error(`${this.engineName} analysis timed out.`));
-      }, timeoutMs);
+      // Use configurable timeout or fall back to default based on engine
+      const configuredTimeoutMs = settings.get("engineTimeoutMs");
+      const fallbackTimeoutMs = this.engineName.toLowerCase() === "lc0" ? LC0_ANALYZE_TIMEOUT_MS : ANALYZE_TIMEOUT_MS;
+      const timeoutMs = configuredTimeoutMs ? Number(configuredTimeoutMs) : fallbackTimeoutMs;
+
+      const timeoutAction = () => {
+        if (done) return;
+
+        console.log(`[${this.engineName}] Timeout reached (${timeoutMs}ms) - sending stop command`);
+
+        // Send graceful stop command
+        try {
+          this.proc?.stdin?.write("stop\n");
+        } catch (err) {
+          console.error(`[${this.engineName}] Failed to send stop command:`, err);
+        }
+
+        // Kill process after grace period if it hasn't exited
+        const killTimer = setTimeout(() => {
+          try {
+            if (this.proc && !this.proc.killed) {
+              this.proc.kill();
+              console.log(`[${this.engineName}] Process killed after grace period`);
+            }
+          } catch (err) {
+            console.error(`[${this.engineName}] Failed to kill process:`, err);
+          }
+        }, 500);
+
+        // Snapshot whatever lines we have collected so far
+        const snapshotLines = [...linesByRank.entries()]
+          .sort((a, b) => a[0] - b[0])
+          .slice(0, 4)
+          .map(([rank, value]) => ({
+            rank,
+            score: value.score || null,
+            pv: value.pv || ""
+          }));
+
+        if (snapshotLines.length > 0) {
+          console.log(`[${this.engineName}] Resolving with partial snapshot (${snapshotLines.length} lines)`);
+          finish();
+        } else {
+          console.log(`[${this.engineName}] No lines collected - rejecting`);
+          fail(new Error(`${this.engineName} analysis timeout with no results`));
+        }
+      };
+
+      const timer = setTimeout(timeoutAction, timeoutMs);
 
       try {
         this.send("ucinewgame");
@@ -1161,6 +1205,8 @@ async function checkOllamaQwen3(): Promise<{ ollamaRunning: boolean; qwen3Instal
   }
 }
 
+let mainWindow: BrowserWindow | null = null;
+
 async function createWindow(): Promise<void> {
   const win = new BrowserWindow({
     width: 1300,
@@ -1199,6 +1245,11 @@ async function createWindow(): Promise<void> {
         win.webContents.openDevTools();
       }
     }
+  });
+
+  mainWindow = win;
+  win.on("closed", () => {
+    mainWindow = null;
   });
 }
 
@@ -2445,9 +2496,145 @@ IMPORTANT:
   }
 
   try {
-    const answer = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
-    console.log(`[LLM] PASS 2: ANALYSIS Complete ✓`);
-    return { ok: true, answer: answer || "No response returned.", linesUsed: analysisLines.length };
+    // Fan-out: create one agent per analysis line (up to 4 parallely)
+    if (analysisLines.length === 0) {
+      const answer = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
+      console.log(`[LLM] PASS 2: ANALYSIS Complete ✓`);
+      return { ok: true, answer: answer || "No response returned.", linesUsed: 0 };
+    }
+
+    // Build individual prompts for each line
+    const agentPromises = analysisLines.map(async (line, idx) => {
+      const agentId = idx + 1;
+      const lineLabel = `Line ${line.rank ?? agentId}: ${(line.pv || line.line || "").split(" ").slice(0, 5).join(" ")}`;
+
+      // Push "working" status to UI
+      if (mainWindow && mainWindow.webContents) {
+        mainWindow.webContents.send("analysis:agent-progress", {
+          agentId,
+          lineIndex: idx,
+          lineLabel,
+          status: "working" as const
+        });
+      }
+
+      // Build focused system prompt for this agent
+      const focusedSystemPrompt = `You are a chess expert analyzing a single variation. Analyze this specific line deeply, providing strategic and tactical insights.
+
+## Response Format Requirements:
+- Use Markdown formatting with headers, bullet points, and clear structure
+- Each point should be 1-2 lines maximum (no long paragraphs)
+- Use clear section headers with ###
+- Use bold text (**text**) for section headers
+- Be specific about pieces and squares
+
+## Analysis Structure:
+
+**Strategic Plans:**
+- White's objective: [specific goal in this line]
+- Black's response: [counter-strategy]
+
+**Attacking & Defensive Resources:**
+- White's attacking options: [specific moves/ideas]
+- Black's defensive resources: [specific moves/ideas]
+
+**Tactical Threats & Forcing Moves:**
+- Immediate threats: [checks, captures, pins]
+- Forcing sequences: [moves that compel responses]
+- Material risk: [which pieces are vulnerable]
+
+**Key Continuations:**
+- Critical follow-up moves: [moves that matter most]
+
+Always use bullet points. Be concise and actionable.`;
+
+      // Build focused user prompt for this line
+      const lineScore = (() => {
+        const s = line.score as any;
+        if (!s) return "?";
+        if (s.type === "cp") {
+          return `${s.value >= 0 ? "+" : ""}${(s.value / 100).toFixed(1)}`;
+        } else if (s.type === "mate") {
+          return `M${s.value}`;
+        } else if (s.winProb !== undefined) {
+          return `${(s.winProb * 100).toFixed(1)}%`;
+        }
+        return "?";
+      })();
+
+      const lineMessages: Array<{ role: string; content: string }> = [
+        { role: "system", content: focusedSystemPrompt },
+        {
+          role: "user",
+          content: `Analyze this specific line from the chess engine analysis:
+
+Variation: ${line.pv || line.line || "No moves"}
+Score: ${lineScore} (${engineType.toUpperCase()})
+
+Question from user: ${question}
+
+Provide detailed analysis of this variation only, using Markdown with bullet points.`
+        }
+      ];
+
+      try {
+        const response = await runLlmChat({
+          provider: llmProvider,
+          baseUrl,
+          model,
+          apiKey: llmApiKey,
+          messages: lineMessages
+        });
+
+        // Push "done" status
+        if (mainWindow && mainWindow.webContents) {
+          mainWindow.webContents.send("analysis:agent-progress", {
+            agentId,
+            lineIndex: idx,
+            lineLabel,
+            status: "done" as const,
+            response
+          });
+        }
+
+        console.log(`[LLM] PASS 2: Agent ${agentId} Complete ✓`);
+        return { agentId, lineLabel, response };
+      } catch (err) {
+        const error = (err as Error).message;
+
+        // Push "error" status
+        if (mainWindow && mainWindow.webContents) {
+          mainWindow.webContents.send("analysis:agent-progress", {
+            agentId,
+            lineIndex: idx,
+            lineLabel,
+            status: "error" as const,
+            error
+          });
+        }
+
+        console.error(`[LLM] PASS 2: Agent ${agentId} failed: ${error}`);
+        throw err;
+      }
+    });
+
+    // Run all agents in parallel
+    const agentResults = await Promise.allSettled(agentPromises);
+
+    // Collate responses
+    const collatedParts = agentResults
+      .map((result, idx) => {
+        if (result.status === "fulfilled") {
+          const { lineLabel, response } = result.value;
+          return `## ${lineLabel}\n\n${response}`;
+        } else {
+          return `## Agent ${idx + 1}: Error\n\n⚠️ ${(result as PromiseRejectedResult).reason?.message || "Unknown error"}`;
+        }
+      });
+
+    const collatedAnswer = collatedParts.join("\n\n---\n\n");
+    console.log(`[LLM] PASS 2: ANALYSIS Complete ✓ (${agentResults.length} agents)`);
+    return { ok: true, answer: collatedAnswer, linesUsed: analysisLines.length };
   } catch (err) {
     const errorMsg = (err as Error)?.message || "Analysis failed.";
     console.error(`[LLM] PASS 2: ANALYSIS failed: ${errorMsg}`);

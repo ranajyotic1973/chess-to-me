@@ -13,6 +13,8 @@ import {
 } from "@mui/material";
 import SettingsIcon from "@mui/icons-material/Settings";
 import ClearIcon from "@mui/icons-material/Clear";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import ReactMarkdown from "react-markdown";
 import { useState, useEffect } from "react";
 import type { ChatPanelProps } from "../types";
@@ -80,6 +82,7 @@ export default function ChatPanel({
   responseData = {},
   showSolution = false,
   onShowSolution,
+  agentStatuses = [],
   sx
 }: ChatPanelProps) {
   const [showEngineLines, setShowEngineLines] = useState(false);
@@ -270,6 +273,37 @@ export default function ChatPanel({
                     variant="outlined"
                     sx={{ height: 24 }}
                   />
+                </Box>
+              )}
+
+              {/* Agent Status Cards - show while agents are working */}
+              {agentStatuses.length > 0 && agentStatuses.some((a) => a.status === "working") && (
+                <Box sx={{ p: 1.5, backgroundColor: "info.lighter", borderRadius: 1, mb: 1 }}>
+                  <Typography variant="caption" color="info.main" sx={{ fontWeight: 600, display: "block", mb: 1 }}>
+                    Analyzing variations...
+                  </Typography>
+                  <Stack spacing={0.5}>
+                    {agentStatuses.map((agent) => (
+                      <Stack
+                        key={agent.agentId}
+                        direction="row"
+                        spacing={1}
+                        alignItems="center"
+                        sx={{ p: 0.75, backgroundColor: "background.paper", borderRadius: 0.5 }}
+                      >
+                        {agent.status === "working" && <CircularProgress size={14} />}
+                        {agent.status === "done" && (
+                          <CheckCircleOutlineIcon sx={{ fontSize: 16, color: "success.main" }} />
+                        )}
+                        {agent.status === "error" && (
+                          <ErrorOutlineIcon sx={{ fontSize: 16, color: "error.main" }} />
+                        )}
+                        <Typography variant="caption" sx={{ flex: 1 }}>
+                          Agent {agent.agentId}: {agent.lineLabel}
+                        </Typography>
+                      </Stack>
+                    ))}
+                  </Stack>
                 </Box>
               )}
 
