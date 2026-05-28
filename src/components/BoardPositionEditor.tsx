@@ -297,15 +297,15 @@ export default function BoardPositionEditor({
         sx={{
           display: "flex",
           flexDirection: "row",
-          gap: 2,
+          gap: 1,
           flex: 1,
           minHeight: 0,
           backgroundColor: "#fafafa",
           alignItems: "flex-start",
-          justifyContent: "flex-start",
+          justifyContent: "center",
           overflowX: "hidden",
           overflowY: "auto",
-          padding: 2
+          padding: 1.5
         }}
       >
         {/* Left Section - Board with Pieces (80% width) */}
@@ -313,7 +313,8 @@ export default function BoardPositionEditor({
           direction="column"
           spacing={2}
           sx={{
-            flex: "0 0 80%",
+            flex: "1 1 auto",
+            maxWidth: "80%",
             alignItems: "center",
             minHeight: 0
           }}
@@ -460,14 +461,15 @@ export default function BoardPositionEditor({
           </Stack>
         </Stack>
 
-        {/* Right Section - Side Selection (20% width) */}
+        {/* Right Section - Side Selection */}
         <Box
           sx={{
-            flex: "0 0 20%",
+            flex: "0 0 auto",
+            minWidth: 150,
             display: "flex",
             alignItems: "flex-start",
             justifyContent: "center",
-            paddingTop: 2
+            paddingTop: 1
           }}
         >
           <Box
