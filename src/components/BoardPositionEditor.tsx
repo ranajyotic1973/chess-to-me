@@ -394,69 +394,82 @@ export default function BoardPositionEditor({
               </IconButton>
             </Tooltip>
           </Stack>
-
-          {/* Side to Move Selection */}
-          <FormControl size="small" sx={{ minWidth: 200 }}>
-            <FormLabel sx={{ mb: 0.5, fontSize: "0.85rem", fontWeight: 600 }}>Side to Play First</FormLabel>
-            <RadioGroup
-              row
-              value={sideToMove}
-              onChange={(e) => setSideToMove(e.target.value as "w" | "b")}
-              sx={{ justifyContent: "center", gap: 1 }}
-            >
-              <FormControlLabel
-                value="w"
-                control={<Radio size="small" />}
-                label={<span style={{ fontSize: "0.9rem" }}>White</span>}
-                sx={{ margin: 0 }}
-              />
-              <FormControlLabel
-                value="b"
-                control={<Radio size="small" />}
-                label={<span style={{ fontSize: "0.9rem" }}>Black</span>}
-                sx={{ margin: 0 }}
-              />
-            </RadioGroup>
-          </FormControl>
         </Stack>
 
-        {/* Black Pieces - Right Side */}
-        <Stack direction="column" spacing={1} sx={{ flexShrink: 0, paddingTop: 1 }}>
-          {PIECE_SYMBOLS.black.map((piece) => (
-            <Box
-              key={piece.piece}
-              draggable
-              onDragStart={(e) => handlePieceDragStart(e, piece.piece)}
-              sx={{
-                width: 50,
-                height: 50,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: "#f0f0f0",
-                cursor: "grab",
-                "&:active": { cursor: "grabbing" },
-                border: "1px solid #ccc",
-                borderRadius: 1,
-                opacity: 0.95,
-                "&:hover": { opacity: 1, backgroundColor: "#e8e8e8" },
-                flexShrink: 0,
-                overflow: "hidden"
-              }}
-              title={piece.name}
-            >
-              <img
-                src={getPieceImageUrl(piece.piece)}
-                alt={piece.name}
-                style={{
-                  width: "80%",
-                  height: "80%",
-                  objectFit: "contain"
+        {/* Black Pieces and Side Selection - Right Side */}
+        <Stack direction="column" spacing={2} sx={{ flexShrink: 0, alignItems: "center" }}>
+          {/* Black Pieces */}
+          <Stack direction="column" spacing={1}>
+            {PIECE_SYMBOLS.black.map((piece) => (
+              <Box
+                key={piece.piece}
+                draggable
+                onDragStart={(e) => handlePieceDragStart(e, piece.piece)}
+                sx={{
+                  width: 50,
+                  height: 50,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: "#f0f0f0",
+                  cursor: "grab",
+                  "&:active": { cursor: "grabbing" },
+                  border: "1px solid #ccc",
+                  borderRadius: 1,
+                  opacity: 0.95,
+                  "&:hover": { opacity: 1, backgroundColor: "#e8e8e8" },
+                  flexShrink: 0,
+                  overflow: "hidden"
                 }}
-                draggable={false}
-              />
-            </Box>
-          ))}
+                title={piece.name}
+              >
+                <img
+                  src={getPieceImageUrl(piece.piece)}
+                  alt={piece.name}
+                  style={{
+                    width: "80%",
+                    height: "80%",
+                    objectFit: "contain"
+                  }}
+                  draggable={false}
+                />
+              </Box>
+            ))}
+          </Stack>
+
+          {/* Side to Move Selection */}
+          <Box
+            sx={{
+              backgroundColor: "white",
+              border: "1px solid #ddd",
+              borderRadius: 1,
+              padding: 1.5,
+              minWidth: 180
+            }}
+          >
+            <FormControl size="small" fullWidth>
+              <FormLabel sx={{ mb: 1, fontSize: "0.85rem", fontWeight: 600, display: "block" }}>
+                Side to Play First
+              </FormLabel>
+              <RadioGroup
+                value={sideToMove}
+                onChange={(e) => setSideToMove(e.target.value as "w" | "b")}
+              >
+                <FormControlLabel
+                  value="w"
+                  control={<Radio size="small" />}
+                  label={<span style={{ fontSize: "0.9rem" }}>White</span>}
+                  sx={{ margin: 0 }}
+                />
+                <FormControlLabel
+                  value="b"
+                  control={<Radio size="small" />}
+                  label={<span style={{ fontSize: "0.9rem" }}>Black</span>}
+                  sx={{ margin: 0 }}
+                />
+              </RadioGroup>
+            </FormControl>
+          </Box>
         </Stack>
       </DialogContent>
       <DialogActions>
