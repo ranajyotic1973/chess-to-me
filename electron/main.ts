@@ -2700,9 +2700,15 @@ ipcMain.handle("ollama:ask-question", async (_event, payload) => {
 
   const language = payload?.language || settings.get("explainLanguage") || "English";
   const payloadProvider = payload?.llmProvider?.trim() || null;
-  const savedProvider = settings.get("llmProvider")?.trim() || null;
+  const savedProviderRaw = settings.get("llmProvider");
+  const savedProvider = (savedProviderRaw as string)?.trim() || null;
+
+  // Use payload provider if explicitly provided, otherwise use saved settings
+  // Don't default to ollama - require explicit configuration
   const llmProvider = payloadProvider || savedProvider || "ollama";
   const llmApiKey = payload?.llmApiKey || settings.get("llmApiKey") || "";
+
+  console.log(`[LLM] Provider selection | Payload: "${payloadProvider}" | Saved (raw): "${savedProviderRaw}" | Saved (trim): "${savedProvider}" | Final: "${llmProvider}"`);
 
   // Get the correct model based on provider
   let model = payload?.model;
@@ -2718,7 +2724,7 @@ ipcMain.handle("ollama:ask-question", async (_event, payload) => {
 
   try {
     // PASS 1: Classify the request
-    console.log(`[LLM] PASS 1: Classification - Starting for question: "${question.substring(0, 60)}..."`);
+    console.log(`[LLM] PASS 1: Classification - Starting | Provider: ${llmProvider} | Model: ${model} | Question: "${question.substring(0, 60)}..."`);
 
     const classificationMessages = [
       {
