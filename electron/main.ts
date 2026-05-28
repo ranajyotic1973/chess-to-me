@@ -1854,10 +1854,11 @@ async function runLlmChat(params: {
   apiKey?: string;
   messages: Array<{ role: string; content: string }>;
   timeoutMs?: number;
+  includeTools?: boolean;
 }): Promise<string> {
   // Use shorter timeout for Ollama (it's usually fast), longer for cloud providers
   const defaultTimeout = params.provider === "ollama" ? 60000 : 120000;
-  const { provider, baseUrl, model, apiKey, messages, timeoutMs = defaultTimeout } = params;
+  const { provider, baseUrl, model, apiKey, messages, timeoutMs = defaultTimeout, includeTools = true } = params;
 
   // Validate required fields
   if (!provider || !model?.trim() || !baseUrl?.trim()) {
@@ -1908,9 +1909,9 @@ async function runLlmChat(params: {
     if (provider === "ollama") {
       result = await runOllamaChatInternal(baseUrl, model, messages, controller.signal);
     } else if (provider === "openai" || provider === "grok") {
-      result = await runOpenAICompatibleChat(provider, baseUrl, model, apiKey, messages, controller.signal, true);
+      result = await runOpenAICompatibleChat(provider, baseUrl, model, apiKey, messages, controller.signal, includeTools);
     } else if (provider === "anthropic") {
-      result = await runAnthropicChat(baseUrl, model, apiKey, messages, controller.signal, true);
+      result = await runAnthropicChat(baseUrl, model, apiKey, messages, controller.signal, includeTools);
     } else if (provider === "gemini") {
       result = await runGeminiChat(baseUrl, model, apiKey, messages, controller.signal);
     } else {
@@ -2753,7 +2754,8 @@ Respond with ONLY the category name, nothing else.`
       model,
       apiKey: llmApiKey,
       messages: classificationMessages,
-      timeoutMs: 30000
+      timeoutMs: 30000,
+      includeTools: false
     });
 
     const classified = classification.trim().toUpperCase();
