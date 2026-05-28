@@ -6,35 +6,8 @@ import { Chess } from "chess.js";
 import type { AnalysisLine } from "../src/types";
 import { settings } from "./settings";
 
-// Lazy load electron - will be available when running under Electron
-let app: any;
-let BrowserWindow: any;
-let ipcMain: any;
-let dialog: any;
-let shell: any;
-let Menu: any;
-
-// Function to initialize Electron APIs when available
-function initializeElectronApis() {
-  try {
-    const electronModule = require("electron");
-    app = electronModule.app;
-    BrowserWindow = electronModule.BrowserWindow;
-    ipcMain = electronModule.ipcMain;
-    dialog = electronModule.dialog;
-    shell = electronModule.shell;
-    Menu = electronModule.Menu;
-
-    if (!app) {
-      console.error("[electron] Electron module loaded but APIs unavailable");
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.error("[electron] Failed to initialize Electron APIs:", err);
-    return false;
-  }
-}
+// Import electron APIs
+import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from "electron";
 
 const DEFAULT_OLLAMA_MODEL = "qwen3:8b";
 
@@ -94,7 +67,8 @@ function isModelRelevantForProvider(provider: string, model: string): boolean {
 
 
 const ENGINE_VERIFY_TIMEOUT_MS = 5000;
-const ANALYZE_TIMEOUT_MS = 30000;
+const ANALYZE_TIMEOUT_MS = 60000; // 60 seconds for Stockfish
+const LC0_ANALYZE_TIMEOUT_MS = 120000; // 120 seconds for LC0 (slower neural network)
 const PROCESS_LOG_LIMIT = 400;
 const OLLAMA_SERVE_RESTART_MS = 2500;
 
@@ -445,9 +419,11 @@ class EngineRunner {
 
       this.proc!.stdout?.on("data", onData);
 
+      // Use longer timeout for LC0 since it's slower than Stockfish
+      const timeoutMs = this.engineName.toLowerCase() === "lc0" ? LC0_ANALYZE_TIMEOUT_MS : ANALYZE_TIMEOUT_MS;
       const timer = setTimeout(() => {
         fail(new Error(`${this.engineName} analysis timed out.`));
-      }, ANALYZE_TIMEOUT_MS);
+      }, timeoutMs);
 
       try {
         this.send("ucinewgame");
@@ -1404,10 +1380,13 @@ ipcMain.handle("app:update-settings", async (_event, payload) => {
     // If mask, don't update (key unchanged)
   }
 
-  try {
-    await processManager.setActiveModel(nextModel);
-  } catch {
-    // Already logged in the process manager.
+  // Only manage Ollama model if the provider is Ollama
+  if (nextProvider === "ollama") {
+    try {
+      await processManager.setActiveModel(nextModel);
+    } catch {
+      // Already logged in the process manager.
+    }
   }
 
   return {
@@ -1738,12 +1717,21 @@ Always validate moves before applying them.
     "Use deep strategic and tactical understanding to explain positions, evaluate moves, and compare analysis lines.",
     "Your role is to help club-level players understand the ideas behind moves, not to act as a computer engine.",
     "",
+    "Response Format (IMPORTANT):",
+    "- Use Markdown formatting with headers, bullet points, and bold text",
+    "- Use ### headers for each line (### Line 1: e2-e4)",
+    "- Use **bold** for section headers (**Strategic Plans:**, **Threats:**, etc.)",
+    "- Use bullet points (- or •) for each distinct point",
+    "- Each bullet point should be 1-2 lines maximum - concise and specific",
+    "- Never use long paragraphs",
+    "- Each section should have multiple bullet points, not paragraphs",
+    "",
     "Engine-Provided Analysis:",
     "The chess engine has already analyzed the position and provided the top lines.",
     "Your job is to EXPLAIN these engine-provided lines - why they are strong, what ideas they contain, and how they compare.",
     "Do NOT suggest alternative moves or lines - the engine analysis is the source of truth for move suggestions.",
     "When the user asks about moves, explain why the engine-recommended lines are best.",
-    "When reporting on multiple lines in your analysis, format them as a numbered list (1. Line 1 explanation, 2. Line 2 explanation, etc.)",
+    "For each line, always provide: Strategic Plans, Attacking & Defensive Resources, Tactical Threats & Forcing Moves, Key Continuations, and Comparison",
     "",
     "Piece Notation:",
     "Always use piece glyphs and algebraic notation in your analysis:",
@@ -1772,6 +1760,11 @@ Always validate moves before applying them.
     "- Tactical purpose (captures, attacks, defensive moves) using algebraic notation",
     "- Strategic goal (improving position, activating pieces, controlling key squares)",
     "- Relationship to the overall plan",
+    "",
+    "For Puzzles and Positions:",
+    "- Always include which side (White or Black) should move first",
+    "- This must be explicitly stated in the response",
+    "- Include this in the FEN notation in the 'side to move' field",
     "",
     "Always use tactical and strategic chess terminology with glyphs and algebraic notation.",
     "Avoid mentioning being an AI or computer algorithm.",
@@ -1805,22 +1798,49 @@ Always validate moves before applying them.
   if (userMessage) {
     userContent = userMessage;
   } else {
-    const instructions = [
-      "You are a practical chess coach for club-level players.",
-      "Respond only in chess-focused terms; do not mention being an AI or include general commentary about AI.",
-      "Assess the risks for both sides and propose a plan of attack for the player to move next.",
-      "Keep the tone concise and actionable (bulleted points are welcome)."
-    ];
-    const context = [
-      `Language: ${language}`,
-      `Position FEN: ${fen || "unknown"}`
-    ];
+    if (lines.length > 0) {
+      // When analyzing lines, ask for detailed strategic and tactical analysis in Markdown format
+      userContent = `Analyze each line using Markdown bullet points with this structure:
 
-    if (question) {
-      context.push(`Player question: ${question}`);
+**Strategic Plans:**
+- White's objective: [specific goal]
+- Black's response: [counter-strategy]
+
+**Attacking & Defensive Resources:**
+- White's options: [specific moves/ideas]
+- Black's resources: [specific moves/ideas]
+
+**Tactical Threats & Forcing Moves:**
+- Immediate threats: [checks, captures, pins]
+- Forcing sequences: [critical moves]
+- Material risk: [vulnerable pieces]
+
+**Position Assessment:**
+- Evaluation after this line: [who stands better and why]
+
+Language: ${language}
+Position FEN: ${fen || "unknown"}
+${question ? `User question: ${question}` : ""}
+
+Use bullet points (- or •), bold headers (**text**), and keep each point concise (1-2 lines max).`;
+    } else {
+      const instructions = [
+        "You are a practical chess coach for club-level players.",
+        "Respond only in chess-focused terms; do not mention being an AI or include general commentary about AI.",
+        "Assess the risks for both sides and propose a plan of attack for the player to move next.",
+        "Keep the tone concise and actionable (bulleted points are welcome)."
+      ];
+      const context = [
+        `Language: ${language}`,
+        `Position FEN: ${fen || "unknown"}`
+      ];
+
+      if (question) {
+        context.push(`Player question: ${question}`);
+      }
+
+      userContent = [...instructions, ...context].filter(Boolean).join("\n");
     }
-
-    userContent = [...instructions, ...context].filter(Boolean).join("\n");
   }
 
   messages.push({ role: "user", content: userContent });
@@ -2191,7 +2211,30 @@ ipcMain.handle("ollama:explain-lines", async (_event, payload) => {
   try {
     const explanations = await Promise.all(
       lines.map(async (line: any) => {
-        const messages = buildPrompt({ language, fen, line });
+        // Build messages with conversation history for context
+        let messages = buildPrompt({ language, fen, line, lines: [line] });
+
+        // Optionally include recent conversation history for context (if available)
+        if (Array.isArray(payload?.conversationHistory) && payload.conversationHistory.length > 0) {
+          const systemMsg = messages[0];
+          const userMsg = messages[messages.length - 1];
+
+          // Rebuild with conversation history
+          messages = [systemMsg];
+
+          // Add last 2 exchanges from conversation history for context
+          const recentHistory = payload.conversationHistory.slice(-4);
+          for (const entry of recentHistory) {
+            messages.push({
+              role: entry.role === "user" ? "user" : "assistant",
+              content: entry.message
+            });
+          }
+
+          // Add the current line analysis request
+          messages.push(userMsg);
+        }
+
         const text = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
         return {
           rank: line.rank,
@@ -2208,7 +2251,7 @@ ipcMain.handle("ollama:explain-lines", async (_event, payload) => {
   }
 });
 
-// Classification endpoint - determine request type
+// Classification endpoint - Two-pass processing: PASS 1 - Classify request type
 ipcMain.handle("ollama:classify-question", async (_event, payload) => {
   const question = String(payload?.question || "").trim();
   if (!question) {
@@ -2230,12 +2273,15 @@ ipcMain.handle("ollama:classify-question", async (_event, payload) => {
   const classificationPrompt = [
     {
       role: "system",
-      content: `You are a chess question classifier. Classify the user's question into ONE category:
-- ANALYSIS: User asks to analyze a position, best move, or evaluate moves
-- PUZZLE: User presents a chess puzzle or tactical problem
-- POSITION: User wants to set up or discuss a specific position
-- GAME: User discusses a game or wants game-related content
-- OTHER: Anything else
+      content: `You are a chess request classifier. Classify the user's request into ONE category and respond with ONLY the category name.
+
+Categories:
+- ANALYSIS: User asks to analyze current position, best moves, evaluate lines, tactical analysis
+- PUZZLE: User asks to create/generate a chess puzzle, tactical problem, or chess challenge
+- POSITION: User asks to create/generate a random chess position or specific position type
+- HISTORIC_GAME: User asks about famous/historic chess games from databases like Lichess
+- LOCAL_GAMES: User asks about their own stored chess games locally
+- OTHER: Anything else not chess-related
 
 Respond with ONLY the category name, nothing else.`
     },
@@ -2255,17 +2301,389 @@ Respond with ONLY the category name, nothing else.`
       timeoutMs: 30000
     });
 
-    const type = classification.trim().toUpperCase() as "ANALYSIS" | "PUZZLE" | "POSITION" | "GAME" | "OTHER";
-    const validTypes = ["ANALYSIS", "PUZZLE", "POSITION", "GAME", "OTHER"];
+    const type = classification.trim().toUpperCase() as "ANALYSIS" | "PUZZLE" | "POSITION" | "HISTORIC_GAME" | "LOCAL_GAMES" | "OTHER";
+    const validTypes = ["ANALYSIS", "PUZZLE", "POSITION", "HISTORIC_GAME", "LOCAL_GAMES", "OTHER"];
     const responseType = validTypes.includes(type) ? type : "OTHER";
 
-    console.log(`[LLM] Classification: "${question.substring(0, 60)}..." → ${responseType}`);
+    console.log(`[LLM] PASS 1 - Classification: "${question.substring(0, 60)}..." → ${responseType}`);
     return { ok: true, type: responseType };
   } catch (err) {
     console.error(`[LLM] Classification failed: ${(err as Error).message}`);
     return { ok: false, error: (err as Error).message || "Classification failed." };
   }
 });
+
+// ============================================================================
+// Two-Pass Request Handler Helper Functions
+// ============================================================================
+
+async function handleAnalysisRequest(question: string, fen: string, lines: AnalysisLine[], payload: any, llmProvider: string, llmApiKey: string, model: string, baseUrl: string): Promise<{ ok: boolean; answer?: string; error?: string; linesUsed?: number }> {
+  console.log(`[LLM] PASS 2: ANALYSIS - Running engine analysis for FEN`);
+
+  let analysisLines = lines;
+
+  // Run engine analysis if no lines provided
+  if (fen && !analysisLines.length) {
+    const cachedLines = getCachedAnalysis(fen);
+    if (cachedLines) {
+      analysisLines = cachedLines;
+      console.log(`[LLM] Using cached analysis for FEN`);
+    } else {
+      try {
+        const engineType = payload?.engine || settings.get("selectedEngine") || "stockfish";
+        const depth = Math.min(20, payload?.depth || settings.get("analysisDepth") || 16);
+        console.log(`[LLM] Running ${engineType.toUpperCase()} analysis (depth ${depth})`);
+
+        const analysisResult = await performAnalysis(engineType, fen, depth, 2);
+        if (analysisResult?.ok && analysisResult?.analysis?.lines) {
+          analysisLines = analysisResult.analysis.lines.slice(0, 2);
+          updateAnalysisCache(fen, analysisLines);
+          console.log(`[LLM] Engine analysis complete: ${analysisLines.length} lines`);
+        }
+      } catch (err) {
+        console.error(`[LLM] Engine analysis failed: ${(err as Error).message}`);
+      }
+    }
+  }
+
+  // Format engine output with engine type info
+  const engineType = payload?.engine || settings.get("selectedEngine") || "stockfish";
+  const engineAnalysis = analysisLines
+    .map((l) => {
+      const lineNum = l.rank || "?";
+      const pv = l.pv || l.line || "";
+      let score = "?";
+      if (l.score) {
+        const s = l.score as any;
+        if (s.type === "cp") {
+          score = `${s.value >= 0 ? "+" : ""}${(s.value / 100).toFixed(1)}`;
+        } else if (s.type === "mate") {
+          score = `M${s.value}`;
+        } else if (s.winProb !== undefined) {
+          score = `${(s.winProb * 100).toFixed(1)}%`;
+        }
+      }
+      return `Line ${lineNum}: ${pv} (Score: ${score})`;
+    })
+    .join("\n");
+
+  const messages: Array<{ role: string; content: string }> = [
+    {
+      role: "system",
+      content: `You are a chess expert analyzing positions using ${engineType.toUpperCase()} engine analysis. Analyze each variation independently, providing deep strategic and tactical insights.
+
+## Response Format Requirements:
+- Use Markdown formatting with headers, bullet points, and clear structure
+- Each line should be a distinct, concise point (not paragraphs)
+- Use clear section headers for each analysis section
+- Every point should be actionable and specific to the position
+
+## Analysis Structure for Each Line:
+For each variation, provide analysis in this exact format:
+
+### Line N: [Move sequence]
+
+**Strategic Plans:**
+- White's objective: [specific goal]
+- Black's response: [counter-strategy]
+
+**Attacking & Defensive Resources:**
+- White's attacking options: [specific moves/ideas]
+- Black's defensive resources: [specific moves/ideas]
+
+**Tactical Threats & Forcing Moves:**
+- Immediate threats: [checks, captures, pins]
+- Forcing sequences: [moves that compel responses]
+- Material risk: [which pieces are vulnerable]
+
+**Key Continuations:**
+- Critical variation: [moves that matter most]
+
+**Comparison to Other Lines:**
+- How this differs: [strategic/tactical differences]
+
+Always use bullet points. Never use long paragraphs. Each point should be 1-2 lines maximum.`
+    }
+  ];
+
+  // Include conversation history for context
+  const conversationHistory = Array.isArray(payload?.conversationHistory) ? payload.conversationHistory : [];
+  if (conversationHistory.length > 0) {
+    const recentHistory = conversationHistory.slice(-8);
+    for (const entry of recentHistory) {
+      if (entry.role === "user") {
+        messages.push({ role: "user", content: entry.message });
+      } else {
+        messages.push({ role: "assistant", content: entry.message });
+      }
+    }
+  }
+
+  if (analysisLines.length > 0) {
+    messages.push({
+      role: "assistant",
+      content: `I've analyzed this position with ${engineType.toUpperCase()}. Here's what the engine found:\n\n${engineAnalysis}`
+    });
+
+    const analysisPrompt = `${question}
+
+For EACH line, provide analysis using Markdown formatting with bullet points.
+Engine: ${engineType.toUpperCase()}
+
+IMPORTANT:
+- Use Markdown bullet points (- or •)
+- Use headers with ### for each line
+- Use bold text (**text**) for section headers
+- Each bullet point should be concise (1-2 lines max)
+- Never use long paragraphs
+- Be specific about pieces and squares involved`;
+
+    messages.push({ role: "user", content: analysisPrompt });
+  } else {
+    messages.push({ role: "user", content: question });
+  }
+
+  try {
+    const answer = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
+    console.log(`[LLM] PASS 2: ANALYSIS Complete ✓`);
+    return { ok: true, answer: answer || "No response returned.", linesUsed: analysisLines.length };
+  } catch (err) {
+    const errorMsg = (err as Error)?.message || "Analysis failed.";
+    console.error(`[LLM] PASS 2: ANALYSIS failed: ${errorMsg}`);
+    return { ok: false, error: errorMsg };
+  }
+}
+
+async function handlePuzzleRequest(question: string, payload: any, llmProvider: string, llmApiKey: string, model: string, baseUrl: string): Promise<{ ok: boolean; answer?: string; error?: string }> {
+  console.log(`[LLM] PASS 2: PUZZLE - Generating chess puzzle`);
+
+  const messages: Array<{ role: string; content: string }> = [
+    {
+      role: "system",
+      content: `You are a chess puzzle generator. Create a valid chess puzzle in the following JSON format:
+{
+  "fen": "valid FEN string",
+  "side_to_move": "White|Black",
+  "solution": "moves leading to solution (e.g., 'e4 e5 g4')",
+  "difficulty": "easy|medium|hard",
+  "explanation": "detailed solution walkthrough",
+  "puzzle_type": "tactical|endgame|positional"
+}
+
+Ensure the FEN is valid and can be loaded by chess.js. The puzzle should have a clear solution sequence.`
+    },
+    {
+      role: "user",
+      content: question
+    }
+  ];
+
+  try {
+    const puzzleResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
+
+    // Try to parse JSON from response
+    const jsonMatch = puzzleResponse.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.warn(`[LLM] PASS 2: PUZZLE - No JSON found in response, asking LLM to reformat`);
+      messages.push({ role: "assistant", content: puzzleResponse });
+      messages.push({
+        role: "user",
+        content: "Please respond with ONLY the JSON, no markdown or extra text."
+      });
+      const retryResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
+      return { ok: true, answer: retryResponse };
+    }
+
+    const puzzleData = JSON.parse(jsonMatch[0]);
+
+    // Validate FEN with chess.js
+    try {
+      const testChess = new Chess();
+      testChess.load(puzzleData.fen);
+      console.log(`[LLM] PASS 2: PUZZLE ✓ Generated valid puzzle - Side to move: ${puzzleData.side_to_move}`);
+      return { ok: true, answer: JSON.stringify(puzzleData) };
+    } catch (fenError) {
+      console.warn(`[LLM] PASS 2: PUZZLE - Invalid FEN, asking LLM to fix`);
+      messages.push({ role: "assistant", content: puzzleResponse });
+      messages.push({
+        role: "user",
+        content: `The FEN "${puzzleData.fen}" is invalid. Please generate a new valid FEN that can be loaded by chess.js. Respond with the complete corrected JSON.`
+      });
+
+      const correctedResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
+      const correctedMatch = correctedResponse.match(/\{[\s\S]*\}/);
+      if (correctedMatch) {
+        const correctedData = JSON.parse(correctedMatch[0]);
+        const retestChess = new Chess();
+        retestChess.load(correctedData.fen);
+        console.log(`[LLM] PASS 2: PUZZLE ✓ Corrected puzzle is valid`);
+        return { ok: true, answer: JSON.stringify(correctedData) };
+      }
+      return { ok: true, answer: correctedResponse };
+    }
+  } catch (err) {
+    const errorMsg = (err as Error)?.message || "Puzzle generation failed.";
+    console.error(`[LLM] PASS 2: PUZZLE failed: ${errorMsg}`);
+    return { ok: false, error: errorMsg };
+  }
+}
+
+async function handlePositionRequest(question: string, payload: any, llmProvider: string, llmApiKey: string, model: string, baseUrl: string): Promise<{ ok: boolean; answer?: string; error?: string }> {
+  console.log(`[LLM] PASS 2: POSITION - Generating chess position`);
+
+  const messages: Array<{ role: string; content: string }> = [
+    {
+      role: "system",
+      content: `You are a chess position generator. Create a valid chess position in the following JSON format:
+{
+  "fen": "valid FEN string",
+  "side_to_move": "White|Black",
+  "position_type": "opening|middlegame|endgame",
+  "explanation": "brief description of the position"
+}
+
+Ensure the FEN is valid and can be loaded by chess.js. The position should be realistic and interesting.`
+    },
+    {
+      role: "user",
+      content: question
+    }
+  ];
+
+  try {
+    const positionResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
+
+    const jsonMatch = positionResponse.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.warn(`[LLM] PASS 2: POSITION - No JSON found, asking for reformat`);
+      messages.push({ role: "assistant", content: positionResponse });
+      messages.push({
+        role: "user",
+        content: "Please respond with ONLY the JSON, no markdown or extra text."
+      });
+      const retryResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
+      return { ok: true, answer: retryResponse };
+    }
+
+    const positionData = JSON.parse(jsonMatch[0]);
+
+    try {
+      const testChess = new Chess();
+      testChess.load(positionData.fen);
+      console.log(`[LLM] PASS 2: POSITION ✓ Generated valid position - Type: ${positionData.position_type}`);
+      return { ok: true, answer: JSON.stringify(positionData) };
+    } catch (fenError) {
+      console.warn(`[LLM] PASS 2: POSITION - Invalid FEN, asking LLM to fix`);
+      messages.push({ role: "assistant", content: positionResponse });
+      messages.push({
+        role: "user",
+        content: `The FEN "${positionData.fen}" is invalid. Please generate a new valid FEN. Respond with the complete corrected JSON.`
+      });
+
+      const correctedResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
+      const correctedMatch = correctedResponse.match(/\{[\s\S]*\}/);
+      if (correctedMatch) {
+        const correctedData = JSON.parse(correctedMatch[0]);
+        const retestChess = new Chess();
+        retestChess.load(correctedData.fen);
+        console.log(`[LLM] PASS 2: POSITION ✓ Corrected position is valid`);
+        return { ok: true, answer: JSON.stringify(correctedData) };
+      }
+      return { ok: true, answer: correctedResponse };
+    }
+  } catch (err) {
+    const errorMsg = (err as Error)?.message || "Position generation failed.";
+    console.error(`[LLM] PASS 2: POSITION failed: ${errorMsg}`);
+    return { ok: false, error: errorMsg };
+  }
+}
+
+async function handleHistoricGameRequest(question: string, payload: any, llmProvider: string, llmApiKey: string, model: string, baseUrl: string): Promise<{ ok: boolean; answer?: string; error?: string }> {
+  console.log(`[LLM] PASS 2: HISTORIC_GAME - Searching for famous games`);
+
+  const messages: Array<{ role: string; content: string }> = [
+    {
+      role: "system",
+      content: `You are a chess historian. Help the user find famous chess games. You can suggest games from famous players, tournaments, or openings.
+
+For game information, provide:
+- Player names and rating
+- Tournament and year
+- Opening name
+- Game result
+- Key moments and brilliant moves
+
+Suggest searching Lichess database at https://lichess.org/games or Chess.com game database.`
+    },
+    {
+      role: "user",
+      content: question
+    }
+  ];
+
+  try {
+    const answer = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
+    console.log(`[LLM] PASS 2: HISTORIC_GAME ✓`);
+    return { ok: true, answer };
+  } catch (err) {
+    const errorMsg = (err as Error)?.message || "Historic game search failed.";
+    console.error(`[LLM] PASS 2: HISTORIC_GAME failed: ${errorMsg}`);
+    return { ok: false, error: errorMsg };
+  }
+}
+
+async function handleLocalGamesRequest(question: string, payload: any, llmProvider: string, llmApiKey: string, model: string, baseUrl: string): Promise<{ ok: boolean; answer?: string; error?: string }> {
+  console.log(`[LLM] PASS 2: LOCAL_GAMES - Processing local PGN files`);
+
+  // Get conversation history to check if PGN path was already provided
+  const conversationHistory = Array.isArray(payload?.conversationHistory) ? payload.conversationHistory : [];
+
+  const messages: Array<{ role: string; content: string }> = [
+    {
+      role: "system",
+      content: `You are a chess game analyzer helping users access their local chess game files (PGN format).
+
+If the user hasn't provided a file path:
+1. Ask them for the full path to their PGN file or folder
+2. Remember this path for the conversation
+
+If the path is provided:
+1. Acknowledge the file location
+2. Help them search or analyze games from that file
+3. Provide game summaries or analysis as requested
+
+Always be helpful in accessing local game data.`
+    }
+  ];
+
+  // Add conversation history for context
+  if (conversationHistory.length > 0) {
+    const recentHistory = conversationHistory.slice(-8);
+    for (const entry of recentHistory) {
+      if (entry.role === "user") {
+        messages.push({ role: "user", content: entry.message });
+      } else {
+        messages.push({ role: "assistant", content: entry.message });
+      }
+    }
+  }
+
+  messages.push({ role: "user", content: question });
+
+  try {
+    const answer = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
+    console.log(`[LLM] PASS 2: LOCAL_GAMES ✓`);
+    return { ok: true, answer };
+  } catch (err) {
+    const errorMsg = (err as Error)?.message || "Local games processing failed.";
+    console.error(`[LLM] PASS 2: LOCAL_GAMES failed: ${errorMsg}`);
+    return { ok: false, error: errorMsg };
+  }
+}
+
+// ============================================================================
+// Main Two-Pass Ask Question Handler
+// ============================================================================
 
 ipcMain.handle("ollama:ask-question", async (_event, payload) => {
   const question = String(payload?.question || "").trim();
@@ -2275,89 +2693,18 @@ ipcMain.handle("ollama:ask-question", async (_event, payload) => {
 
   let fen = String(payload?.fen || "").trim();
   let lines = Array.isArray(payload?.lines) ? payload.lines.slice(0, 4) : [];
-  let requestType = payload?.responseType || "ANALYSIS";
 
   if (!fen && payload?.boardFen) {
     fen = String(payload.boardFen).trim();
   }
 
-  // Step 1: Classify the question if not provided
-  if (!payload?.responseType) {
-    const llmProvider = payload?.llmProvider || settings.get("llmProvider") || "ollama";
-    const llmApiKey = payload?.llmApiKey || settings.get("llmApiKey") || "";
-    let model = payload?.model;
-    if (!model) {
-      if (llmProvider === "ollama") {
-        model = settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL;
-      } else {
-        model = settings.get("llmModel") || getModelForProvider(llmProvider);
-      }
-    }
-    const baseUrl = (payload?.baseUrl || (llmProvider === "ollama" ? settings.get("ollamaBaseUrl") : null) || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
-
-    try {
-      const classificationMessages = [
-        {
-          role: "system" as const,
-          content: `You are a chess question classifier. Classify into: ANALYSIS, PUZZLE, POSITION, GAME, or OTHER. Respond with ONLY the category.`
-        },
-        {
-          role: "user" as const,
-          content: question
-        }
-      ];
-
-      const classification = await runLlmChat({
-        provider: llmProvider,
-        baseUrl,
-        model,
-        apiKey: llmApiKey,
-        messages: classificationMessages,
-        timeoutMs: 30000
-      });
-
-      const classified = classification.trim().toUpperCase();
-      if (["ANALYSIS", "PUZZLE", "POSITION", "GAME", "OTHER"].includes(classified)) {
-        requestType = classified as "ANALYSIS" | "PUZZLE" | "POSITION" | "GAME" | "OTHER";
-      }
-      console.log(`[LLM] Step 1 Classification: "${question.substring(0, 50)}..." → ${requestType}`);
-    } catch (err) {
-      console.warn("[LLM] Classification failed, defaulting to ANALYSIS");
-      requestType = "ANALYSIS";
-    }
-  }
-
-  // Step 2: Run engine analysis if needed
-  if (fen && !lines.length && (requestType === "ANALYSIS" || requestType === "PUZZLE")) {
-    const cachedLines = getCachedAnalysis(fen);
-    if (cachedLines) {
-      lines = cachedLines;
-      console.log(`[LLM] Using cached analysis for FEN`);
-    } else {
-      try {
-        const engineType = payload?.engine || settings.get("selectedEngine") || "stockfish";
-        const depth = Math.min(20, payload?.depth || settings.get("analysisDepth") || 16);
-
-        console.log(`[LLM] Step 2 Running ${engineType.toUpperCase()} analysis (depth ${depth})`);
-        const analysisResult = await performAnalysis(engineType, fen, depth, 2);
-
-        if (analysisResult?.ok && analysisResult?.analysis?.lines) {
-          lines = analysisResult.analysis.lines.slice(0, 2);
-          updateAnalysisCache(fen, lines);
-          console.log(`[LLM] Engine analysis complete: ${lines.length} lines`);
-        }
-      } catch (err) {
-        console.error(`[LLM] Engine analysis failed: ${(err as Error).message}`);
-        // Continue without engine analysis
-      }
-    }
-  }
-
   const language = payload?.language || settings.get("explainLanguage") || "English";
-  const llmProvider = payload?.llmProvider || settings.get("llmProvider") || "ollama";
+  const payloadProvider = payload?.llmProvider?.trim() || null;
+  const savedProvider = settings.get("llmProvider")?.trim() || null;
+  const llmProvider = payloadProvider || savedProvider || "ollama";
   const llmApiKey = payload?.llmApiKey || settings.get("llmApiKey") || "";
 
-  // Get the correct model from settings based on provider, or use payload override
+  // Get the correct model based on provider
   let model = payload?.model;
   if (!model) {
     if (llmProvider === "ollama") {
@@ -2369,61 +2716,78 @@ ipcMain.handle("ollama:ask-question", async (_event, payload) => {
 
   const baseUrl = (payload?.baseUrl || (llmProvider === "ollama" ? settings.get("ollamaBaseUrl") : null) || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
 
-  const shortQuestion = question.substring(0, 80) + (question.length > 80 ? "..." : "");
-  console.log(`[LLM] Payload received | Provider from payload: ${payload?.llmProvider} | Saved provider: ${settings.get("llmProvider")}`);
-  console.log(`[LLM] Question from user | Provider: ${llmProvider} | Model: ${model} | Q: "${shortQuestion}"`);
-
   try {
-    console.log(`[LLM] Step 3 Building messages for chess agent | Type: ${requestType} | Lines available: ${lines.length}`);
+    // PASS 1: Classify the request
+    console.log(`[LLM] PASS 1: Classification - Starting for question: "${question.substring(0, 60)}..."`);
 
-    // Build messages with proper context
-    let messages: Array<{ role: string; content: string }>;
+    const classificationMessages = [
+      {
+        role: "system" as const,
+        content: `You are a chess request classifier. Classify the user's request into ONE category and respond with ONLY the category name.
 
-    if (lines.length > 0) {
-      // Engine analysis available - structure as AI message for chess agent
-      const engineAnalysis = lines
-        .map((l) => {
-          const lineNum = l.rank || "?";
-          const pv = l.pv || l.line || "";
-          const score = l.score
-            ? `${l.score.type === "cp" ? "+" : ""}${(l.score.value / 100).toFixed(1)}`
-            : "?";
-          return `Line ${lineNum}: ${pv} (Score: ${score})`;
-        })
-        .join("\n");
+Categories:
+- ANALYSIS: User asks to analyze current position, best moves, evaluate lines, tactical analysis
+- PUZZLE: User asks to create/generate a chess puzzle or tactical problem
+- POSITION: User asks to create/generate a random chess position or specific position type
+- HISTORIC_GAME: User asks about famous/historic chess games from databases (Lichess, Chess.com)
+- LOCAL_GAMES: User asks about their own stored chess games locally on their machine
+- OTHER: Anything else not chess-related
 
-      messages = [
-        {
-          role: "system",
-          content: payload?.systemPrompt || `You are a chess expert analyzing positions using engine analysis. The engine has already analyzed this position. Explain the lines clearly.`
-        },
-        {
-          role: "assistant",
-          content: `I've analyzed this position. Here's what the chess engine found:\n\n${engineAnalysis}`
-        },
-        {
-          role: "user",
-          content: question
-        }
-      ];
-    } else {
-      // No engine analysis - use standard prompt building
-      messages = buildPrompt({
-        language,
-        fen,
-        lines: [],
-        question,
-        userMessage: payload?.userMessage,
-        systemPrompt: payload?.systemPrompt
-      });
+Respond with ONLY the category name, nothing else.`
+      },
+      {
+        role: "user" as const,
+        content: question
+      }
+    ];
+
+    const classification = await runLlmChat({
+      provider: llmProvider,
+      baseUrl,
+      model,
+      apiKey: llmApiKey,
+      messages: classificationMessages,
+      timeoutMs: 30000
+    });
+
+    const classified = classification.trim().toUpperCase();
+    const validCategories = ["ANALYSIS", "PUZZLE", "POSITION", "HISTORIC_GAME", "LOCAL_GAMES", "OTHER"];
+    const requestType = validCategories.includes(classified) ? classified : "ANALYSIS";
+
+    console.log(`[LLM] PASS 1: Classification Result: "${classified}" (${requestType})`);
+
+    // PASS 2: Route to appropriate handler based on classification
+    let result;
+
+    switch (requestType) {
+      case "PUZZLE":
+        result = await handlePuzzleRequest(question, payload, llmProvider, llmApiKey, model, baseUrl);
+        break;
+      case "POSITION":
+        result = await handlePositionRequest(question, payload, llmProvider, llmApiKey, model, baseUrl);
+        break;
+      case "HISTORIC_GAME":
+        result = await handleHistoricGameRequest(question, payload, llmProvider, llmApiKey, model, baseUrl);
+        break;
+      case "LOCAL_GAMES":
+        result = await handleLocalGamesRequest(question, payload, llmProvider, llmApiKey, model, baseUrl);
+        break;
+      case "ANALYSIS":
+      default:
+        result = await handleAnalysisRequest(question, fen, lines, payload, llmProvider, llmApiKey, model, baseUrl);
+        break;
     }
 
-    const answer = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
-    console.log(`[LLM] Step 3 Complete ✓ (${lines.length} lines used) | Provider: ${llmProvider}`);
-    return { ok: true, answer: answer || "No response returned.", linesUsed: lines.length };
+    if (result.ok) {
+      console.log(`[LLM] ✓ Complete (Type: ${requestType}) | Provider: ${llmProvider}`);
+    } else {
+      console.error(`[LLM] ✗ Failed (Type: ${requestType}) | Error: ${result.error}`);
+    }
+
+    return result;
   } catch (err) {
-    const errorMsg = (err as Error)?.message || "LLM question failed.";
-    console.error(`[LLM] ✗ Step 3 failed: ${errorMsg} | Provider: ${llmProvider}`);
+    const errorMsg = (err as Error)?.message || "Question processing failed.";
+    console.error(`[LLM] ✗ Two-pass processing failed: ${errorMsg}`);
     return { ok: false, error: errorMsg };
   }
 });
@@ -2480,12 +2844,6 @@ ipcMain.handle("analyzeBoardPosition", async (_event, { fen, depth }: { fen?: st
     return { ok: false, error: errorMsg };
   }
 });
-}
-
-// Initialize Electron APIs
-if (!initializeElectronApis()) {
-  console.error("[electron] Failed to initialize Electron APIs");
-  process.exit(1);
 }
 
 app.whenReady().then(async () => {
