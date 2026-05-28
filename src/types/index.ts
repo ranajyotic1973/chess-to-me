@@ -69,6 +69,7 @@ export interface AppSettings {
   lc0Path: string;
   selectedEngine: "stockfish" | "lc0";
   analysisDepth: number;
+  engineTimeoutMs?: number;
   explainLanguage: string;
   ollamaModel: string;
   ollamaBaseUrl: string;
@@ -143,6 +144,15 @@ export interface ProcessLogs {
 // ============================================================================
 
 export type ResponseType = "Analysis" | "Puzzle" | "Position" | "Game";
+
+export interface AgentProgressEvent {
+  agentId: number;       // 1-based
+  lineIndex: number;     // 0-based
+  lineLabel: string;     // "Line 1: e4 e5 Nf3..."
+  status: "working" | "done" | "error";
+  response?: string;
+  error?: string;
+}
 
 export interface ConversationMessage {
   role: "user" | "assistant";
@@ -416,6 +426,7 @@ export interface ElectronAPI {
   // Logging
   getProcessLogs(): Promise<ProcessLogs>;
   onLogEntry(callback: (data: { bucket: "stockfish" | "ollama"; entry: LogEntry }) => void): () => void;
+  onAgentProgress(callback: (data: AgentProgressEvent) => void): () => void;
   setOllamaModel(model: string): Promise<{ ok: true; activeModel: string } | { ok: false; error: string }>;
 
   // LLM Model Management

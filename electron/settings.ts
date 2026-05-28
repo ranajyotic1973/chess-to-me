@@ -27,6 +27,7 @@ interface Settings {
   lc0Path?: string;
   selectedEngine?: string;
   analysisDepth?: number;
+  engineTimeoutMs?: number;
   explainLanguage?: string;
   ollamaModel?: string;
   ollamaBaseUrl?: string;
@@ -41,6 +42,7 @@ const DEFAULTS: Settings = {
   lc0Path: "",
   selectedEngine: "lc0",
   analysisDepth: 16,
+  engineTimeoutMs: 30000,
   explainLanguage: "English",
   ollamaModel: "qwen3:8b",
   ollamaBaseUrl: "http://localhost:11434/api",

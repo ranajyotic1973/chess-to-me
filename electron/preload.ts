@@ -58,6 +58,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("process:log-entry", handler);
     return () => ipcRenderer.removeListener("process:log-entry", handler);
   },
+
+  onAgentProgress: (callback: (data: any) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on("analysis:agent-progress", handler);
+    return () => ipcRenderer.removeListener("analysis:agent-progress", handler);
+  },
+
   setOllamaModel: (model: string) =>
     ipcRenderer.invoke("process:set-model", model) as Promise<IpcResponses["setOllamaModel"]>,
 

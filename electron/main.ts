@@ -2332,7 +2332,7 @@ async function handleAnalysisRequest(question: string, fen: string, lines: Analy
     } else {
       try {
         const engineType = payload?.engine || settings.get("selectedEngine") || "stockfish";
-        const depth = Math.min(20, payload?.depth || settings.get("analysisDepth") || 16);
+        const depth = Math.max(6, Math.min(30, Number(payload?.depth || settings.get("analysisDepth") || 16)));
         console.log(`[LLM] Running ${engineType.toUpperCase()} analysis (depth ${depth})`);
 
         const analysisResult = await performAnalysis(engineType, fen, depth, 2);
