@@ -779,6 +779,7 @@ export default function App() {
         ollamaModel: formState.ollamaModel,
         ollamaBaseUrl: formState.ollamaBaseUrl,
         llmProvider: formState.llmProvider,
+        llmModel: formState.llmModel,
         llmApiKey: formState.llmApiKey
       });
       if (!configResult?.ok) {
