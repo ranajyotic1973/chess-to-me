@@ -302,86 +302,150 @@ export default function BoardPositionEditor({
           minHeight: 0,
           backgroundColor: "#fafafa",
           alignItems: "flex-start",
-          justifyContent: "center",
+          justifyContent: "flex-start",
           overflowX: "hidden",
-          overflowY: "auto"
+          overflowY: "auto",
+          padding: 2
         }}
       >
-        {/* White Pieces - Left Side */}
-        <Stack direction="column" spacing={1} sx={{ flexShrink: 0, paddingTop: 1 }}>
-          {PIECE_SYMBOLS.white.map((piece) => (
-            <Box
-              key={piece.piece}
-              draggable
-              onDragStart={(e) => handlePieceDragStart(e, piece.piece)}
-              sx={{
-                width: 50,
-                height: 50,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: "#f0f0f0",
-                cursor: "grab",
-                "&:active": { cursor: "grabbing" },
-                border: "1px solid #ccc",
-                borderRadius: 1,
-                opacity: 0.95,
-                "&:hover": { opacity: 1, backgroundColor: "#e8e8e8" },
-                flexShrink: 0,
-                overflow: "hidden"
-              }}
-              title={piece.name}
-            >
-              <img
-                src={getPieceImageUrl(piece.piece)}
-                alt={piece.name}
-                style={{
-                  width: "80%",
-                  height: "80%",
-                  objectFit: "contain"
-                }}
-                draggable={false}
-              />
-            </Box>
-          ))}
-        </Stack>
-
-        {/* Board and Controls - Center */}
-        <Stack direction="column" spacing={2} sx={{ flexShrink: 0, alignItems: "center" }}>
-          {!boardLoaded && !ctor && (
-            <Typography variant="body2" color="textSecondary" sx={{ textAlign: "center", px: 2 }}>
-              Loading chessboard library...
-            </Typography>
-          )}
-          {!boardLoaded && ctor && (
-            <Typography variant="body2" color="error" sx={{ textAlign: "center", px: 2 }}>
-              Failed to initialize board
-            </Typography>
-          )}
-          <Box
-            onDragOver={handleBoardDragOver}
-            onDrop={handleBoardDropFromList}
+        {/* Left Section - Board with Pieces (80% width) */}
+        <Stack
+          direction="column"
+          spacing={2}
+          sx={{
+            flex: "0 0 80%",
+            alignItems: "center",
+            minHeight: 0
+          }}
+        >
+          {/* Board and Pieces Row */}
+          <Stack
+            direction="row"
+            spacing={1}
             sx={{
-              width: 400,
-              height: 400,
-              position: "relative",
-              aspectRatio: "1",
-              backgroundColor: "white",
-              border: "2px solid #ddd",
-              borderRadius: 1,
-              display: "flex",
               alignItems: "center",
               justifyContent: "center"
             }}
-            ref={boardRef}
-          />
+          >
+            {/* White Pieces */}
+            <Stack direction="column" spacing={1} sx={{ flexShrink: 0 }}>
+              {PIECE_SYMBOLS.white.map((piece) => (
+                <Box
+                  key={piece.piece}
+                  draggable
+                  onDragStart={(e) => handlePieceDragStart(e, piece.piece)}
+                  sx={{
+                    width: 45,
+                    height: 45,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: "#f0f0f0",
+                    cursor: "grab",
+                    "&:active": { cursor: "grabbing" },
+                    border: "1px solid #ccc",
+                    borderRadius: 1,
+                    opacity: 0.95,
+                    "&:hover": { opacity: 1, backgroundColor: "#e8e8e8" },
+                    flexShrink: 0,
+                    overflow: "hidden"
+                  }}
+                  title={piece.name}
+                >
+                  <img
+                    src={getPieceImageUrl(piece.piece)}
+                    alt={piece.name}
+                    style={{
+                      width: "80%",
+                      height: "80%",
+                      objectFit: "contain"
+                    }}
+                    draggable={false}
+                  />
+                </Box>
+              ))}
+            </Stack>
 
+            {/* Board */}
+            <Stack direction="column" spacing={1} sx={{ flexShrink: 0, alignItems: "center" }}>
+              {!boardLoaded && !ctor && (
+                <Typography variant="body2" color="textSecondary" sx={{ textAlign: "center" }}>
+                  Loading chessboard library...
+                </Typography>
+              )}
+              {!boardLoaded && ctor && (
+                <Typography variant="body2" color="error" sx={{ textAlign: "center" }}>
+                  Failed to initialize board
+                </Typography>
+              )}
+              <Box
+                onDragOver={handleBoardDragOver}
+                onDrop={handleBoardDropFromList}
+                sx={{
+                  width: 350,
+                  height: 350,
+                  position: "relative",
+                  aspectRatio: "1",
+                  backgroundColor: "white",
+                  border: "2px solid #ddd",
+                  borderRadius: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0
+                }}
+                ref={boardRef}
+              />
+            </Stack>
+
+            {/* Black Pieces */}
+            <Stack direction="column" spacing={1} sx={{ flexShrink: 0 }}>
+              {PIECE_SYMBOLS.black.map((piece) => (
+                <Box
+                  key={piece.piece}
+                  draggable
+                  onDragStart={(e) => handlePieceDragStart(e, piece.piece)}
+                  sx={{
+                    width: 45,
+                    height: 45,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: "#f0f0f0",
+                    cursor: "grab",
+                    "&:active": { cursor: "grabbing" },
+                    border: "1px solid #ccc",
+                    borderRadius: 1,
+                    opacity: 0.95,
+                    "&:hover": { opacity: 1, backgroundColor: "#e8e8e8" },
+                    flexShrink: 0,
+                    overflow: "hidden"
+                  }}
+                  title={piece.name}
+                >
+                  <img
+                    src={getPieceImageUrl(piece.piece)}
+                    alt={piece.name}
+                    style={{
+                      width: "80%",
+                      height: "80%",
+                      objectFit: "contain"
+                    }}
+                    draggable={false}
+                  />
+                </Box>
+              ))}
+            </Stack>
+          </Stack>
+
+          {/* Error Message */}
           {errorMessage && (
             <Alert severity="error" sx={{ animation: "fadeInOut 3s ease-in-out", width: "100%" }}>
               {errorMessage}
             </Alert>
           )}
 
+          {/* Control Buttons */}
           <Stack direction="row" spacing={1}>
             <Tooltip title="Clear board">
               <IconButton onClick={handleClearBoard} size="small">
@@ -396,59 +460,27 @@ export default function BoardPositionEditor({
           </Stack>
         </Stack>
 
-        {/* Black Pieces and Side Selection - Right Side */}
-        <Stack direction="column" spacing={2} sx={{ flexShrink: 0, alignItems: "center" }}>
-          {/* Black Pieces */}
-          <Stack direction="column" spacing={1}>
-            {PIECE_SYMBOLS.black.map((piece) => (
-              <Box
-                key={piece.piece}
-                draggable
-                onDragStart={(e) => handlePieceDragStart(e, piece.piece)}
-                sx={{
-                  width: 50,
-                  height: 50,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: "#f0f0f0",
-                  cursor: "grab",
-                  "&:active": { cursor: "grabbing" },
-                  border: "1px solid #ccc",
-                  borderRadius: 1,
-                  opacity: 0.95,
-                  "&:hover": { opacity: 1, backgroundColor: "#e8e8e8" },
-                  flexShrink: 0,
-                  overflow: "hidden"
-                }}
-                title={piece.name}
-              >
-                <img
-                  src={getPieceImageUrl(piece.piece)}
-                  alt={piece.name}
-                  style={{
-                    width: "80%",
-                    height: "80%",
-                    objectFit: "contain"
-                  }}
-                  draggable={false}
-                />
-              </Box>
-            ))}
-          </Stack>
-
-          {/* Side to Move Selection */}
+        {/* Right Section - Side Selection (20% width) */}
+        <Box
+          sx={{
+            flex: "0 0 20%",
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "center",
+            paddingTop: 2
+          }}
+        >
           <Box
             sx={{
               backgroundColor: "white",
               border: "1px solid #ddd",
               borderRadius: 1,
-              padding: 1.5,
-              minWidth: 180
+              padding: 2,
+              width: "100%"
             }}
           >
             <FormControl size="small" fullWidth>
-              <FormLabel sx={{ mb: 1, fontSize: "0.85rem", fontWeight: 600, display: "block" }}>
+              <FormLabel sx={{ mb: 1.5, fontSize: "0.9rem", fontWeight: 600, display: "block" }}>
                 Side to Play First
               </FormLabel>
               <RadioGroup
@@ -459,18 +491,18 @@ export default function BoardPositionEditor({
                   value="w"
                   control={<Radio size="small" />}
                   label={<span style={{ fontSize: "0.9rem" }}>White</span>}
-                  sx={{ margin: 0 }}
+                  sx={{ margin: "0.5rem 0" }}
                 />
                 <FormControlLabel
                   value="b"
                   control={<Radio size="small" />}
                   label={<span style={{ fontSize: "0.9rem" }}>Black</span>}
-                  sx={{ margin: 0 }}
+                  sx={{ margin: "0.5rem 0" }}
                 />
               </RadioGroup>
             </FormControl>
           </Box>
-        </Stack>
+        </Box>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
