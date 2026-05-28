@@ -2350,7 +2350,7 @@ Respond with ONLY the category name, nothing else.`
       model,
       apiKey: llmApiKey,
       messages: classificationPrompt,
-      timeoutMs: 30000
+      timeoutMs: llmProvider === "ollama" ? 60000 : 120000
     });
 
     const type = classification.trim().toUpperCase() as "ANALYSIS" | "PUZZLE" | "POSITION" | "HISTORIC_GAME" | "LOCAL_GAMES" | "OTHER";
@@ -2941,7 +2941,7 @@ Respond with ONLY the category name, nothing else.`
       model,
       apiKey: llmApiKey,
       messages: classificationMessages,
-      timeoutMs: 30000,
+      timeoutMs: llmProvider === "ollama" ? 60000 : 120000,
       includeTools: false
     });
 
