@@ -284,8 +284,8 @@ export default function BoardPositionEditor({
       }}
       PaperProps={{
         sx: {
-          minHeight: "85vh",
-          maxHeight: "85vh",
+          minHeight: "92vh",
+          maxHeight: "92vh",
           display: "flex",
           flexDirection: "column",
           zIndex: 1000
