@@ -10,7 +10,12 @@ import {
   Typography,
   Alert,
   IconButton,
-  Tooltip
+  Tooltip,
+  FormControl,
+  FormLabel,
+  RadioGroup,
+  FormControlLabel,
+  Radio
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -65,6 +70,7 @@ export default function BoardPositionEditor({
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [draggedPiece, setDraggedPiece] = useState<string | null>(null);
   const [boardLoaded, setBoardLoaded] = useState(false);
+  const [sideToMove, setSideToMove] = useState<"w" | "b">("w");
   const currentPosition = useRef<Record<string, string>>({ ...STARTING_POSITION });
 
   function detectChessboardConstructor() {
@@ -241,7 +247,7 @@ export default function BoardPositionEditor({
   const validatePosition = (): boolean => {
     try {
       // Build FEN from position
-      const fen = positionToFen(currentPosition.current);
+      const fen = positionToFen(currentPosition.current, sideToMove);
       console.log("[BoardEditor] Generated FEN:", fen);
 
       // Validate with chess.js
@@ -259,7 +265,7 @@ export default function BoardPositionEditor({
 
   const handleConfirm = () => {
     if (validatePosition()) {
-      const fen = positionToFen(currentPosition.current);
+      const fen = positionToFen(currentPosition.current, sideToMove);
       onPositionConfirm(fen);
       onClose();
     }
@@ -271,12 +277,18 @@ export default function BoardPositionEditor({
       onClose={onClose}
       maxWidth="md"
       fullWidth
+      slotProps={{
+        backdrop: {
+          sx: { zIndex: 999 }
+        }
+      }}
       PaperProps={{
         sx: {
           minHeight: "85vh",
           maxHeight: "85vh",
           display: "flex",
-          flexDirection: "column"
+          flexDirection: "column",
+          zIndex: 1000
         }
       }}
     >
@@ -382,6 +394,30 @@ export default function BoardPositionEditor({
               </IconButton>
             </Tooltip>
           </Stack>
+
+          {/* Side to Move Selection */}
+          <FormControl size="small" sx={{ minWidth: 200 }}>
+            <FormLabel sx={{ mb: 0.5, fontSize: "0.85rem", fontWeight: 600 }}>Side to Play First</FormLabel>
+            <RadioGroup
+              row
+              value={sideToMove}
+              onChange={(e) => setSideToMove(e.target.value as "w" | "b")}
+              sx={{ justifyContent: "center", gap: 1 }}
+            >
+              <FormControlLabel
+                value="w"
+                control={<Radio size="small" />}
+                label={<span style={{ fontSize: "0.9rem" }}>White</span>}
+                sx={{ margin: 0 }}
+              />
+              <FormControlLabel
+                value="b"
+                control={<Radio size="small" />}
+                label={<span style={{ fontSize: "0.9rem" }}>Black</span>}
+                sx={{ margin: 0 }}
+              />
+            </RadioGroup>
+          </FormControl>
         </Stack>
 
         {/* Black Pieces - Right Side */}
@@ -436,16 +472,21 @@ export default function BoardPositionEditor({
           10%, 90% { opacity: 1; }
         }
 
-        /* Ensure popup has lower z-index than dragging pieces */
-        .MuiDialog-root {
-          z-index: 100 !important;
+        /* Allow dragged pieces to appear above dialog */
+        body .chessboard-1-piece-dragging {
+          z-index: 10000 !important;
+          position: fixed !important;
         }
 
-        /* Ensure dragged piece ghost image stays on top - use fixed positioning to escape stacking context */
-        body .ui-draggable-dragging,
-        body .chessboard-1-piece-dragging,
-        body div[class*="piece-"] {
-          z-index: 9999 !important;
+        /* Chessboard.js dragging class variants */
+        body .chessboard-piece-dragging {
+          z-index: 10000 !important;
+          position: fixed !important;
+        }
+
+        /* Generic piece dragging */
+        div[data-piece-dragging="true"] {
+          z-index: 10000 !important;
           position: fixed !important;
         }
       `}</style>
@@ -454,7 +495,7 @@ export default function BoardPositionEditor({
 }
 
 // Convert position object to FEN
-function positionToFen(position: Record<string, string>): string {
+function positionToFen(position: Record<string, string>, sideToMove: "w" | "b" = "w"): string {
   // Map piece notation from board format (wK, bP) to FEN format (K, k, P, p)
   const pieceMap: Record<string, string> = {
     wK: "K", wQ: "Q", wR: "R", wB: "B", wN: "N", wP: "P",
@@ -496,7 +537,7 @@ function positionToFen(position: Record<string, string>): string {
   }
 
   // Add side to move and castling rights
-  fen += " w KQkq - 0 1";
+  fen += ` ${sideToMove} KQkq - 0 1`;
 
   return fen;
 }
