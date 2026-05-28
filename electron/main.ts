@@ -2374,27 +2374,20 @@ async function handleAnalysisRequest(question: string, fen: string, lines: Analy
 
   let analysisLines = lines;
 
-  // Run engine analysis if no lines provided
+  // Run engine analysis if no lines provided (always fresh analysis from current board)
   if (fen && !analysisLines.length) {
-    const cachedLines = getCachedAnalysis(fen);
-    if (cachedLines) {
-      analysisLines = cachedLines;
-      console.log(`[LLM] Using cached analysis for FEN`);
-    } else {
-      try {
-        const engineType = payload?.engine || settings.get("selectedEngine") || "stockfish";
-        const depth = Math.max(6, Math.min(30, Number(payload?.depth || settings.get("analysisDepth") || 16)));
-        console.log(`[LLM] Running ${engineType.toUpperCase()} analysis (depth ${depth})`);
+    try {
+      const engineType = payload?.engine || settings.get("selectedEngine") || "stockfish";
+      const depth = Math.max(6, Math.min(30, Number(payload?.depth || settings.get("analysisDepth") || 16)));
+      console.log(`[LLM] Running fresh ${engineType.toUpperCase()} analysis (depth ${depth}) for FEN`);
 
-        const analysisResult = await performAnalysis(engineType, fen, depth, 2);
-        if (analysisResult?.ok && analysisResult?.analysis?.lines) {
-          analysisLines = analysisResult.analysis.lines.slice(0, 2);
-          updateAnalysisCache(fen, analysisLines);
-          console.log(`[LLM] Engine analysis complete: ${analysisLines.length} lines`);
-        }
-      } catch (err) {
-        console.error(`[LLM] Engine analysis failed: ${(err as Error).message}`);
+      const analysisResult = await performAnalysis(engineType, fen, depth, 2);
+      if (analysisResult?.ok && analysisResult?.analysis?.lines) {
+        analysisLines = analysisResult.analysis.lines.slice(0, 2);
+        console.log(`[LLM] Engine analysis complete: ${analysisLines.length} lines`);
       }
+    } catch (err) {
+      console.error(`[LLM] Engine analysis failed: ${(err as Error).message}`);
     }
   }
 
