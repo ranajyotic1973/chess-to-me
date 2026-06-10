@@ -1,8 +1,12 @@
 import type { EngineInfo } from "../types";
 
-const electronAPI = typeof window !== "undefined" ? window.electronAPI : null;
+// Access window.electronAPI dynamically so tests can replace it after module load.
+function getAPI() {
+  return typeof window !== "undefined" ? window.electronAPI : null;
+}
 
 export async function discoverEngines(): Promise<{ stockfish: string | null; lc0: string | null }> {
+  const electronAPI = getAPI();
   if (!electronAPI?.discoverEngines) {
     console.warn("Engine discovery API unavailable");
     return { stockfish: null, lc0: null };
@@ -21,6 +25,7 @@ export async function discoverEngines(): Promise<{ stockfish: string | null; lc0
 }
 
 export async function detectEngine(engineName: string): Promise<string | null> {
+  const electronAPI = getAPI();
   if (!electronAPI?.detectEngine) {
     return null;
   }
@@ -35,6 +40,7 @@ export async function detectEngine(engineName: string): Promise<string | null> {
 }
 
 export async function validateEnginePath(engineName: string, path: string): Promise<boolean> {
+  const electronAPI = getAPI();
   if (!electronAPI?.validateEngine) {
     return false;
   }

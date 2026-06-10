@@ -1,10 +1,17 @@
 import {
   Alert,
+  Box,
   Button,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
   FormControl,
   Grid,
   InputLabel,
+  LinearProgress,
   MenuItem,
   Paper,
   Select,
@@ -13,8 +20,8 @@ import {
   Typography,
   Link
 } from "@mui/material";
-import { useEffect, useState } from "react";
-import type { SettingsPanelProps } from "../types";
+import { useEffect, useState, useRef } from "react";
+import type { SettingsPanelProps, DbStatus, DbProgressEvent } from "../types";
 
 const PROVIDER_DOCS: Record<string, string> = {
   openai: "https://platform.openai.com/api-keys",
@@ -71,6 +78,14 @@ export default function SettingsPanel({
   const [apiKeyToTest, setApiKeyToTest] = useState<string>("");
   const [hasAutoFetched, setHasAutoFetched] = useState(false);
 
+  // Database state
+  const [dbStatus, setDbStatus] = useState<DbStatus | null>(null);
+  const [dbActionLoading, setDbActionLoading] = useState<"puzzles" | "games" | null>(null);
+  const [dbProgress, setDbProgress] = useState<DbProgressEvent | null>(null);
+  const [dbActionMessage, setDbActionMessage] = useState<string>("");
+  const [deleteConfirm, setDeleteConfirm] = useState<"puzzles" | "games" | null>(null);
+  const dbProgressUnsubRef = useRef<(() => void) | null>(null);
+
   const fetchModelsForProvider = async (apiKey: string, provider: string) => {
     const electronAPI = typeof window !== "undefined" ? (window as any).electronAPI : null;
     if (!electronAPI?.getAvailableModels) {
@@ -122,6 +137,110 @@ export default function SettingsPanel({
       fetchModelsForProvider(formState.llmApiKey, formState.llmProvider);
     }
   }, [formState.llmProvider]);
+
+  const electronAPI = typeof window !== "undefined" ? (window as any).electronAPI : null;
+
+  const fetchDbStatus = async () => {
+    if (!electronAPI?.dbStatus) return;
+    try {
+      const status = await electronAPI.dbStatus();
+      setDbStatus(status);
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchDbStatus();
+  }, []);
+
+  useEffect(() => {
+    if (!electronAPI?.onDbRefreshStatus) return;
+    const unsub = electronAPI.onDbRefreshStatus(() => fetchDbStatus());
+    return unsub;
+  }, []);
+
+  const subscribeToProgress = () => {
+    if (!electronAPI?.onDbProgress) return;
+    if (dbProgressUnsubRef.current) dbProgressUnsubRef.current();
+    const unsub = electronAPI.onDbProgress((data: DbProgressEvent) => setDbProgress(data));
+    dbProgressUnsubRef.current = unsub;
+  };
+
+  const handleDownloadPuzzles = async () => {
+    if (!electronAPI?.dbDownloadPuzzles) return;
+    setDbActionLoading("puzzles");
+    setDbProgress(null);
+    setDbActionMessage("");
+    subscribeToProgress();
+    try {
+      const result = await electronAPI.dbDownloadPuzzles();
+      if (result.ok) {
+        setDbActionMessage(`Import complete: ${result.count?.toLocaleString()} puzzles`);
+      } else {
+        setDbActionMessage(`Error: ${result.error}`);
+      }
+    } catch (err: any) {
+      setDbActionMessage(`Error: ${err.message}`);
+    } finally {
+      setDbActionLoading(null);
+      setDbProgress(null);
+      if (dbProgressUnsubRef.current) { dbProgressUnsubRef.current(); dbProgressUnsubRef.current = null; }
+      fetchDbStatus();
+    }
+  };
+
+  const handleCheckPuzzleUpdate = async () => {
+    if (!electronAPI?.dbCheckPuzzleUpdate) return;
+    setDbActionLoading("puzzles");
+    setDbActionMessage("");
+    try {
+      const result = await electronAPI.dbCheckPuzzleUpdate();
+      setDbActionMessage(result.hasUpdate
+        ? `Update available (${result.serverDate}). Click Download to update.`
+        : "Puzzle database is up to date.");
+    } catch {
+      setDbActionMessage("Update check failed.");
+    } finally {
+      setDbActionLoading(null);
+    }
+  };
+
+  const handleImportGames7z = async () => {
+    if (!electronAPI?.dbBrowseGamesFile) return;
+    const { filePath } = await electronAPI.dbBrowseGamesFile();
+    if (!filePath) return;
+    setDbActionLoading("games");
+    setDbProgress(null);
+    setDbActionMessage("");
+    subscribeToProgress();
+    try {
+      const result = await electronAPI.dbImportGames7z(filePath);
+      if (result.ok) {
+        setDbActionMessage(`Import complete: ${result.count?.toLocaleString()} games indexed`);
+      } else {
+        setDbActionMessage(`Error: ${result.error}`);
+      }
+    } catch (err: any) {
+      setDbActionMessage(`Error: ${err.message}`);
+    } finally {
+      setDbActionLoading(null);
+      setDbProgress(null);
+      if (dbProgressUnsubRef.current) { dbProgressUnsubRef.current(); dbProgressUnsubRef.current = null; }
+      fetchDbStatus();
+    }
+  };
+
+  const handleDeleteDb = async (which: "puzzles" | "games") => {
+    setDeleteConfirm(null);
+    if (!electronAPI) return;
+    try {
+      if (which === "puzzles") await electronAPI.dbDeletePuzzles();
+      else await electronAPI.dbDeleteGames();
+    } catch {}
+    setDbActionMessage("");
+    fetchDbStatus();
+  };
+
+  const fmtBytes = (b: number) => b > 1e9 ? `${(b/1e9).toFixed(1)} GB` : `${(b/1e6).toFixed(0)} MB`;
 
   const availableModelList = Array.isArray(systemStatus?.availableModels)
     ? systemStatus.availableModels.filter(Boolean)
@@ -242,6 +361,7 @@ export default function SettingsPanel({
               value={apiKeyToTest || formState.llmApiKey || (llmApiKeyLength > 0 ? getApiKeyMask(llmApiKeyLength) : "")}
               onChange={(event) => {
                 setApiKeyToTest(event.target.value);
+                onFieldChange("llmApiKey", event.target.value);
                 setModelsFetchError("");
               }}
               onFocus={(event) => {
@@ -268,10 +388,11 @@ export default function SettingsPanel({
               <Button
                 variant="contained"
                 onClick={async () => {
+                  const trimmedKey = apiKeyToTest.trim();
                   // Save the API key
-                  onFieldChange("llmApiKey", apiKeyToTest);
+                  onFieldChange("llmApiKey", trimmedKey);
                   // Fetch models for the current provider
-                  await fetchModelsForProvider(apiKeyToTest, formState.llmProvider);
+                  await fetchModelsForProvider(trimmedKey, formState.llmProvider);
                   setApiKeyToTest("");
                 }}
                 disabled={modelsFetchLoading}
@@ -387,6 +508,138 @@ export default function SettingsPanel({
             </Grid>
           )}
         </Grid>
+
+        {/* ── Databases ───────────────────────────────────────────────── */}
+        <Divider />
+        <Typography variant="h6" sx={{ mt: 1 }}>Databases</Typography>
+
+        {dbActionMessage && (
+          <Alert severity={dbActionMessage.startsWith("Error") ? "error" : "success"} onClose={() => setDbActionMessage("")}>
+            {dbActionMessage}
+          </Alert>
+        )}
+        {(dbActionLoading) && dbProgress && (
+          <Box>
+            <Typography variant="body2" sx={{ mb: 0.5 }}>{dbProgress.message}</Typography>
+            <LinearProgress variant="determinate" value={dbProgress.percent} />
+          </Box>
+        )}
+        {(dbActionLoading) && !dbProgress && (
+          <LinearProgress />
+        )}
+
+        <Grid container spacing={2}>
+          {/* Puzzle Database */}
+          <Grid item xs={12} sm={6}>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, p: 2 }}>
+              <Typography variant="subtitle1" fontWeight="bold">Puzzle Database</Typography>
+              {dbStatus?.puzzles ? (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  {dbStatus.puzzles.count.toLocaleString()} puzzles &bull; {fmtBytes(dbStatus.puzzles.sizeBytes)}
+                  {dbStatus.puzzles.version ? ` &bull; ${dbStatus.puzzles.version}` : ""}
+                </Typography>
+              ) : (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Not downloaded</Typography>
+              )}
+              <Stack direction="row" spacing={1} sx={{ mt: 1.5 }} flexWrap="wrap">
+                <Button
+                  size="small"
+                  variant="contained"
+                  onClick={handleDownloadPuzzles}
+                  disabled={!!dbActionLoading}
+                >
+                  {dbStatus?.puzzles ? "Re-download" : "Download"}
+                </Button>
+                {dbStatus?.puzzles && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={handleCheckPuzzleUpdate}
+                    disabled={!!dbActionLoading}
+                  >
+                    Check for updates
+                  </Button>
+                )}
+                {dbStatus?.puzzles && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="error"
+                    onClick={() => setDeleteConfirm("puzzles")}
+                    disabled={!!dbActionLoading}
+                  >
+                    Delete
+                  </Button>
+                )}
+              </Stack>
+            </Box>
+          </Grid>
+
+          {/* Games Database */}
+          <Grid item xs={12} sm={6}>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, p: 2 }}>
+              <Typography variant="subtitle1" fontWeight="bold">Games Database</Typography>
+              {dbStatus?.games ? (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  {dbStatus.games.count.toLocaleString()} games &bull; {fmtBytes(dbStatus.games.sizeBytes)}
+                  {dbStatus.games.source ? ` · ${dbStatus.games.source}` : ""}
+                </Typography>
+              ) : (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  Loading bundled DB on first launch…
+                </Typography>
+              )}
+              <Typography variant="caption" color="text.disabled" sx={{ display: "block", mt: 0.5 }}>
+                Monthly OTB updates:{" "}
+                <Link
+                  component="button"
+                  variant="caption"
+                  onClick={() => electronAPI?.openExternalUrl?.("https://lumbrasgigabase.com/en/download-in-pgn-format-en/")}
+                  sx={{ cursor: "pointer" }}
+                >
+                  lumbrasgigabase.com
+                </Link>
+                {" "}— download latest OTB file, then click Import.
+              </Typography>
+              <Stack direction="row" spacing={1} sx={{ mt: 1.5 }} flexWrap="wrap">
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={handleImportGames7z}
+                  disabled={!!dbActionLoading}
+                >
+                  Import monthly update…
+                </Button>
+                {dbStatus?.games && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="error"
+                    onClick={() => setDeleteConfirm("games")}
+                    disabled={!!dbActionLoading}
+                  >
+                    Delete
+                  </Button>
+                )}
+              </Stack>
+            </Box>
+          </Grid>
+        </Grid>
+
+        {/* Delete confirmation dialog */}
+        <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)}>
+          <DialogTitle>Delete {deleteConfirm === "puzzles" ? "Puzzle" : "Games"} Database?</DialogTitle>
+          <DialogContent>
+            <Typography>
+              This will permanently delete the local database file. You can re-download it anytime.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+            <Button color="error" onClick={() => deleteConfirm && handleDeleteDb(deleteConfirm)}>Delete</Button>
+          </DialogActions>
+        </Dialog>
+
         {statusMessage ? <Alert severity="info">{statusMessage}</Alert> : null}
         <Stack direction="row" spacing={2} justifyContent="flex-end">
           <Button variant="contained" color="primary" onClick={onSaveSettings} disabled={settingsSaving}>

@@ -8,3 +8,7 @@ release/
 *.exe
 *.dll
 *.pdb
+data/puzzles/*.db
+data/puzzles/.version
+data/games/*.db
+data/games/.version

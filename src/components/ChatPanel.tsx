@@ -3,7 +3,6 @@ import {
   Button,
   CircularProgress,
   IconButton,
-  Modal,
   Paper,
   Stack,
   TextField,
@@ -16,7 +15,7 @@ import ClearIcon from "@mui/icons-material/Clear";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import ReactMarkdown from "react-markdown";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { ChatPanelProps } from "../types";
 
 interface DetectedMove {
@@ -25,38 +24,17 @@ interface DetectedMove {
   analysis?: string;
 }
 
-const sanitizeHtml = (html: string | null | undefined): string => {
-  if (!html) {
-    return "";
-  }
-  if (typeof window === "undefined") {
-    return html;
-  }
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, "text/html");
-  doc.querySelectorAll("script,style").forEach((el) => el.remove());
-  return doc.body.innerHTML;
-};
-
 const detectMovesInResponse = (response: string): DetectedMove[] => {
   const moves: DetectedMove[] = [];
   if (!response) return moves;
 
-  // Pattern: [MOVE: from-to] or similar notation
-  // Look for patterns like "e2-e4" or "e2 to e4" within the response
   const movePattern = /(?:move[s]?:|suggest[s]?:|playing?:)\s*([a-h][1-8])\s*(?:to|-|→)\s*([a-h][1-8])/gi;
   let match;
-
   while ((match = movePattern.exec(response)) !== null) {
-    moves.push({
-      from: match[1].toLowerCase(),
-      to: match[2].toLowerCase()
-    });
+    moves.push({ from: match[1].toLowerCase(), to: match[2].toLowerCase() });
   }
-
   return moves;
 };
-
 
 export default function ChatPanel({
   questionText,
@@ -66,12 +44,7 @@ export default function ChatPanel({
   questionResponse,
   onClearQuestion,
   onOpenSettings,
-  analysisEntries = [],
   analysisStatus,
-  analysisLoading,
-  onPlayLine,
-  selectedAnalysisId,
-  onLineSelect,
   onMoveSuggested,
   llmProvider = "LLM",
   analysisLines = [],
@@ -83,24 +56,25 @@ export default function ChatPanel({
   showSolution = false,
   onShowSolution,
   agentStatuses = [],
+  isExplanationLoading = false,
+  puzzleNavigationMode = false,
   sx
 }: ChatPanelProps) {
-  const [showEngineLines, setShowEngineLines] = useState(false);
-  const [prevSelectedIndex, setPrevSelectedIndex] = useState<number | null>(null);
+  const [showInlineLines, setShowInlineLines] = useState(false);
+  const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (analysisLines.length > 0) {
-      setShowEngineLines(true);
+      setShowInlineLines(true);
     }
   }, [analysisLines]);
 
+  // Re-expand lines list if line is deselected
   useEffect(() => {
-    // Close modal when a line is selected (either by click or auto-detection)
-    if (selectedEngineLineIndex !== null && selectedEngineLineIndex !== prevSelectedIndex) {
-      setPrevSelectedIndex(selectedEngineLineIndex);
-      setShowEngineLines(false);
+    if (selectedEngineLineIndex === null) {
+      setShowInlineLines(analysisLines.length > 0);
     }
-  }, [selectedEngineLineIndex, prevSelectedIndex]);
+  }, [selectedEngineLineIndex, analysisLines.length]);
 
   const paperSx = Array.isArray(sx) ? sx : sx ? [sx] : [];
   const providerName = llmProvider
@@ -108,10 +82,11 @@ export default function ChatPanel({
     : "LLM";
 
   const detectedMoves = detectMovesInResponse(questionResponse);
-
-  const handleEngineLineSelected = () => {
-    setShowEngineLines(false);
-  };
+  const showLineList = analysisLines.length > 0 &&
+    (responseType === "Analysis" || responseType === "Position") &&
+    showInlineLines;
+  const selectedLine = selectedEngineLineIndex !== null ? analysisLines[selectedEngineLineIndex] : null;
+  const selectedLineNum = selectedLine ? (selectedLine.rank || (selectedEngineLineIndex ?? 0) + 1) : null;
 
   return (
     <Paper
@@ -162,53 +137,15 @@ export default function ChatPanel({
             mb: 2
           }}
         >
-          {/* Engine Lines Modal */}
-          <Modal
-            open={analysisLines.length > 0 && showEngineLines}
-            onClose={() => setShowEngineLines(false)}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center"
-            }}
-          >
-            <Box
-              sx={{
-                backgroundColor: "background.paper",
-                borderRadius: 2,
-                boxShadow: 24,
-                p: 3,
-                maxHeight: "50%",
-                width: "90%",
-                maxWidth: 500,
-                overflowY: "auto",
-                display: "flex",
-                flexDirection: "column",
-                gap: 1.5
-              }}
-            >
-              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <Typography variant="h6" sx={{ fontWeight: 600, color: "primary.main" }}>
-                  Engine Analysis (Top Lines)
-                </Typography>
-                {selectedEngineLineIndex !== null && analysisLines[selectedEngineLineIndex] && (
-                  <Typography variant="caption" sx={{ color: "success.main", fontWeight: 600 }}>
-                    Line {(analysisLines[selectedEngineLineIndex]?.rank || selectedEngineLineIndex + 1)} selected
-                  </Typography>
-                )}
-              </Box>
-
-              {selectedEngineLineIndex !== null && analysisLines[selectedEngineLineIndex] && (
-                <Box sx={{ backgroundColor: "action.hover", p: 1.5, borderRadius: 1 }}>
-                  <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mb: 0.5 }}>
-                    Move {currentMoveIndex + 1} of {(analysisLines[selectedEngineLineIndex]?.pv || analysisLines[selectedEngineLineIndex]?.line || "").split(/\s+/).filter((m) => m.trim()).length}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: "info.main", fontStyle: "italic" }}>
-                    ⌨️ Use arrow keys to navigate | Click a line or type its number to select
-                  </Typography>
-                </Box>
-              )}
-
+          {/* Inline Engine Analysis Lines */}
+          {showLineList && (
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "primary.main" }}>
+                Engine Analysis (Top Lines)
+              </Typography>
+              <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                Click a line or type its number (1–{analysisLines.length}) to select
+              </Typography>
               {analysisLines.map((line, idx) => {
                 const lineNum = line.rank || idx + 1;
                 const pv = line.pv || line.line || "";
@@ -218,31 +155,65 @@ export default function ChatPanel({
                     key={`line-${idx}`}
                     onClick={() => {
                       onSelectEngineLine?.(idx, line);
-                      handleEngineLineSelected();
+                      setShowInlineLines(false);
                     }}
                     sx={{
-                      p: 1,
+                      p: 1.5,
                       borderRadius: 1,
                       backgroundColor: isSelected ? "primary.light" : "action.hover",
                       cursor: "pointer",
-                      transition: "all 0.2s ease",
                       border: isSelected ? 2 : 1,
                       borderColor: isSelected ? "primary.main" : "transparent",
-                      fontWeight: isSelected ? 700 : 400,
                       "&:hover": {
                         backgroundColor: isSelected ? "primary.light" : "action.selected"
                       }
                     }}
                   >
-                    <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
+                    <Typography variant="body2" sx={{ fontFamily: "monospace", fontWeight: isSelected ? 700 : 400 }}>
                       <strong>Line {lineNum}:</strong> {pv || "(no moves)"}
                     </Typography>
                   </Box>
                 );
               })}
             </Box>
-          </Modal>
+          )}
 
+          {/* Selected line summary (collapsed state) */}
+          {!showInlineLines && selectedLineNum !== null && (
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Chip
+                  label={`Line ${selectedLineNum} selected`}
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                />
+                <Button
+                  size="small"
+                  variant="text"
+                  onClick={() => setShowInlineLines(true)}
+                  sx={{ textTransform: "none", fontSize: "0.75rem" }}
+                >
+                  Change line
+                </Button>
+              </Stack>
+              <Typography variant="caption" sx={{ color: "info.main", fontStyle: "italic" }}>
+                Line {selectedLineNum} selected. Use → to advance moves, ← to go back.
+                {" "}Move {currentMoveIndex + 1} of {(selectedLine?.pv || selectedLine?.line || "").split(/\s+/).filter((m) => m.trim()).length || "?"}
+              </Typography>
+            </Box>
+          )}
+
+          {/* Puzzle navigation instruction */}
+          {puzzleNavigationMode && (
+            <Box sx={{ p: 1.5, backgroundColor: "warning.lighter", borderRadius: 1, border: 1, borderColor: "warning.light" }}>
+              <Typography variant="caption" sx={{ color: "warning.dark", fontWeight: 600 }}>
+                Solution loaded. Use → to step through each move, ← to go back.
+              </Typography>
+            </Box>
+          )}
+
+          {/* Main conversation content */}
           {!questionResponse && !questionLoading ? (
             <Typography variant="body2" color="text.secondary" sx={{ color: "#999" }}>
               Ask a question to see the response here...
@@ -276,7 +247,7 @@ export default function ChatPanel({
                 </Box>
               )}
 
-              {/* Agent Status Cards - show while agents are working */}
+              {/* Agent Status Cards */}
               {agentStatuses.length > 0 && agentStatuses.some((a) => a.status === "working") && (
                 <Box sx={{ p: 1.5, backgroundColor: "info.lighter", borderRadius: 1, mb: 1 }}>
                   <Typography variant="caption" color="info.main" sx={{ fontWeight: 600, display: "block", mb: 1 }}>
@@ -380,12 +351,18 @@ export default function ChatPanel({
             placeholder="e.g. What plans should White consider here?"
             value={questionText}
             onChange={(event) => onQuestionChange(event.target.value)}
+            disabled={isExplanationLoading}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 onAskQuestion();
                 onClearQuestion();
               }
+              // Allow Left/Right to move cursor in textarea naturally — do NOT call event.stopPropagation()
+              // The global keyboard handler guards against textarea focus via document.activeElement check
+            }}
+            inputRef={(el) => {
+              chatInputRef.current = el;
             }}
             fullWidth
           />
@@ -399,7 +376,7 @@ export default function ChatPanel({
               onAskQuestion();
               onClearQuestion();
             }}
-            disabled={questionLoading}
+            disabled={questionLoading || isExplanationLoading}
           >
             Ask {providerName}
           </Button>
@@ -407,6 +384,7 @@ export default function ChatPanel({
             <IconButton
               size="small"
               onClick={onClearQuestion}
+              disabled={isExplanationLoading}
               aria-label="clear chat"
             >
               <ClearIcon fontSize="small" />

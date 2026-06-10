@@ -30,10 +30,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // LLM
   explainLines: (payload: IpcPayloads["explainLines"]) =>
-    ipcRenderer.invoke("ollama:explain-lines", payload) as Promise<IpcResponses["explainLines"]>,
+    ipcRenderer.invoke("llm:explain-lines", payload) as Promise<IpcResponses["explainLines"]>,
   askQuestion: (payload?: IpcPayloads["askQuestion"]) => {
     const { userMessage, question, ...rest } = payload || {};
-    return ipcRenderer.invoke("ollama:ask-question", { userMessage, question, ...rest }) as Promise<IpcResponses["askQuestion"]>;
+    return ipcRenderer.invoke("llm:ask-question", { userMessage, question, ...rest }) as Promise<IpcResponses["askQuestion"]>;
   },
   getAvailableModels: (payload: IpcPayloads["getAvailableModels"]) =>
     ipcRenderer.invoke("getAvailableModels", payload) as Promise<IpcResponses["getAvailableModels"]>,
@@ -72,5 +72,35 @@ contextBridge.exposeInMainWorld("electronAPI", {
   openExternalUrl: (url: string) =>
     ipcRenderer.invoke("app:open-external", url) as Promise<IpcResponses["openExternalUrl"]>,
   getSystemStatus: () =>
-    ipcRenderer.invoke("app:system-check") as Promise<IpcResponses["getSystemStatus"]>
+    ipcRenderer.invoke("app:system-check") as Promise<IpcResponses["getSystemStatus"]>,
+
+  // Database
+  dbStatus: () =>
+    ipcRenderer.invoke("db:status") as Promise<IpcResponses["db:status"]>,
+  dbDownloadPuzzles: () =>
+    ipcRenderer.invoke("db:download-puzzles") as Promise<IpcResponses["db:download-puzzles"]>,
+  dbCheckPuzzleUpdate: () =>
+    ipcRenderer.invoke("db:check-puzzle-update") as Promise<IpcResponses["db:check-puzzle-update"]>,
+  dbBrowseGamesFile: () =>
+    ipcRenderer.invoke("db:browse-games-file") as Promise<IpcResponses["db:browse-games-file"]>,
+  dbImportGames7z: (filePath: string) =>
+    ipcRenderer.invoke("db:import-games-7z", { filePath }) as Promise<IpcResponses["db:import-games-7z"]>,
+  dbSearchPuzzles: (params: IpcPayloads["db:search-puzzles"]) =>
+    ipcRenderer.invoke("db:search-puzzles", params) as Promise<IpcResponses["db:search-puzzles"]>,
+  dbSearchGames: (params: IpcPayloads["db:search-games"]) =>
+    ipcRenderer.invoke("db:search-games", params) as Promise<IpcResponses["db:search-games"]>,
+  dbDeletePuzzles: () =>
+    ipcRenderer.invoke("db:delete-puzzles") as Promise<IpcResponses["db:delete-puzzles"]>,
+  dbDeleteGames: () =>
+    ipcRenderer.invoke("db:delete-games") as Promise<IpcResponses["db:delete-games"]>,
+  onDbProgress: (callback: (data: any) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on("db:progress", handler);
+    return () => ipcRenderer.removeListener("db:progress", handler);
+  },
+  onDbRefreshStatus: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on("db:refresh-status", handler);
+    return () => ipcRenderer.removeListener("db:refresh-status", handler);
+  }
 } as ElectronAPI);

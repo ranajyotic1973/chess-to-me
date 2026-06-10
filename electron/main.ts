@@ -3,13 +3,105 @@ import fs from "node:fs";
 import { execSync } from "node:child_process";
 import { spawn, ChildProcess } from "node:child_process";
 import { Chess } from "chess.js";
-import type { AnalysisLine } from "../src/types";
+import type { AnalysisLine, PuzzleRow } from "../src/types";
 import { settings } from "./settings";
+import { initPuzzleDb, importPuzzlesFromCsv, searchPuzzles, getPuzzleDbStats } from "./puzzleDb";
+import { initGamesDb, importPgnFile, searchGames, getGamesDbStats, rebuildFts, setGamesSource } from "./gamesDb";
+import { downloadPuzzleCsv, checkPuzzleUpdate, extract7z, findPgnFiles } from "./downloader";
+import {
+  CLASSIFIER_SYSTEM_PROMPT,
+  analysisAgentSystemPrompt,
+  analysisLineAgentSystemPrompt,
+  explainLinesSystemPrompt,
+  PUZZLE_INTENT_SYSTEM_PROMPT,
+  PUZZLE_GENERATION_SYSTEM_PROMPT,
+  buildPuzzlePresentationPrompt,
+  POSITION_AGENT_SYSTEM_PROMPT,
+  HISTORIC_GAME_AGENT_SYSTEM_PROMPT,
+  LOCAL_GAMES_AGENT_SYSTEM_PROMPT,
+  PLAYER_GAMES_AGENT_SYSTEM_PROMPT
+} from "./agentPrompts";
+import type Database from "better-sqlite3";
 
 // Import electron APIs
 import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from "electron";
 
 const DEFAULT_OLLAMA_MODEL = "qwen3:8b";
+
+// ============================================================================
+// Database state (lazily initialised, closed on delete)
+// ============================================================================
+
+let puzzleDb: Database.Database | null = null;
+let gamesDb: Database.Database | null = null;
+
+function getDbPaths(): { puzzleDbPath: string; puzzleVersionPath: string; gamesDbPath: string; gamesExtractDir: string } {
+  const base = path.join(app.getPath("userData"), "chess-to-me");
+  return {
+    puzzleDbPath:    path.join(base, "puzzles", "puzzles.db"),
+    puzzleVersionPath: path.join(base, "puzzles", ".version"),
+    gamesDbPath:     path.join(base, "games", "games.db"),
+    gamesExtractDir: path.join(base, "games", "extracted"),
+  };
+}
+
+function getBundledGamesDbPath(): string | null {
+  // Production: electron-builder puts it in extraResources -> resources/games-db/games.db
+  // Development: data/games/games.db in the project root
+  const prodPath = path.join(process.resourcesPath ?? "", "games-db", "games.db");
+  const devPath  = path.join(app.getAppPath(), "data", "games", "games.db");
+  if (fs.existsSync(prodPath)) return prodPath;
+  if (fs.existsSync(devPath))  return devPath;
+  return null;
+}
+
+async function setupBundledGamesDb(): Promise<void> {
+  const { gamesDbPath } = getDbPaths();
+  if (fs.existsSync(gamesDbPath)) return;
+
+  const bundled = getBundledGamesDbPath();
+  if (!bundled) {
+    console.log("[DB] No bundled games DB found — skipping first-run copy.");
+    return;
+  }
+
+  console.log(`[DB] First run: copying bundled games DB to userData…`);
+  const destDir = path.dirname(gamesDbPath);
+  if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+  fs.copyFileSync(bundled, gamesDbPath);
+  console.log(`[DB] Bundled games DB copied (${(fs.statSync(gamesDbPath).size / 1024 / 1024).toFixed(0)} MB).`);
+
+  // Open and rebuild FTS — initGamesDb detects fts_built=false and triggers rebuild
+  console.log("[DB] Opening games DB and building search index…");
+  gamesDb = initGamesDb(gamesDbPath);
+  console.log("[DB] Games DB ready.");
+}
+
+function getPuzzleDb(): Database.Database | null {
+  if (puzzleDb) return puzzleDb;
+  const { puzzleDbPath } = getDbPaths();
+  if (!fs.existsSync(puzzleDbPath)) return null;
+  try {
+    puzzleDb = initPuzzleDb(puzzleDbPath);
+    return puzzleDb;
+  } catch (err) {
+    console.error("[DB] Failed to open puzzle DB:", err);
+    return null;
+  }
+}
+
+function getGamesDb(): Database.Database | null {
+  if (gamesDb) return gamesDb;
+  const { gamesDbPath } = getDbPaths();
+  if (!fs.existsSync(gamesDbPath)) return null;
+  try {
+    gamesDb = initGamesDb(gamesDbPath);
+    return gamesDb;
+  } catch (err) {
+    console.error("[DB] Failed to open games DB:", err);
+    return null;
+  }
+}
 
 const PROVIDER_ENDPOINTS = {
   ollama: "http://localhost:11434/api",
@@ -1208,9 +1300,15 @@ async function checkOllamaQwen3(): Promise<{ ollamaRunning: boolean; qwen3Instal
 let mainWindow: BrowserWindow | null = null;
 
 async function createWindow(): Promise<void> {
+  // In dev: __dirname = electron/dist → ../../build/icon.ico
+  // In prod: icon is embedded in the exe by electron-builder; path is best-effort
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, "icon.ico")
+    : path.join(__dirname, "..", "..", "build", "icon.ico");
   const win = new BrowserWindow({
     width: 1300,
     height: 840,
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -1251,6 +1349,61 @@ async function createWindow(): Promise<void> {
   win.on("closed", () => {
     mainWindow = null;
   });
+}
+
+// ── Shared import logic ───────────────────────────────────────────────────────
+async function doImportGamesFile(
+  filePath: string,
+  sendProgress: (phase: string, pct: number, msg: string) => void
+): Promise<{ ok: boolean; count?: number; error?: string }> {
+  const { gamesDbPath, gamesExtractDir } = getDbPaths();
+  try {
+    let pgnFiles: string[];
+    const lower = filePath.toLowerCase();
+
+    if (lower.endsWith(".7z")) {
+      sendProgress("decompressing", 0, "Extracting 7z archive…");
+      await extract7z(filePath, gamesExtractDir, (pct, msg) => sendProgress("decompressing", pct, msg));
+      pgnFiles = findPgnFiles(gamesExtractDir);
+    } else if (lower.endsWith(".pgn")) {
+      pgnFiles = [filePath];
+    } else {
+      return { ok: false, error: "Unsupported file type. Please select a .7z or .pgn file." };
+    }
+
+    if (pgnFiles.length === 0) return { ok: false, error: "No PGN files found in the archive." };
+
+    if (gamesDb) { gamesDb.close(); gamesDb = null; }
+    gamesDb = initGamesDb(gamesDbPath);
+
+    sendProgress("importing", 0, `Streaming ${pgnFiles.length} PGN file(s)…`);
+    let total = 0;
+    for (let i = 0; i < pgnFiles.length; i++) {
+      total += await importPgnFile(gamesDb, pgnFiles[i], (n) =>
+        sendProgress("importing",
+          Math.round(((i / pgnFiles.length) + (n / 500000 / pgnFiles.length)) * 90),
+          `Imported ${(total + n).toLocaleString()} games…`)
+      );
+      sendProgress("importing", Math.round(((i + 1) / pgnFiles.length) * 90), `${total.toLocaleString()} games…`);
+    }
+
+    sendProgress("importing", 95, "Rebuilding search index…");
+    setGamesSource(gamesDb, "Lumbra's Gigabase");
+    rebuildFts(gamesDb);
+    gamesDb.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('fts_built', 'true')").run();
+    gamesDb.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('last_update_import', ?)").run(new Date().toISOString().slice(0, 10));
+
+    if (lower.endsWith(".7z") && fs.existsSync(gamesExtractDir)) {
+      fs.rmSync(gamesExtractDir, { recursive: true, force: true });
+    }
+
+    sendProgress("importing", 100, `Done — ${total.toLocaleString()} games added`);
+    console.log(`[DB] Games import complete: ${total} games`);
+    return { ok: true, count: total };
+  } catch (err) {
+    console.error("[DB] Games import failed:", err);
+    return { ok: false, error: (err as Error).message };
+  }
 }
 
 // IPC Handlers
@@ -1423,10 +1576,11 @@ ipcMain.handle("app:update-settings", async (_event, payload) => {
   // Handle API key with mask detection
   if (payload?.llmApiKey !== undefined && payload.llmApiKey !== "") {
     const storedKey = settings.get("llmApiKey") || "";
-    const isMask = payload.llmApiKey === "•".repeat(storedKey.length);
-    if (!isMask) {
+    const trimmedKey = payload.llmApiKey.trim();
+    const isMask = trimmedKey === "•".repeat(storedKey.length);
+    if (!isMask && trimmedKey) {
       // Real API key provided, update it
-      settings.set("llmApiKey", payload.llmApiKey);
+      settings.set("llmApiKey", trimmedKey);
     }
     // If mask, don't update (key unchanged)
   }
@@ -1468,7 +1622,8 @@ ipcMain.handle("process:set-model", async (_event, model) => {
 });
 
 ipcMain.handle("getAvailableModels", async (_event, payload) => {
-  const { provider, apiKey, baseUrl } = payload || {};
+  const { provider, baseUrl } = payload || {};
+  const apiKey = typeof payload?.apiKey === "string" ? payload.apiKey.trim() : payload?.apiKey;
 
   if (provider === "ollama") {
     try {
@@ -1676,6 +1831,21 @@ function getLlmToolDefinitions(): Array<{
         },
         required: []
       }
+    },
+    {
+      name: "search_player_games",
+      description:
+        "Search the local games database for games played by a specific player. Use this when the user asks to see games played by a named player, find examples of openings by a player, or study a player's historical games.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          player: { type: "string", description: "Player name to search for (partial match, e.g. 'Carlsen', 'Kasparov')" },
+          eco: { type: "string", description: "ECO opening code to filter by (optional, e.g. 'B20' for Sicilian)" },
+          min_elo: { type: "number", description: "Minimum Elo rating filter (optional)" },
+          limit: { type: "number", description: "Maximum number of games to return (optional, default 5)" }
+        },
+        required: ["player"]
+      }
     }
   ];
 }
@@ -1711,6 +1881,21 @@ async function executeTool(toolName: string, args: Record<string, any>): Promise
           result = { ok: false, error: (err as Error).message };
         }
         break;
+      case "search_player_games": {
+        const db = getGamesDb();
+        if (!db) {
+          result = { ok: false, error: "Games database not available. The database may still be initializing.", games: [] };
+        } else {
+          const games = searchGames(db, {
+            player: args.player,
+            eco: args.eco,
+            minElo: args.min_elo,
+            limit: args.limit || 5
+          });
+          result = { ok: true, games, count: games.length };
+        }
+        break;
+      }
       default:
         throw new Error(`Unknown tool: ${toolName}`);
     }
@@ -1723,180 +1908,7 @@ async function executeTool(toolName: string, args: Record<string, any>): Promise
   }
 }
 
-function buildPrompt(params: {
-  language: string;
-  fen?: string;
-  line?: any;
-  lines?: any[];
-  question?: string;
-  userMessage?: string;
-  systemPrompt?: string;
-}): Array<{ role: string; content: string }> {
-  const { language, fen, line, lines = [], question, userMessage, systemPrompt } = params;
-  const notationGuide =
-    "Notation Guide:\n" +
-    "- Algebraic notation: e2-e4 means a pawn moves from e2 to e4\n" +
-    "- Piece abbreviations: N=knight, B=bishop, R=rook, Q=queen, K=king, P=pawn (sometimes omitted)\n" +
-    "- Captures: xd5 means 'captures on d5' (e.g., Bxd5 = bishop captures on d5)\n" +
-    "- Special moves: 0-0 = kingside castling, 0-0-0 = queenside castling\n" +
-    "- Checks and checkmate: + indicates check, # indicates checkmate\n" +
-    "- Promotions: =Q means promotion to queen (e.g., e8=Q)";
 
-  const toolDefinitions = getLlmToolDefinitions();
-  const toolsInfo = `
-Available Chess Analysis Tools:
-You have access to the following tools to interact with the chess board:
-
-${toolDefinitions.map((tool) => `- ${tool.name}: ${tool.description}`).join("\n")}
-
-Instructions for using tools:
-1. When asked about hypothetical moves (e.g., "what if I move e5?"), use validate_move to check legality
-2. If the move is legal, use apply_move to apply it and get_board_fen to see the new position
-3. Use analyze_position to get engine analysis of any position
-4. Format tool calls as: TOOL_NAME(param1="value1", param2="value2")
-
-Example: If user asks "what if I move e2 to e4?":
-1. validate_move(from="e2", to="e4")  → checks if legal
-2. If valid: apply_move(from="e2", to="e4")  → applies move, returns new FEN
-3. analyze_position(fen="<new-fen>")  → analyzes the resulting position
-
-Always validate moves before applying them.
-`;
-
-  const defaultSystemPrompt = [
-    "You are a chess grandmaster analyzing positions with expert-level insight.",
-    "Use deep strategic and tactical understanding to explain positions, evaluate moves, and compare analysis lines.",
-    "Your role is to help club-level players understand the ideas behind moves, not to act as a computer engine.",
-    "",
-    "Response Format (IMPORTANT):",
-    "- Use Markdown formatting with headers, bullet points, and bold text",
-    "- Use ### headers for each line (### Line 1: e2-e4)",
-    "- Use **bold** for section headers (**Strategic Plans:**, **Threats:**, etc.)",
-    "- Use bullet points (- or •) for each distinct point",
-    "- Each bullet point should be 1-2 lines maximum - concise and specific",
-    "- Never use long paragraphs",
-    "- Each section should have multiple bullet points, not paragraphs",
-    "",
-    "Engine-Provided Analysis:",
-    "The chess engine has already analyzed the position and provided the top lines.",
-    "Your job is to EXPLAIN these engine-provided lines - why they are strong, what ideas they contain, and how they compare.",
-    "Do NOT suggest alternative moves or lines - the engine analysis is the source of truth for move suggestions.",
-    "When the user asks about moves, explain why the engine-recommended lines are best.",
-    "For each line, always provide: Strategic Plans, Attacking & Defensive Resources, Tactical Threats & Forcing Moves, Key Continuations, and Comparison",
-    "",
-    "Piece Notation:",
-    "Always use piece glyphs and algebraic notation in your analysis:",
-    "- White pieces: ♔ (king) ♕ (queen) ♖ (rook) ♗ (bishop) ♘ (knight) ♙ (pawn)",
-    "- Black pieces: ♚ (king) ♛ (queen) ♜ (rook) ♝ (bishop) ♞ (knight) ♟ (pawn)",
-    "- Use algebraic notation: Ne4 (knight to e4), Bxd5 (bishop captures d5), 0-0 (castling kingside)",
-    "- Never write out piece names in words like 'knight' or 'bishop' - always use glyphs",
-    "- Example: Instead of 'the knight moves to e4', write: ♘e4 or Ne4 with context",
-    "",
-    "Engine Output Format:",
-    "You will receive analysis from chess engines (Stockfish or LC0) in the following format:",
-    "- Evaluations show position advantage: 'white is winning' means white has a winning advantage",
-    "- Depth indicates search depth (higher depth = more confidence in the evaluation)",
-    "- Lines are ranked by strength: Line 1 is the best continuation, Line 2 is the second-best, etc.",
-    "- Centipawn (cp) evaluations: +100 cp means white is better by about one pawn; negative values favor black",
-    "- Win probability from neural networks: 75% means the neural net expects white to win 75% of the time from random play",
-    "",
-    "When analyzing multiple lines, compare them strategically using a numbered list format:",
-    "1. Line 1: Explain why it's superior (better position, safer, clearer advantage)",
-    "2. Line 2: Highlight key differences from Line 1 (different plans, pawn structures, piece activity)",
-    "3. Line 3: (if discussing) Key tactical/strategic differences",
-    "4. Line 4: (if discussing) Position assessment and viability",
-    "Focus on concrete ideas and tactical motifs, not abstract concepts.",
-    "",
-    "For move-by-move explanations: break down the line move by move, explaining each move's:",
-    "- Tactical purpose (captures, attacks, defensive moves) using algebraic notation",
-    "- Strategic goal (improving position, activating pieces, controlling key squares)",
-    "- Relationship to the overall plan",
-    "",
-    "For Puzzles and Positions:",
-    "- Always include which side (White or Black) should move first",
-    "- This must be explicitly stated in the response",
-    "- Include this in the FEN notation in the 'side to move' field",
-    "",
-    "Always use tactical and strategic chess terminology with glyphs and algebraic notation.",
-    "Avoid mentioning being an AI or computer algorithm.",
-    "Keep the tone practical, focused on ideas, and suitable for club-level understanding.",
-    "",
-    toolsInfo,
-    "",
-    notationGuide
-  ].join("\n");
-
-  const systemContent = systemPrompt || `${defaultSystemPrompt}\nLanguage: ${language}`;
-  const messages: Array<{ role: string; content: string }> = [{ role: "system", content: systemContent }];
-
-  // Add chess engine analysis as an assistant message if lines are available
-  if (lines.length > 0) {
-    const engineAnalysis = lines
-      .map((l: any) => {
-        const evaluation = normalizeEvaluation(l.score);
-        const lineNum = l.rank || "?";
-        const pv = l.pv || l.line || "";
-        return `Line ${lineNum}: ${evaluation.description}${pv ? ` (${pv})` : ""}`;
-      })
-      .join("\n");
-
-    const assistantContent = `Chess Engine Analysis:\n${engineAnalysis}`;
-    messages.push({ role: "assistant", content: assistantContent });
-  }
-
-  let userContent = "";
-
-  if (userMessage) {
-    userContent = userMessage;
-  } else {
-    if (lines.length > 0) {
-      // When analyzing lines, ask for detailed strategic and tactical analysis in Markdown format
-      userContent = `Analyze each line using Markdown bullet points with this structure:
-
-**Strategic Plans:**
-- White's objective: [specific goal]
-- Black's response: [counter-strategy]
-
-**Attacking & Defensive Resources:**
-- White's options: [specific moves/ideas]
-- Black's resources: [specific moves/ideas]
-
-**Tactical Threats & Forcing Moves:**
-- Immediate threats: [checks, captures, pins]
-- Forcing sequences: [critical moves]
-- Material risk: [vulnerable pieces]
-
-**Position Assessment:**
-- Evaluation after this line: [who stands better and why]
-
-Language: ${language}
-Position FEN: ${fen || "unknown"}
-${question ? `User question: ${question}` : ""}
-
-Use bullet points (- or •), bold headers (**text**), and keep each point concise (1-2 lines max).`;
-    } else {
-      const instructions = [
-        "You are a practical chess coach for club-level players.",
-        "Respond only in chess-focused terms; do not mention being an AI or include general commentary about AI.",
-        "Assess the risks for both sides and propose a plan of attack for the player to move next.",
-        "Keep the tone concise and actionable (bulleted points are welcome)."
-      ];
-      const context = [
-        `Language: ${language}`,
-        `Position FEN: ${fen || "unknown"}`
-      ];
-
-      if (question) {
-        context.push(`Player question: ${question}`);
-      }
-
-      userContent = [...instructions, ...context].filter(Boolean).join("\n");
-    }
-  }
-
-  messages.push({ role: "user", content: userContent });
-  return messages;
-}
 
 async function runLlmChat(params: {
   provider: string;
@@ -2008,7 +2020,7 @@ async function runOllamaChatInternal(baseUrl: string, model: string, messages: A
 async function runOpenAICompatibleChat(provider: string, baseUrl: string, model: string, apiKey: string | undefined, messages: Array<{ role: string; content: string }>, signal: AbortSignal, includeTools: boolean = true): Promise<string> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (apiKey) {
-    headers["Authorization"] = `Bearer ${apiKey}`;
+    headers["Authorization"] = `Bearer ${apiKey.trim()}`;
   }
 
   const conversationMessages = [...messages];
@@ -2235,7 +2247,7 @@ async function runGeminiChat(baseUrl: string, model: string, apiKey: string | un
   return String(data?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
 }
 
-ipcMain.handle("ollama:explain-lines", async (_event, payload) => {
+ipcMain.handle("llm:explain-lines", async (_event, payload) => {
   const lines = Array.isArray(payload?.lines) ? payload.lines.slice(0, 4) : [];
   const fen = payload?.fen || "";
   const language = payload?.language || settings.get("explainLanguage") || "English";
@@ -2263,31 +2275,31 @@ ipcMain.handle("ollama:explain-lines", async (_event, payload) => {
   try {
     const explanations = await Promise.all(
       lines.map(async (line: any) => {
-        // Build messages with conversation history for context
-        let messages = buildPrompt({ language, fen, line, lines: [line] });
+        const lineScore = (() => {
+          const s = line.score as any;
+          if (!s) return "?";
+          if (s.type === "cp") return `${s.value >= 0 ? "+" : ""}${(s.value / 100).toFixed(1)}`;
+          if (s.type === "mate") return `M${s.value}`;
+          if (s.winProb !== undefined) return `${(s.winProb * 100).toFixed(1)}%`;
+          return "?";
+        })();
 
-        // Optionally include recent conversation history for context (if available)
+        let messages: Array<{ role: string; content: string }> = [
+          { role: "system", content: explainLinesSystemPrompt(language) }
+        ];
+
         if (Array.isArray(payload?.conversationHistory) && payload.conversationHistory.length > 0) {
-          const systemMsg = messages[0];
-          const userMsg = messages[messages.length - 1];
-
-          // Rebuild with conversation history
-          messages = [systemMsg];
-
-          // Add last 2 exchanges from conversation history for context
-          const recentHistory = payload.conversationHistory.slice(-4);
-          for (const entry of recentHistory) {
-            messages.push({
-              role: entry.role === "user" ? "user" : "assistant",
-              content: entry.message
-            });
+          for (const entry of payload.conversationHistory.slice(-4)) {
+            messages.push({ role: entry.role === "user" ? "user" : "assistant", content: entry.message });
           }
-
-          // Add the current line analysis request
-          messages.push(userMsg);
         }
 
-        const text = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
+        messages.push({
+          role: "user",
+          content: `Explain this engine line:\nVariation: ${line.pv || line.line || "No moves"}\nScore: ${lineScore}\nFEN: ${fen || "unknown"}`
+        });
+
+        const text = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: false });
         return {
           rank: line.rank,
           text: text || `No explanation returned for line ${line.rank}.`
@@ -2304,7 +2316,7 @@ ipcMain.handle("ollama:explain-lines", async (_event, payload) => {
 });
 
 // Classification endpoint - Two-pass processing: PASS 1 - Classify request type
-ipcMain.handle("ollama:classify-question", async (_event, payload) => {
+ipcMain.handle("llm:classify-question", async (_event, payload) => {
   const question = String(payload?.question || "").trim();
   if (!question) {
     return { ok: false, error: "Question is empty." };
@@ -2323,24 +2335,8 @@ ipcMain.handle("ollama:classify-question", async (_event, payload) => {
   const baseUrl = (payload?.baseUrl || (llmProvider === "ollama" ? settings.get("ollamaBaseUrl") : null) || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
 
   const classificationPrompt = [
-    {
-      role: "system",
-      content: `You are a chess request classifier. Classify the user's request into ONE category and respond with ONLY the category name.
-
-Categories:
-- ANALYSIS: User asks to analyze current position, best moves, evaluate lines, tactical analysis
-- PUZZLE: User asks to create/generate a chess puzzle, tactical problem, or chess challenge
-- POSITION: User asks to create/generate a random chess position or specific position type
-- HISTORIC_GAME: User asks about famous/historic chess games from databases like Lichess
-- LOCAL_GAMES: User asks about their own stored chess games locally
-- OTHER: Anything else not chess-related
-
-Respond with ONLY the category name, nothing else.`
-    },
-    {
-      role: "user",
-      content: question
-    }
+    { role: "system", content: CLASSIFIER_SYSTEM_PROMPT },
+    { role: "user", content: question }
   ];
 
   try {
@@ -2350,11 +2346,12 @@ Respond with ONLY the category name, nothing else.`
       model,
       apiKey: llmApiKey,
       messages: classificationPrompt,
-      timeoutMs: llmProvider === "ollama" ? 60000 : 120000
+      timeoutMs: llmProvider === "ollama" ? 60000 : 120000,
+      includeTools: false
     });
 
-    const type = classification.trim().toUpperCase() as "ANALYSIS" | "PUZZLE" | "POSITION" | "HISTORIC_GAME" | "LOCAL_GAMES" | "OTHER";
-    const validTypes = ["ANALYSIS", "PUZZLE", "POSITION", "HISTORIC_GAME", "LOCAL_GAMES", "OTHER"];
+    const type = classification.trim().toUpperCase() as "ANALYSIS" | "PUZZLE" | "POSITION" | "PLAYER_GAMES" | "HISTORIC_GAME" | "LOCAL_GAMES" | "OTHER";
+    const validTypes = ["ANALYSIS", "PUZZLE", "POSITION", "PLAYER_GAMES", "HISTORIC_GAME", "LOCAL_GAMES", "OTHER"];
     const responseType = validTypes.includes(type) ? type : "OTHER";
 
     console.log(`[LLM] PASS 1 - Classification: "${question.substring(0, 60)}..." → ${responseType}`);
@@ -2413,42 +2410,7 @@ async function handleAnalysisRequest(question: string, fen: string, lines: Analy
     .join("\n");
 
   const messages: Array<{ role: string; content: string }> = [
-    {
-      role: "system",
-      content: `You are a chess expert analyzing positions using ${engineType.toUpperCase()} engine analysis. Analyze each variation independently, providing deep strategic and tactical insights.
-
-## Response Format Requirements:
-- Use Markdown formatting with headers, bullet points, and clear structure
-- Each line should be a distinct, concise point (not paragraphs)
-- Use clear section headers for each analysis section
-- Every point should be actionable and specific to the position
-
-## Analysis Structure for Each Line:
-For each variation, provide analysis in this exact format:
-
-### Line N: [Move sequence]
-
-**Strategic Plans:**
-- White's objective: [specific goal]
-- Black's response: [counter-strategy]
-
-**Attacking & Defensive Resources:**
-- White's attacking options: [specific moves/ideas]
-- Black's defensive resources: [specific moves/ideas]
-
-**Tactical Threats & Forcing Moves:**
-- Immediate threats: [checks, captures, pins]
-- Forcing sequences: [moves that compel responses]
-- Material risk: [which pieces are vulnerable]
-
-**Key Continuations:**
-- Critical variation: [moves that matter most]
-
-**Comparison to Other Lines:**
-- How this differs: [strategic/tactical differences]
-
-Always use bullet points. Never use long paragraphs. Each point should be 1-2 lines maximum.`
-    }
+    { role: "system", content: analysisAgentSystemPrompt(engineType) }
   ];
 
   // Include conversation history for context
@@ -2491,7 +2453,7 @@ IMPORTANT:
   try {
     // Fan-out: create one agent per analysis line (up to 4 parallely)
     if (analysisLines.length === 0) {
-      const answer = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
+      const answer = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: false });
       console.log(`[LLM] PASS 2: ANALYSIS Complete ✓`);
       return { ok: true, answer: answer || "No response returned.", linesUsed: 0 };
     }
@@ -2511,35 +2473,6 @@ IMPORTANT:
         });
       }
 
-      // Build focused system prompt for this agent
-      const focusedSystemPrompt = `You are a chess expert analyzing a single variation. Analyze this specific line deeply, providing strategic and tactical insights.
-
-## Response Format Requirements:
-- Use Markdown formatting with headers, bullet points, and clear structure
-- Each point should be 1-2 lines maximum (no long paragraphs)
-- Use clear section headers with ###
-- Use bold text (**text**) for section headers
-- Be specific about pieces and squares
-
-## Analysis Structure:
-
-**Strategic Plans:**
-- White's objective: [specific goal in this line]
-- Black's response: [counter-strategy]
-
-**Attacking & Defensive Resources:**
-- White's attacking options: [specific moves/ideas]
-- Black's defensive resources: [specific moves/ideas]
-
-**Tactical Threats & Forcing Moves:**
-- Immediate threats: [checks, captures, pins]
-- Forcing sequences: [moves that compel responses]
-- Material risk: [which pieces are vulnerable]
-
-**Key Continuations:**
-- Critical follow-up moves: [moves that matter most]
-
-Always use bullet points. Be concise and actionable.`;
 
       // Build focused user prompt for this line
       const lineScore = (() => {
@@ -2556,17 +2489,10 @@ Always use bullet points. Be concise and actionable.`;
       })();
 
       const lineMessages: Array<{ role: string; content: string }> = [
-        { role: "system", content: focusedSystemPrompt },
+        { role: "system", content: analysisLineAgentSystemPrompt },
         {
           role: "user",
-          content: `Analyze this specific line from the chess engine analysis:
-
-Variation: ${line.pv || line.line || "No moves"}
-Score: ${lineScore} (${engineType.toUpperCase()})
-
-Question from user: ${question}
-
-Provide detailed analysis of this variation only, using Markdown with bullet points.`
+          content: `Analyze this engine variation:\nVariation: ${line.pv || line.line || "No moves"}\nScore: ${lineScore} (${engineType.toUpperCase()})\n\nUser question: ${question}`
         }
       ];
 
@@ -2576,7 +2502,8 @@ Provide detailed analysis of this variation only, using Markdown with bullet poi
           baseUrl,
           model,
           apiKey: llmApiKey,
-          messages: lineMessages
+          messages: lineMessages,
+          includeTools: false
         });
 
         // Push "done" status
@@ -2635,73 +2562,124 @@ Provide detailed analysis of this variation only, using Markdown with bullet poi
   }
 }
 
+
 async function handlePuzzleRequest(question: string, payload: any, llmProvider: string, llmApiKey: string, model: string, baseUrl: string): Promise<{ ok: boolean; answer?: string; error?: string }> {
-  console.log(`[LLM] PASS 2: PUZZLE - Generating chess puzzle`);
+  console.log(`[LLM] PASS 2: PUZZLE - Checking database first`);
 
-  const messages: Array<{ role: string; content: string }> = [
-    {
-      role: "system",
-      content: `You are a chess puzzle generator. Create a valid chess puzzle in the following JSON format:
-{
-  "fen": "valid FEN string",
-  "side_to_move": "White|Black",
-  "solution": "moves leading to solution (e.g., 'e4 e5 g4')",
-  "difficulty": "easy|medium|hard",
-  "explanation": "detailed solution walkthrough",
-  "puzzle_type": "tactical|endgame|positional"
-}
+  // Parse, validate FEN, normalize solution moves (UCI or SAN → UCI), stamp required fields
+  const tryParseAndValidate = (response: string): string | null => {
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+    let data: any;
+    try { data = JSON.parse(jsonMatch[0]); } catch { return null; }
 
-Ensure the FEN is valid and can be loaded by chess.js. The puzzle should have a clear solution sequence.`
-    },
-    {
-      role: "user",
-      content: question
+    if (!data.fen) return null;
+    try { const testChess = new Chess(); testChess.load(data.fen); } catch { return null; }
+
+    data.response_type = "Puzzle";
+    data.hidden_solution = true;
+
+    let rawMoves: string[] = [];
+    if (Array.isArray(data.solution)) rawMoves = data.solution.map(String);
+    else if (typeof data.solution === "string") rawMoves = data.solution.trim().split(/\s+/).filter(Boolean);
+
+    const board = new Chess();
+    try { board.load(data.fen); } catch { board.reset(); }
+    const validUci: string[] = [];
+    for (const raw of rawMoves) {
+      const move = raw.trim().toLowerCase();
+      if (/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move)) {
+        try {
+          const result = board.move({ from: move.slice(0, 2), to: move.slice(2, 4), promotion: move[4] || undefined });
+          if (result) { validUci.push(result.from + result.to + (result.promotion || "")); continue; }
+        } catch { /* fall through */ }
+      }
+      try {
+        const result = board.move(raw);
+        if (result) { validUci.push(result.from + result.to + (result.promotion || "")); continue; }
+      } catch { break; }
     }
+    data.solution = validUci;
+    console.log(`[LLM] PASS 2: PUZZLE ✓ Valid puzzle | FEN: ${data.fen} | Moves: ${validUci.join(" ")}`);
+    return JSON.stringify(data);
+  };
+
+  // ── DB-first puzzle lookup ──────────────────────────────────────────────────
+  const db = getPuzzleDb();
+  if (db) {
+    // Step 1: Extract search intent from user question
+    let searchParams: Record<string, any> = {};
+    try {
+      const intentMessages = [
+        { role: "system", content: PUZZLE_INTENT_SYSTEM_PROMPT },
+        { role: "user", content: question }
+      ];
+      const intentResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages: intentMessages, includeTools: false });
+      const intentJson = intentResponse.match(/\{[\s\S]*\}/)?.[0];
+      if (intentJson) searchParams = JSON.parse(intentJson);
+    } catch {
+      console.warn("[DB] Intent extraction failed, using empty params");
+    }
+    console.log("[DB] Puzzle intent:", searchParams);
+
+    // Step 2: Query DB
+    try {
+      const results = searchPuzzles(db, { ...searchParams, limit: 1 });
+      const dbPuzzle = results[0];
+      if (dbPuzzle) {
+        console.log(`[DB] Found puzzle ${dbPuzzle.puzzle_id} (rating ${dbPuzzle.rating})`);
+        // Step 3: LLM wraps DB puzzle in story/explanation
+        const presentMessages = [
+          { role: "system", content: buildPuzzlePresentationPrompt(dbPuzzle) },
+          { role: "user", content: `Present this chess puzzle with an engaging story and step-by-step walkthrough.` }
+        ];
+        const presentResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages: presentMessages, includeTools: false });
+        const parsed = tryParseAndValidate(presentResponse);
+        if (parsed) {
+          console.log("[DB] Puzzle presentation succeeded");
+          return { ok: true, answer: parsed };
+        }
+        console.warn("[DB] Presentation parse failed, falling back to LLM generation");
+      } else {
+        console.log("[DB] No matching puzzle found in DB, falling back to LLM generation");
+      }
+    } catch (err) {
+      console.warn("[DB] Puzzle DB query failed:", (err as Error).message);
+    }
+  }
+
+  // LLM generation fallback (when DB miss or DB absent)
+  console.log(`[LLM] PASS 2: PUZZLE - Generating chess puzzle via LLM`);
+  const messages: Array<{ role: string; content: string }> = [
+    { role: "system", content: PUZZLE_GENERATION_SYSTEM_PROMPT },
+    { role: "user", content: question }
   ];
 
   try {
-    const puzzleResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
+    const firstResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: false });
+    const firstParsed = tryParseAndValidate(firstResponse);
+    if (firstParsed) return { ok: true, answer: firstParsed };
 
-    // Try to parse JSON from response
-    const jsonMatch = puzzleResponse.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.warn(`[LLM] PASS 2: PUZZLE - No JSON found in response, asking LLM to reformat`);
-      messages.push({ role: "assistant", content: puzzleResponse });
-      messages.push({
-        role: "user",
-        content: "Please respond with ONLY the JSON, no markdown or extra text."
-      });
-      const retryResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
-      return { ok: true, answer: retryResponse };
+    console.warn(`[LLM] PASS 2: PUZZLE - Response was not valid JSON, retrying with stricter instruction`);
+    messages.push({ role: "assistant", content: firstResponse });
+    messages.push({
+      role: "user",
+      content: `Respond with ONLY the JSON object — no prose, no markdown fences. ` +
+        `Keys: "response_type"="Puzzle", "fen" (valid FEN), ` +
+        `"solution" (UCI array like ["d5e4","d7e7"]), ` +
+        `"difficulty", "explanation" (story + move walkthrough), "hidden_solution"=true.`
+    });
+
+    const retryResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: false });
+    const retryParsed = tryParseAndValidate(retryResponse);
+    if (retryParsed) {
+      console.log(`[LLM] PASS 2: PUZZLE ✓ Retry succeeded`);
+      return { ok: true, answer: retryParsed };
     }
 
-    const puzzleData = JSON.parse(jsonMatch[0]);
-
-    // Validate FEN with chess.js
-    try {
-      const testChess = new Chess();
-      testChess.load(puzzleData.fen);
-      console.log(`[LLM] PASS 2: PUZZLE ✓ Generated valid puzzle - Side to move: ${puzzleData.side_to_move}`);
-      return { ok: true, answer: JSON.stringify(puzzleData) };
-    } catch (fenError) {
-      console.warn(`[LLM] PASS 2: PUZZLE - Invalid FEN, asking LLM to fix`);
-      messages.push({ role: "assistant", content: puzzleResponse });
-      messages.push({
-        role: "user",
-        content: `The FEN "${puzzleData.fen}" is invalid. Please generate a new valid FEN that can be loaded by chess.js. Respond with the complete corrected JSON.`
-      });
-
-      const correctedResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
-      const correctedMatch = correctedResponse.match(/\{[\s\S]*\}/);
-      if (correctedMatch) {
-        const correctedData = JSON.parse(correctedMatch[0]);
-        const retestChess = new Chess();
-        retestChess.load(correctedData.fen);
-        console.log(`[LLM] PASS 2: PUZZLE ✓ Corrected puzzle is valid`);
-        return { ok: true, answer: JSON.stringify(correctedData) };
-      }
-      return { ok: true, answer: correctedResponse };
-    }
+    // Last resort: return raw retry text so the user at least sees the content
+    console.warn(`[LLM] PASS 2: PUZZLE - Both attempts failed to produce valid JSON`);
+    return { ok: true, answer: retryResponse };
   } catch (err) {
     const errorMsg = (err as Error)?.message || "Puzzle generation failed.";
     console.error(`[LLM] PASS 2: PUZZLE failed: ${errorMsg}`);
@@ -2713,26 +2691,12 @@ async function handlePositionRequest(question: string, payload: any, llmProvider
   console.log(`[LLM] PASS 2: POSITION - Generating chess position`);
 
   const messages: Array<{ role: string; content: string }> = [
-    {
-      role: "system",
-      content: `You are a chess position generator. Create a valid chess position in the following JSON format:
-{
-  "fen": "valid FEN string",
-  "side_to_move": "White|Black",
-  "position_type": "opening|middlegame|endgame",
-  "explanation": "brief description of the position"
-}
-
-Ensure the FEN is valid and can be loaded by chess.js. The position should be realistic and interesting.`
-    },
-    {
-      role: "user",
-      content: question
-    }
+    { role: "system", content: POSITION_AGENT_SYSTEM_PROMPT },
+    { role: "user", content: question }
   ];
 
   try {
-    const positionResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
+    const positionResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: false });
 
     const jsonMatch = positionResponse.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
@@ -2742,7 +2706,7 @@ Ensure the FEN is valid and can be loaded by chess.js. The position should be re
         role: "user",
         content: "Please respond with ONLY the JSON, no markdown or extra text."
       });
-      const retryResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
+      const retryResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: false });
       return { ok: true, answer: retryResponse };
     }
 
@@ -2761,7 +2725,7 @@ Ensure the FEN is valid and can be loaded by chess.js. The position should be re
         content: `The FEN "${positionData.fen}" is invalid. Please generate a new valid FEN. Respond with the complete corrected JSON.`
       });
 
-      const correctedResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
+      const correctedResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: false });
       const correctedMatch = correctedResponse.match(/\{[\s\S]*\}/);
       if (correctedMatch) {
         const correctedData = JSON.parse(correctedMatch[0]);
@@ -2779,31 +2743,36 @@ Ensure the FEN is valid and can be loaded by chess.js. The position should be re
   }
 }
 
-async function handleHistoricGameRequest(question: string, payload: any, llmProvider: string, llmApiKey: string, model: string, baseUrl: string): Promise<{ ok: boolean; answer?: string; error?: string }> {
-  console.log(`[LLM] PASS 2: HISTORIC_GAME - Searching for famous games`);
+async function handlePlayerGamesRequest(question: string, llmProvider: string, llmApiKey: string, model: string, baseUrl: string): Promise<{ ok: boolean; answer?: string; error?: string }> {
+  console.log(`[LLM] PASS 2: PLAYER_GAMES - Searching local games database`);
 
   const messages: Array<{ role: string; content: string }> = [
-    {
-      role: "system",
-      content: `You are a chess historian. Help the user find famous chess games. You can suggest games from famous players, tournaments, or openings.
-
-For game information, provide:
-- Player names and rating
-- Tournament and year
-- Opening name
-- Game result
-- Key moments and brilliant moves
-
-Suggest searching Lichess database at https://lichess.org/games or Chess.com game database.`
-    },
-    {
-      role: "user",
-      content: question
-    }
+    { role: "system", content: PLAYER_GAMES_AGENT_SYSTEM_PROMPT },
+    { role: "user", content: question }
   ];
 
   try {
-    const answer = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
+    // includeTools: true so the LLM can call search_player_games
+    const answer = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: true });
+    console.log(`[LLM] PASS 2: PLAYER_GAMES ✓`);
+    return { ok: true, answer };
+  } catch (err) {
+    const errorMsg = (err as Error)?.message || "Player games search failed.";
+    console.error(`[LLM] PASS 2: PLAYER_GAMES failed: ${errorMsg}`);
+    return { ok: false, error: errorMsg };
+  }
+}
+
+async function handleHistoricGameRequest(question: string, llmProvider: string, llmApiKey: string, model: string, baseUrl: string): Promise<{ ok: boolean; answer?: string; error?: string }> {
+  console.log(`[LLM] PASS 2: HISTORIC_GAME - Searching for famous games`);
+
+  const messages: Array<{ role: string; content: string }> = [
+    { role: "system", content: HISTORIC_GAME_AGENT_SYSTEM_PROMPT },
+    { role: "user", content: question }
+  ];
+
+  try {
+    const answer = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: false });
     console.log(`[LLM] PASS 2: HISTORIC_GAME ✓`);
     return { ok: true, answer };
   } catch (err) {
@@ -2820,21 +2789,7 @@ async function handleLocalGamesRequest(question: string, payload: any, llmProvid
   const conversationHistory = Array.isArray(payload?.conversationHistory) ? payload.conversationHistory : [];
 
   const messages: Array<{ role: string; content: string }> = [
-    {
-      role: "system",
-      content: `You are a chess game analyzer helping users access their local chess game files (PGN format).
-
-If the user hasn't provided a file path:
-1. Ask them for the full path to their PGN file or folder
-2. Remember this path for the conversation
-
-If the path is provided:
-1. Acknowledge the file location
-2. Help them search or analyze games from that file
-3. Provide game summaries or analysis as requested
-
-Always be helpful in accessing local game data.`
-    }
+    { role: "system", content: LOCAL_GAMES_AGENT_SYSTEM_PROMPT }
   ];
 
   // Add conversation history for context
@@ -2852,7 +2807,7 @@ Always be helpful in accessing local game data.`
   messages.push({ role: "user", content: question });
 
   try {
-    const answer = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages });
+    const answer = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: false });
     console.log(`[LLM] PASS 2: LOCAL_GAMES ✓`);
     return { ok: true, answer };
   } catch (err) {
@@ -2866,7 +2821,7 @@ Always be helpful in accessing local game data.`
 // Main Two-Pass Ask Question Handler
 // ============================================================================
 
-ipcMain.handle("ollama:ask-question", async (_event, payload) => {
+ipcMain.handle("llm:ask-question", async (_event, payload) => {
   const question = String(payload?.question || "").trim();
   if (!question) {
     return { ok: false, error: "Question is empty." };
@@ -2908,24 +2863,8 @@ ipcMain.handle("ollama:ask-question", async (_event, payload) => {
     console.log(`[LLM] PASS 1: Classification - Starting | Provider: ${llmProvider} | Model: ${model} | Question: "${question.substring(0, 60)}..."`);
 
     const classificationMessages = [
-      {
-        role: "system" as const,
-        content: `You are a chess request classifier. Classify the user's request into ONE category and respond with ONLY the category name.
-
-Categories:
-- ANALYSIS: User asks to analyze current position, best moves, evaluate lines, tactical analysis
-- PUZZLE: User asks to create/generate a chess puzzle or tactical problem
-- POSITION: User asks to create/generate a random chess position or specific position type
-- HISTORIC_GAME: User asks about famous/historic chess games from databases (Lichess, Chess.com)
-- LOCAL_GAMES: User asks about their own stored chess games locally on their machine
-- OTHER: Anything else not chess-related
-
-Respond with ONLY the category name, nothing else.`
-      },
-      {
-        role: "user" as const,
-        content: question
-      }
+      { role: "system" as const, content: CLASSIFIER_SYSTEM_PROMPT },
+      { role: "user" as const, content: question }
     ];
 
     const classification = await runLlmChat({
@@ -2939,7 +2878,7 @@ Respond with ONLY the category name, nothing else.`
     });
 
     const classified = classification.trim().toUpperCase();
-    const validCategories = ["ANALYSIS", "PUZZLE", "POSITION", "HISTORIC_GAME", "LOCAL_GAMES", "OTHER"];
+    const validCategories = ["ANALYSIS", "PUZZLE", "POSITION", "PLAYER_GAMES", "HISTORIC_GAME", "LOCAL_GAMES", "OTHER"];
     const requestType = validCategories.includes(classified) ? classified : "ANALYSIS";
 
     console.log(`[LLM] PASS 1: Classification Result: "${classified}" (${requestType})`);
@@ -2954,8 +2893,11 @@ Respond with ONLY the category name, nothing else.`
       case "POSITION":
         result = await handlePositionRequest(question, payload, llmProvider, llmApiKey, model, baseUrl);
         break;
+      case "PLAYER_GAMES":
+        result = await handlePlayerGamesRequest(question, llmProvider, llmApiKey, model, baseUrl);
+        break;
       case "HISTORIC_GAME":
-        result = await handleHistoricGameRequest(question, payload, llmProvider, llmApiKey, model, baseUrl);
+        result = await handleHistoricGameRequest(question, llmProvider, llmApiKey, model, baseUrl);
         break;
       case "LOCAL_GAMES":
         result = await handleLocalGamesRequest(question, payload, llmProvider, llmApiKey, model, baseUrl);
@@ -3032,6 +2974,183 @@ ipcMain.handle("analyzeBoardPosition", async (_event, { fen, depth }: { fen?: st
     return { ok: false, error: errorMsg };
   }
 });
+
+// ============================================================================
+// Database IPC handlers (Tasks 5.1–5.9)
+// ============================================================================
+
+ipcMain.handle("db:status", () => {
+  const { puzzleDbPath, puzzleVersionPath, gamesDbPath } = getDbPaths();
+  const puzzleStats = getPuzzleDbStats(puzzleDbPath);
+  const gamesStats = getGamesDbStats(gamesDbPath);
+  const puzzleVersion = fs.existsSync(puzzleVersionPath)
+    ? fs.readFileSync(puzzleVersionPath, "utf8").trim()
+    : "";
+  return {
+    puzzles: puzzleStats ? { ...puzzleStats, version: puzzleVersion } : null,
+    games: gamesStats
+  };
+});
+
+ipcMain.handle("db:download-puzzles", async (event) => {
+  const { puzzleDbPath, puzzleVersionPath } = getDbPaths();
+  const send = (phase: string, percent: number, message: string) =>
+    event.sender.send("db:progress", { phase, percent, message });
+  try {
+    if (puzzleDb) { puzzleDb.close(); puzzleDb = null; }
+    const csvText = await downloadPuzzleCsv(
+      path.dirname(puzzleDbPath),
+      (phase, pct, msg) => send(phase, pct, msg)
+    );
+    send("importing", 0, "Importing puzzles into database…");
+    puzzleDb = initPuzzleDb(puzzleDbPath);
+    const count = importPuzzlesFromCsv(puzzleDb, csvText, (pct) => send("importing", pct, `Importing… ${pct}%`));
+    console.log(`[DB] Puzzle import complete: ${count} rows`);
+    return { ok: true, count };
+  } catch (err) {
+    console.error("[DB] Puzzle download/import failed:", err);
+    return { ok: false, error: (err as Error).message };
+  }
+});
+
+ipcMain.handle("db:check-puzzle-update", async () => {
+  const { puzzleVersionPath } = getDbPaths();
+  try {
+    return await checkPuzzleUpdate(puzzleVersionPath);
+  } catch (err) {
+    return { hasUpdate: false, serverDate: "" };
+  }
+});
+
+ipcMain.handle("db:browse-games-file", async () => {
+  const result = await dialog.showOpenDialog({
+    title: "Select Lumbra's Gigabase update file",
+    filters: [
+      { name: "7z archive", extensions: ["7z"] },
+      { name: "PGN file",   extensions: ["pgn"] },
+      { name: "All files",  extensions: ["*"] },
+    ],
+    properties: ["openFile"],
+  });
+  return { filePath: result.canceled ? null : (result.filePaths[0] ?? null) };
+});
+
+ipcMain.handle("db:import-games-7z", async (event, { filePath }: { filePath: string }) => {
+  return doImportGamesFile(filePath, (phase, pct, msg) =>
+    event.sender.send("db:progress", { phase, percent: pct, message: msg })
+  );
+});
+
+ipcMain.handle("db:search-puzzles", (_event, params) => {
+  const db = getPuzzleDb();
+  if (!db) return [];
+  try {
+    return searchPuzzles(db, params || {});
+  } catch (err) {
+    console.error("[DB] Puzzle search failed:", err);
+    return [];
+  }
+});
+
+ipcMain.handle("db:search-games", (_event, params) => {
+  const db = getGamesDb();
+  if (!db) return [];
+  try {
+    return searchGames(db, params || {});
+  } catch (err) {
+    console.error("[DB] Games search failed:", err);
+    return [];
+  }
+});
+
+ipcMain.handle("db:delete-puzzles", () => {
+  const { puzzleDbPath, puzzleVersionPath } = getDbPaths();
+  try {
+    if (puzzleDb) { puzzleDb.close(); puzzleDb = null; }
+    if (fs.existsSync(puzzleDbPath)) fs.unlinkSync(puzzleDbPath);
+    if (fs.existsSync(puzzleVersionPath)) fs.unlinkSync(puzzleVersionPath);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false };
+  }
+});
+
+ipcMain.handle("db:delete-games", () => {
+  const { gamesDbPath } = getDbPaths();
+  try {
+    if (gamesDb) { gamesDb.close(); gamesDb = null; }
+    if (fs.existsSync(gamesDbPath)) fs.unlinkSync(gamesDbPath);
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+});
+}
+
+// ── Startup update prompt ─────────────────────────────────────────────────────
+async function checkGamesUpdatePrompt(win: BrowserWindow): Promise<void> {
+  const { gamesDbPath } = getDbPaths();
+  if (!fs.existsSync(gamesDbPath)) return;
+
+  const db = getGamesDb();
+  if (!db) return;
+
+  const row = db.prepare("SELECT value FROM meta WHERE key='last_update_prompt'").get() as { value: string } | undefined;
+  const lastPrompt = row?.value ? new Date(row.value) : null;
+  const daysSince = lastPrompt ? (Date.now() - lastPrompt.getTime()) / 86_400_000 : Infinity;
+  if (daysSince < 30) return;
+
+  db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('last_update_prompt', ?)").run(new Date().toISOString().slice(0, 10));
+
+  const { response: r1 } = await dialog.showMessageBox(win, {
+    type: "question",
+    title: "Monthly Games Update Available",
+    message: "Add the latest OTB games to your database?",
+    detail: "Lumbra's Gigabase publishes monthly OTB updates (ELO 2400+ games).\n\nClick \"Open website\" to download the latest file. After it downloads, come back and click \"Select file\" to import it.",
+    buttons: ["Open website & import", "Not now"],
+    defaultId: 0,
+    cancelId: 1,
+  });
+  if (r1 !== 0) return;
+
+  shell.openExternal("https://lumbrasgigabase.com/en/download-in-pgn-format-en/");
+
+  const { response: r2 } = await dialog.showMessageBox(win, {
+    type: "info",
+    title: "Select the downloaded file",
+    message: "Ready to import?",
+    detail: "Once you have downloaded the update file (.7z or .pgn), click \"Select file\" to add it to your database.",
+    buttons: ["Select file…", "Cancel"],
+    defaultId: 0,
+    cancelId: 1,
+  });
+  if (r2 !== 0) return;
+
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    title: "Select Lumbra's Gigabase update file",
+    filters: [
+      { name: "7z archive", extensions: ["7z"] },
+      { name: "PGN file",   extensions: ["pgn"] },
+      { name: "All files",  extensions: ["*"] },
+    ],
+    properties: ["openFile"],
+  });
+  if (canceled || !filePaths[0]) return;
+
+  const result = await doImportGamesFile(filePaths[0], (phase, pct, msg) =>
+    win.webContents.send("db:progress", { phase, percent: pct, message: msg })
+  );
+
+  await dialog.showMessageBox(win, {
+    type: result.ok ? "info" : "error",
+    title: result.ok ? "Import Complete" : "Import Failed",
+    message: result.ok
+      ? `Successfully added ${result.count?.toLocaleString()} games.`
+      : `Import failed: ${result.error}`,
+    buttons: ["OK"],
+  });
+
+  win.webContents.send("db:refresh-status");
 }
 
 app.whenReady().then(async () => {
@@ -3040,6 +3159,19 @@ app.whenReady().then(async () => {
   registerIpcHandlers();
   Menu.setApplicationMenu(null);
   await createWindow();
+
+  // Copy bundled games DB to userData on first run (runs in background after window opens)
+  setupBundledGamesDb().catch(err => console.error("[DB] First-run setup error:", err));
+
+  // Show monthly update prompt after the window has fully loaded (30-day throttle)
+  if (mainWindow) {
+    mainWindow.webContents.once("did-finish-load", () => {
+      // Delay 3 s so the user sees the app before any dialogs appear
+      setTimeout(() => {
+        if (mainWindow) checkGamesUpdatePrompt(mainWindow).catch(console.error);
+      }, 3000);
+    });
+  }
 
   try {
     await processManager.init();

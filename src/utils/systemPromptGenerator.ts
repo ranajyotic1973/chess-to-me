@@ -26,10 +26,10 @@ export function generateSystemPrompt(config: PromptConfig): string {
       : responseType === "Puzzle"
         ? `{
   "response_type": "Puzzle",
-  "fen": "FEN position of puzzle",
-  "solution": "moves leading to solution",
+  "fen": "valid FEN string — must be a legal chess position",
+  "solution": ["d5e4", "d7e7", "d4d5"],
   "difficulty": "easy|medium|hard",
-  "explanation": "detailed solution walkthrough",
+  "explanation": "full story: puzzle theme, why it works, and a move-by-move walkthrough for the learner",
   "hidden_solution": true
 }`
         : responseType === "Position"
@@ -59,10 +59,12 @@ export function generateSystemPrompt(config: PromptConfig): string {
 - Explain why certain moves are strongest`
       : responseType === "Puzzle"
         ? `For puzzle creation:
-- Provide a chess position (FEN) that has a clear winning or drawing solution
-- Include the solution sequence
-- Set difficulty level based on solution complexity
-- Hide explanation initially (user must solve)`
+- "fen": MUST be a valid, legal FEN string that chess.js can load
+- "solution": MUST be a JSON array of UCI moves (from-square + to-square + optional promo, e.g. ["d5e4","d7e7","d4d5"]). King d5→e4 = "d5e4". Every move must be legal given the FEN and all prior solution moves applied.
+- "explanation": Include the puzzle story/narrative, the tactical/strategic theme, AND a step-by-step walkthrough of each solution move — this is the educational content the learner reads
+- "difficulty": easy | medium | hard based on solution length and complexity
+- "hidden_solution": must be true
+- Output ONLY the JSON object — no text outside the JSON, no markdown fences`
         : responseType === "Position"
           ? `For position evaluation:
 - Describe piece placement and pawn structure

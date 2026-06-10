@@ -1,0 +1,238 @@
+import { parseLLMResponse, validateLLMResponse, formatConversationHistory } from "./llmResponseParser";
+
+// ---------------------------------------------------------------------------
+// parseLLMResponse — task 13.1 (solution array extracted from Puzzle response)
+// ---------------------------------------------------------------------------
+describe("parseLLMResponse — Puzzle solution field", () => {
+  test("extracts solution array from a valid Puzzle response (task 13.1)", () => {
+    const raw = JSON.stringify({
+      response_type: "Puzzle",
+      fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+      solution: ["d7d5", "e4d5"],
+      explanation: "Win a pawn with a surprise capture.",
+      hidden_solution: true
+    });
+
+    const result = parseLLMResponse(raw);
+    expect(result.ok).toBe(true);
+    expect(result.response_type).toBe("Puzzle");
+    expect(result.solution).toEqual(["d7d5", "e4d5"]);
+  });
+
+  test("solution is undefined when field is absent", () => {
+    const raw = JSON.stringify({
+      response_type: "Puzzle",
+      fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+      explanation: "No solution provided.",
+      hidden_solution: true
+    });
+
+    const result = parseLLMResponse(raw);
+    expect(result.solution).toBeUndefined();
+  });
+
+  test("solution is undefined when field is a string instead of array (LLM hallucination guard)", () => {
+    const raw = JSON.stringify({
+      response_type: "Puzzle",
+      fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+      solution: "d7d5 e4d5",
+      explanation: "Wrong format.",
+      hidden_solution: true
+    });
+
+    const result = parseLLMResponse(raw);
+    expect(result.solution).toBeUndefined();
+  });
+
+  test("solution is undefined when field is null", () => {
+    const raw = JSON.stringify({
+      response_type: "Puzzle",
+      fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+      solution: null,
+      explanation: "Null solution.",
+      hidden_solution: true
+    });
+
+    const result = parseLLMResponse(raw);
+    expect(result.solution).toBeUndefined();
+  });
+
+  test("accepts empty solution array", () => {
+    const raw = JSON.stringify({
+      response_type: "Puzzle",
+      fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+      solution: [],
+      explanation: "No moves.",
+      hidden_solution: true
+    });
+
+    const result = parseLLMResponse(raw);
+    expect(result.solution).toEqual([]);
+  });
+
+  test("preserves all solution moves in order", () => {
+    const moves = ["e2e4", "d7d5", "e4e5", "f7f6", "e5f6"];
+    const raw = JSON.stringify({
+      response_type: "Puzzle",
+      fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+      solution: moves,
+      explanation: "En passant puzzle.",
+      hidden_solution: true
+    });
+
+    const result = parseLLMResponse(raw);
+    expect(result.solution).toEqual(moves);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseLLMResponse — general response parsing
+// ---------------------------------------------------------------------------
+describe("parseLLMResponse — response type normalization", () => {
+  test("normalizes 'puzzle' (lowercase) to 'Puzzle'", () => {
+    const raw = JSON.stringify({ response_type: "puzzle", explanation: "Find the best move." });
+    expect(parseLLMResponse(raw).response_type).toBe("Puzzle");
+  });
+
+  test("normalizes 'analysis' to 'Analysis'", () => {
+    const raw = JSON.stringify({ response_type: "analysis", explanation: "The position is equal." });
+    expect(parseLLMResponse(raw).response_type).toBe("Analysis");
+  });
+
+  test("falls back to 'Analysis' for unknown type", () => {
+    const raw = JSON.stringify({ response_type: "unknown_type", explanation: "Something." });
+    expect(parseLLMResponse(raw).response_type).toBe("Analysis");
+  });
+
+  test("returns ok:false for invalid JSON", () => {
+    const result = parseLLMResponse("not-json");
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/Failed to parse/);
+  });
+
+  test("extracts fen field for Puzzle type (task 13.1 — FEN applied to board)", () => {
+    const fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1";
+    const raw = JSON.stringify({ response_type: "Puzzle", fen, explanation: "Solve this.", solution: ["d7d5"] });
+    expect(parseLLMResponse(raw).fen).toBe(fen);
+  });
+
+  test("hidden_solution is true when set in response", () => {
+    const raw = JSON.stringify({
+      response_type: "Puzzle",
+      fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+      solution: ["d7d5"],
+      explanation: "Hidden.",
+      hidden_solution: true
+    });
+    expect(parseLLMResponse(raw).hidden_solution).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateLLMResponse — Puzzle requires fen
+// ---------------------------------------------------------------------------
+describe("validateLLMResponse — Puzzle requirements", () => {
+  test("valid Puzzle response passes validation", () => {
+    const result = validateLLMResponse({
+      ok: true,
+      response_type: "Puzzle",
+      type: "Puzzle",
+      fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+      answer: "Find the best move for black.",
+      explanation: "Find the best move for black.",
+      solution: ["d7d5"]
+    });
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  test("Puzzle response without fen fails validation", () => {
+    const result = validateLLMResponse({
+      ok: true,
+      response_type: "Puzzle",
+      type: "Puzzle",
+      answer: "Find the best move for black.",
+      explanation: "Find the best move for black."
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("Puzzle response requires fen field");
+  });
+
+  test("flags missing response_type field", () => {
+    const result = validateLLMResponse({
+      ok: true,
+      // no response_type or type
+      answer: "Test"
+    } as any);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("Missing response_type field");
+  });
+
+  test("Game response without annotations fails validation", () => {
+    const result = validateLLMResponse({
+      ok: true,
+      response_type: "Game",
+      type: "Game",
+      answer: "Here is the game.",
+      explanation: "Here is the game."
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("Game response requires annotations field");
+  });
+
+  test("response without answer or explanation fails", () => {
+    const result = validateLLMResponse({
+      ok: true,
+      response_type: "Analysis",
+      type: "Analysis"
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("Response must include answer or explanation");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseLLMResponse — Game type
+// ---------------------------------------------------------------------------
+describe("parseLLMResponse — Game type", () => {
+  test("normalizes 'game' to 'Game'", () => {
+    const raw = JSON.stringify({ response_type: "game", explanation: "Annotated game." });
+    expect(parseLLMResponse(raw).response_type).toBe("Game");
+  });
+
+  test("extracts annotations from Game response", () => {
+    const raw = JSON.stringify({
+      response_type: "Game",
+      explanation: "Game analysis.",
+      annotations: { "1": "!!", "3": "?" }
+    });
+    const result = parseLLMResponse(raw);
+    expect(result.annotations).toEqual({ "1": "!!", "3": "?" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatConversationHistory
+// ---------------------------------------------------------------------------
+describe("formatConversationHistory", () => {
+  test("formats user and assistant turns", () => {
+    const result = formatConversationHistory([
+      { role: "user", message: "What is e4?" },
+      { role: "assistant", message: "The King's Pawn opening." }
+    ]);
+    expect(result).toContain("User: What is e4?");
+    expect(result).toContain("Assistant: The King's Pawn opening.");
+  });
+
+  test("separates turns with double newline", () => {
+    const result = formatConversationHistory([
+      { role: "user", message: "Q" },
+      { role: "assistant", message: "A" }
+    ]);
+    expect(result).toContain("\n\n");
+  });
+
+  test("handles empty array", () => {
+    expect(formatConversationHistory([])).toBe("");
+  });
+});

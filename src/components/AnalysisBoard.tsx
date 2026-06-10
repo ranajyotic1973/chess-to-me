@@ -16,6 +16,7 @@ export default function AnalysisBoard({
   runAnalysis,
   setStatusMessage,
   onBoardMove,
+  onMoveAttempt,
   size,
   onStartAnalysis,
   onStopAnalysis,
@@ -76,6 +77,9 @@ export default function AnalysisBoard({
         setCurrentFen(nextFen);
         if (isAnalysisRunning) {
           runAnalysis(nextFen);
+        }
+        if (typeof onMoveAttempt === "function") {
+          onMoveAttempt(source, target, nextFen);
         }
         if (typeof onBoardMove === "function") {
           onBoardMove(nextFen);

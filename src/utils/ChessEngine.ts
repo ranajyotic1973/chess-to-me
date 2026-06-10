@@ -12,13 +12,27 @@ export abstract class IChessEngine {
     this.process = null;
   }
 
-  abstract init(): Promise<void>;
+  // Concrete throwing implementations so incomplete subclasses get readable errors at runtime.
+  // TypeScript's `abstract` keyword is stripped at compile time (no runtime body), which would
+  // produce "not a function" errors instead of the expected "must be implemented" messages.
 
-  abstract analyze(fen: string, depth?: number, multiPv?: number): Promise<AnalysisResult>;
+  async init(): Promise<void> {
+    throw new Error("init() must be implemented by subclass");
+  }
 
-  abstract stop(): Promise<void>;
+  async analyze(_fen: string, _depth?: number, _multiPv?: number): Promise<AnalysisResult> {
+    throw new Error("analyze() must be implemented by subclass");
+  }
 
-  abstract destroy(): Promise<void>;
+  async stop(): Promise<void> {
+    throw new Error("stop() must be implemented by subclass");
+  }
 
-  abstract getStatus(): unknown;
+  async destroy(): Promise<void> {
+    throw new Error("destroy() must be implemented by subclass");
+  }
+
+  getStatus(): unknown {
+    throw new Error("getStatus() must be implemented by subclass");
+  }
 }

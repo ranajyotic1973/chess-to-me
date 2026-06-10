@@ -13,6 +13,7 @@ export function parseLLMResponse(responseText: string): LLMResponse {
       answer: parsed.answer || parsed.explanation || "",
       explanation: parsed.explanation || parsed.answer || "",
       fen: parsed.fen,
+      solution: Array.isArray(parsed.solution) ? parsed.solution : undefined,
       hidden_solution: parsed.hidden_solution || false,
       lines: parsed.lines,
       annotations: parsed.annotations,

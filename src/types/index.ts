@@ -173,6 +173,7 @@ export interface LLMResponse {
   answer?: string;
   explanation?: string;
   fen?: string;
+  solution?: string[];
   hidden_solution?: boolean;
   lines?: AnalysisLine[];
   annotations?: Record<number, "!!" | "!" | "*" | "!?" | "??">;
@@ -280,6 +281,15 @@ export interface IpcPayloads {
   getBoardFen: Record<string, never>;
   getLegalMoves: Record<string, never>;
   analyzeBoardPosition: { fen?: string; depth?: number };
+  "db:status": Record<string, never>;
+  "db:download-puzzles": Record<string, never>;
+  "db:check-puzzle-update": Record<string, never>;
+  "db:browse-games-file": Record<string, never>;
+  "db:import-games-7z": { filePath: string };
+  "db:search-puzzles": PuzzleSearchParams;
+  "db:search-games": GameSearchParams;
+  "db:delete-puzzles": Record<string, never>;
+  "db:delete-games": Record<string, never>;
 }
 
 export interface IpcResponses {
@@ -301,6 +311,84 @@ export interface IpcResponses {
   getBoardFen: { fen: string };
   getLegalMoves: { moves: string[] };
   analyzeBoardPosition: { ok: boolean; analysis?: AnalysisResult; error?: string };
+  "db:status": DbStatus;
+  "db:download-puzzles": { ok: boolean; count?: number; error?: string };
+  "db:check-puzzle-update": { hasUpdate: boolean; serverDate: string };
+  "db:browse-games-file": { filePath: string | null };
+  "db:import-games-7z": { ok: boolean; count?: number; error?: string };
+  "db:search-puzzles": PuzzleRow[];
+  "db:search-games": GameRow[];
+  "db:delete-puzzles": { ok: boolean };
+  "db:delete-games": { ok: boolean };
+}
+
+// ============================================================================
+// Database Types
+// ============================================================================
+
+export interface PuzzleRow {
+  puzzle_id: string;
+  fen: string;
+  moves: string;
+  rating: number;
+  rating_deviation: number;
+  popularity: number;
+  nb_plays: number;
+  themes: string;
+  game_url: string;
+  opening_tags: string;
+}
+
+export interface GameRow {
+  game_id: number;
+  white: string;
+  black: string;
+  result: string;
+  white_elo: number;
+  black_elo: number;
+  eco: string;
+  opening: string;
+  date: string;
+  event: string;
+  pgn_moves: string;
+}
+
+export interface PuzzleDbStats {
+  count: number;
+  sizeBytes: number;
+  version: string;
+}
+
+export interface GamesDbStats {
+  count: number;
+  sizeBytes: number;
+  source: string;
+}
+
+export interface DbStatus {
+  puzzles: PuzzleDbStats | null;
+  games: GamesDbStats | null;
+}
+
+export interface DbProgressEvent {
+  phase: "downloading" | "decompressing" | "importing";
+  percent: number;
+  message: string;
+}
+
+export interface PuzzleSearchParams {
+  theme?: string;
+  minRating?: number;
+  maxRating?: number;
+  opening?: string;
+  limit?: number;
+}
+
+export interface GameSearchParams {
+  player?: string;
+  eco?: string;
+  minElo?: number;
+  limit?: number;
 }
 
 // ============================================================================
@@ -313,6 +401,7 @@ export interface AnalysisBoardProps {
   runAnalysis: (fen: string) => void;
   setStatusMessage: (msg: string) => void;
   onBoardMove?: (fen: string) => void;
+  onMoveAttempt?: (from: string, to: string, fen: string) => void;
   size?: { width: number; height: number };
   onStartAnalysis?: () => void;
   onStopAnalysis?: () => void;
@@ -349,6 +438,8 @@ export interface ChatPanelProps {
   showSolution?: boolean;
   onShowSolution?: () => void;
   agentStatuses?: AgentProgressEvent[];
+  isExplanationLoading?: boolean;
+  puzzleNavigationMode?: boolean;
   sx?: any;
 }
 
@@ -447,6 +538,19 @@ export interface ElectronAPI {
   getBoardFen(): Promise<{ fen: string }>;
   getLegalMoves(): Promise<{ moves: string[] }>;
   analyzeBoardPosition(options: { fen?: string; depth?: number }): Promise<{ ok: boolean; analysis?: AnalysisResult; error?: string }>;
+
+  // Database
+  dbStatus(): Promise<DbStatus>;
+  dbDownloadPuzzles(): Promise<{ ok: boolean; count?: number; error?: string }>;
+  dbCheckPuzzleUpdate(): Promise<{ hasUpdate: boolean; serverDate: string }>;
+  dbBrowseGamesFile(): Promise<{ filePath: string | null }>;
+  dbImportGames7z(filePath: string): Promise<{ ok: boolean; count?: number; error?: string }>;
+  dbSearchPuzzles(params: PuzzleSearchParams): Promise<PuzzleRow[]>;
+  dbSearchGames(params: GameSearchParams): Promise<GameRow[]>;
+  dbDeletePuzzles(): Promise<{ ok: boolean }>;
+  dbDeleteGames(): Promise<{ ok: boolean }>;
+  onDbProgress(callback: (data: DbProgressEvent) => void): () => void;
+  onDbRefreshStatus(callback: () => void): () => void;
 }
 
 declare global {

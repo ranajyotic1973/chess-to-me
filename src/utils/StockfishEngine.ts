@@ -1,7 +1,9 @@
 import { IChessEngine } from "./ChessEngine";
 import type { AnalysisResult } from "../types";
 
-const electronAPI = typeof window !== "undefined" ? window.electronAPI : null;
+function getAPI() {
+  return typeof window !== "undefined" ? window.electronAPI : null;
+}
 
 export class StockfishEngine extends IChessEngine {
   name: string;
@@ -12,15 +14,24 @@ export class StockfishEngine extends IChessEngine {
   }
 
   async init(): Promise<void> {
-    // Engine is lazily initialized on first analysis call
+    const api = getAPI();
+    if (!api?.ensureEngineRunning) {
+      throw new Error("Engine initialization API unavailable");
+    }
+    try {
+      await api.ensureEngineRunning({ engine: "stockfish", path: this.path });
+    } catch (err) {
+      throw new Error(`Failed to initialize Stockfish: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   async analyze(fen: string, depth: number = 16, multiPv: number = 4): Promise<AnalysisResult> {
-    if (!electronAPI?.analyzePosition) {
+    const api = getAPI();
+    if (!api?.analyzePosition) {
       throw new Error("Analysis API unavailable");
     }
     try {
-      const response = await electronAPI.analyzePosition({
+      const response = await api.analyzePosition({
         engine: "stockfish",
         fen,
         depth,
@@ -30,14 +41,20 @@ export class StockfishEngine extends IChessEngine {
         const errorMsg = (response as any)?.error || "Analysis failed";
         throw new Error(errorMsg);
       }
-      return response.analysis;
+      return (response as any).analysis;
     } catch (err) {
       throw new Error(`Stockfish analysis error: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
   async stop(): Promise<void> {
-    // Engine lifecycle is managed by the main process
+    try {
+      const api = getAPI();
+      if (!api?.stopEngine) return;
+      await api.stopEngine({ engine: "stockfish" });
+    } catch {
+      // Engine lifecycle managed by main process; swallow stop errors
+    }
   }
 
   async destroy(): Promise<void> {

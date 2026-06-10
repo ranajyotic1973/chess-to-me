@@ -63,18 +63,20 @@ const describeMovesForLlm = ({
   }> = [];
 
   for (const move of moves || []) {
-    const moveResult = board.move({ from: move.from, to: move.to, promotion: "q" });
-    if (!moveResult) {
+    try {
+      const moveResult = board.move({ from: move.from, to: move.to, promotion: "q" });
+      if (!moveResult) break;
+      moveDetails.push({
+        colorName: colorNames[moveResult.color] || "Both sides",
+        pieceName: pieceNames[moveResult.piece] || "piece",
+        from: move.from,
+        to: move.to,
+        san: moveResult.san || `${move.from}${move.to}`,
+        isCapture: (moveResult.flags || "").includes("c")
+      });
+    } catch {
       break;
     }
-    moveDetails.push({
-      colorName: colorNames[moveResult.color] || "Both sides",
-      pieceName: pieceNames[moveResult.piece] || "piece",
-      from: move.from,
-      to: move.to,
-      san: moveResult.san || `${move.from}${move.to}`,
-      isCapture: (moveResult.flags || "").includes("c")
-    });
   }
 
   const movesLine = (moves || []).map((move) => `${move.from}${move.to}`).join(" ") || "none";
@@ -162,11 +164,13 @@ export const deriveFenSequence = (
   const sequence: string[] = [initialFen];
 
   for (const move of moves || []) {
-    const nextMove = board.move({ from: move.from, to: move.to, promotion: "q" });
-    if (!nextMove) {
+    try {
+      const nextMove = board.move({ from: move.from, to: move.to, promotion: "q" });
+      if (!nextMove) break;
+      sequence.push(board.fen());
+    } catch {
       break;
     }
-    sequence.push(board.fen());
   }
   return sequence;
 };

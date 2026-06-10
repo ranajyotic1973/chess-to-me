@@ -208,6 +208,16 @@ export default function App() {
   const [isPositionEditorOpen, setIsPositionEditorOpen] = useState<boolean>(false);
   const importFileInput = useRef<HTMLInputElement>(null);
   const userSelectedModelRef = useRef<boolean>(false);
+  // Puzzle state
+  const [puzzleSolution, setPuzzleSolution] = useState<string[]>([]);
+  const [puzzleAttemptMoves, setPuzzleAttemptMoves] = useState<string[]>([]);
+  const [puzzleStartFen, setPuzzleStartFen] = useState<string>("");
+  const [puzzleNavigationMode, setPuzzleNavigationMode] = useState<boolean>(false);
+  // Per-move explanation
+  const [isExplanationLoading, setIsExplanationLoading] = useState<boolean>(false);
+  const explanationCache = useRef<Map<string, string>>(new Map());
+  // Base FEN at the time a line was selected (correct starting point for move replay)
+  const [selectedLineBaseFen, setSelectedLineBaseFen] = useState<string>("");
 
   const fetchSystemStatus = useCallback(async (): Promise<void> => {
     if (!electronAPI?.getSystemStatus) {
@@ -561,16 +571,108 @@ export default function App() {
     setAnalysisStatus("Analysis stopped.");
   }, []);
 
+  const applyPuzzleSolutionMove = useCallback((moveIndex: number) => {
+    if (!puzzleStartFen) return;
+    if (moveIndex < 0) {
+      setCurrentFen(puzzleStartFen);
+      return;
+    }
+    const chess = new Chess();
+    try {
+      chess.load(puzzleStartFen);
+    } catch {
+      return;
+    }
+    for (let i = 0; i <= moveIndex && i < puzzleSolution.length; i++) {
+      const uci = puzzleSolution[i];
+      try {
+        // chess.js v1 requires {from, to} object — raw UCI strings throw
+        chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] || undefined });
+      } catch {
+        setStatusMessage(`Invalid solution move: ${uci}`);
+        return;
+      }
+    }
+    setCurrentFen(chess.fen());
+  }, [puzzleStartFen, puzzleSolution]);
+
+  const fetchPerMoveExplanation = useCallback(async (
+    lineIndex: number,
+    lineData: AnalysisLine,
+    baseFen: string,
+    moveIndex: number,
+    moveSan: string
+  ): Promise<void> => {
+    if (!electronAPI?.askQuestion) return;
+    setIsExplanationLoading(true);
+    try {
+      const pv = lineData.pv || lineData.line || "";
+      const response = await electronAPI.askQuestion({
+        question: `Explain the move ${moveSan} (move ${moveIndex + 1} in the line). Full line: ${pv}. Explain the tactical and strategic ideas behind this move concisely. Focus purely on chess.`,
+        fen: baseFen,
+        language: formState.explainLanguage,
+        model: getModelForProvider(formState.llmProvider, formState.ollamaModel, formState.llmModel),
+        baseUrl: getBaseUrlForProvider(formState.llmProvider, formState.ollamaBaseUrl),
+        llmProvider: formState.llmProvider,
+        llmApiKey: formState.llmApiKey
+      });
+      if (response?.ok && (response as any).answer) {
+        const text = (response as any).answer as string;
+        const cacheKey = `${baseFen}:${lineIndex}:${moveIndex}`;
+        explanationCache.current.set(cacheKey, text);
+        setQuestionResponse(text);
+      } else {
+        setQuestionResponse(`⚠️ ${(response as any)?.error || "Unable to generate explanation."}`);
+      }
+    } catch (err) {
+      setQuestionResponse(`⚠️ Explanation failed: ${(err as Error).message}`);
+    } finally {
+      setIsExplanationLoading(false);
+    }
+  }, [formState.explainLanguage, formState.ollamaModel, formState.ollamaBaseUrl, formState.llmProvider, formState.llmApiKey, formState.llmModel]);
+
   const handleSelectEngineLine = useCallback((lineIndex: number, line: AnalysisLine) => {
     setSelectedEngineLineIndex(lineIndex);
     setSelectedEngineLineData(line);
     setCurrentMoveIndex(0);
+    setSelectedLineBaseFen(currentFen);
     const lineNum = line.rank || lineIndex + 1;
     setStatusMessage(`Line ${lineNum} selected.`);
-  }, []);
+  }, [currentFen]);
 
   const handleKeyboardNavigation = useCallback((event: KeyboardEvent) => {
-    // Only navigate if a line is selected
+    // Do not intercept when the user is typing in any input/textarea
+    const activeEl = document.activeElement;
+    if (activeEl && (activeEl.tagName === "TEXTAREA" || activeEl.tagName === "INPUT")) {
+      return;
+    }
+
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") {
+      return;
+    }
+
+    // Puzzle solution navigation mode
+    if (puzzleNavigationMode && puzzleSolution.length > 0) {
+      event.preventDefault();
+      if (event.key === "ArrowRight") {
+        const next = currentMoveIndex + 1;
+        if (next > puzzleSolution.length) return;
+        setCurrentMoveIndex(next);
+        applyPuzzleSolutionMove(next - 1);
+      } else {
+        if (currentMoveIndex <= 0) return;
+        const prev = currentMoveIndex - 1;
+        setCurrentMoveIndex(prev);
+        if (prev === 0) {
+          applyPuzzleSolutionMove(-1);
+        } else {
+          applyPuzzleSolutionMove(prev - 1);
+        }
+      }
+      return;
+    }
+
+    // Analysis line navigation mode
     if (selectedEngineLineIndex === null || !selectedEngineLineData) {
       return;
     }
@@ -578,38 +680,54 @@ export default function App() {
     const pv = selectedEngineLineData.pv || selectedEngineLineData.line || "";
     const moves = pv.split(/\s+/).filter((m) => m.trim());
 
-    // Right arrow: advance to next move in the line (with boundary check)
     if (event.key === "ArrowRight") {
       event.preventDefault();
-      setCurrentMoveIndex((prev) => {
-        const nextIndex = prev + 1;
-        if (nextIndex < moves.length) {
-          return nextIndex;
-        }
-        return prev;
-      });
-    }
-    // Left arrow: go back one move in the line (with boundary check)
-    else if (event.key === "ArrowLeft") {
+      const nextIndex = currentMoveIndex + 1;
+      if (nextIndex >= moves.length) {
+        setQuestionResponse("End of line — no more moves.");
+        return;
+      }
+      setCurrentMoveIndex(nextIndex);
+      const cacheKey = `${selectedLineBaseFen}:${selectedEngineLineIndex}:${nextIndex}`;
+      const cached = explanationCache.current.get(cacheKey);
+      if (cached) {
+        setQuestionResponse(cached);
+      } else {
+        void fetchPerMoveExplanation(
+          selectedEngineLineIndex,
+          selectedEngineLineData,
+          selectedLineBaseFen,
+          nextIndex,
+          moves[nextIndex]
+        );
+      }
+    } else if (event.key === "ArrowLeft") {
       event.preventDefault();
-      setCurrentMoveIndex((prev) => {
-        if (prev > 0) {
-          return prev - 1;
-        }
-        return prev;
-      });
+      if (currentMoveIndex <= 0) return;
+      const prevIndex = currentMoveIndex - 1;
+      setCurrentMoveIndex(prevIndex);
+      const cacheKey = `${selectedLineBaseFen}:${selectedEngineLineIndex}:${prevIndex}`;
+      const cached = explanationCache.current.get(cacheKey);
+      if (cached) {
+        setQuestionResponse(cached);
+      } else {
+        setQuestionResponse("Navigate forward to generate explanation for this move.");
+      }
     }
-  }, [selectedEngineLineIndex, selectedEngineLineData]);
+  }, [
+    puzzleNavigationMode, puzzleSolution, currentMoveIndex, applyPuzzleSolutionMove,
+    selectedEngineLineIndex, selectedEngineLineData, selectedLineBaseFen, fetchPerMoveExplanation
+  ]);
 
   useEffect(() => {
-    if (selectedEngineLineIndex === null) {
+    if (selectedEngineLineIndex === null && !puzzleNavigationMode) {
       return;
     }
     document.addEventListener("keydown", handleKeyboardNavigation);
     return () => {
       document.removeEventListener("keydown", handleKeyboardNavigation);
     };
-  }, [selectedEngineLineIndex, handleKeyboardNavigation]);
+  }, [selectedEngineLineIndex, puzzleNavigationMode, handleKeyboardNavigation]);
 
   const applyLineMove = useCallback((moveIndex: number) => {
     if (!selectedEngineLineData) {
@@ -623,11 +741,19 @@ export default function App() {
     }
 
     const chess = new Chess();
-    chess.load(currentFen);
+    // Use the base FEN captured when the line was selected, not the current FEN
+    // (which changes as moves are applied — using it would cause wrong position)
+    const baseFen = selectedLineBaseFen || currentFen;
+    try {
+      chess.load(baseFen);
+    } catch {
+      setStatusMessage("Error loading base position for line replay.");
+      return;
+    }
 
     try {
       for (let i = 0; i <= moveIndex && i < moves.length; i++) {
-        const moveResult = chess.move(moves[i], { sloppy: true });
+        const moveResult = chess.move(moves[i]);
         if (!moveResult) {
           setStatusMessage(`Invalid move in line: ${moves[i]}`);
           return;
@@ -638,13 +764,54 @@ export default function App() {
     } catch (err) {
       setStatusMessage("Error applying line move.");
     }
-  }, [selectedEngineLineData, currentFen]);
+  }, [selectedEngineLineData, selectedLineBaseFen, currentFen]);
 
   useEffect(() => {
     if (selectedEngineLineIndex !== null && selectedEngineLineData) {
       applyLineMove(currentMoveIndex);
     }
   }, [currentMoveIndex, selectedEngineLineIndex, selectedEngineLineData, applyLineMove]);
+
+  const handleMoveAttempt = useCallback((from: string, to: string, _fen: string) => {
+    if (currentResponseType !== "Puzzle" || puzzleSolution.length === 0) return;
+    const uciMove = `${from}${to}`;
+    // Normalize: compare only first 4 chars (strip promotion suffix from solution if present)
+    const expectedMove = (puzzleSolution[puzzleAttemptMoves.length] || "").substring(0, 4);
+    if (uciMove !== expectedMove) {
+      setSnackbarMessage("Incorrect move! Try again or reveal the solution.");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
+      setQuestionResponse("Incorrect — try again or reveal the solution.");
+      setPuzzleAttemptMoves([]);
+      setCurrentFen(puzzleStartFen);
+      setCurrentMoveIndex(0);
+      setPuzzleNavigationMode(true);
+      return;
+    }
+    const newAttemptMoves = [...puzzleAttemptMoves, uciMove];
+    setPuzzleAttemptMoves(newAttemptMoves);
+    if (newAttemptMoves.length === puzzleSolution.length) {
+      setSnackbarMessage("Correct! Well done.");
+      setSnackbarSeverity("success");
+      setSnackbarOpen(true);
+      setQuestionResponse("Correct! Well done. You solved the puzzle!");
+      setPuzzleAttemptMoves([]);
+    }
+  }, [currentResponseType, puzzleSolution, puzzleAttemptMoves, puzzleStartFen]);
+
+  const handleShowSolution = useCallback(() => {
+    setShowSolution(true);
+    // Restore the original puzzle explanation that was overwritten by the "incorrect" message
+    const explanation = currentResponseData?.explanation || currentResponseData?.answer || "";
+    if (explanation) {
+      setQuestionResponse(explanation);
+    }
+    if (puzzleStartFen) {
+      setCurrentFen(puzzleStartFen);
+      setCurrentMoveIndex(0);
+      setPuzzleNavigationMode(true);
+    }
+  }, [puzzleStartFen, currentResponseData]);
 
   const applyPositions = useCallback(
     (positions: string[], message?: string): void => {
@@ -989,6 +1156,43 @@ export default function App() {
       return;
     }
 
+    // Puzzle mode: detect typed move sequence attempt (handle locally, no LLM call)
+    if (currentResponseType === "Puzzle" && puzzleSolution.length > 0 && puzzleStartFen) {
+      const QUESTION_WORDS = /\b(what|how|why|can|should|is|are|was|were|will|would|could|did|do|does|explain|show|tell|help|please|analyze|analysis)\b/i;
+      const UCI_MOVE = /^[a-h][1-8][a-h][1-8][qrbn]?$/i;
+      const tokens = question.split(/\s+/);
+      if (!QUESTION_WORDS.test(question) && !question.includes("?") && tokens.length > 0 && tokens.every((t) => UCI_MOVE.test(t))) {
+        const normalized = tokens.map((t) => t.toLowerCase().substring(0, 4));
+        const solutionNorm = puzzleSolution.map((m) => m.substring(0, 4));
+        const isCorrect = normalized.length === solutionNorm.length && normalized.every((m, i) => m === solutionNorm[i]);
+        if (isCorrect) {
+          setQuestionResponse("Correct! Well done. You solved the puzzle!");
+          setSnackbarMessage("Correct! Well done.");
+          setSnackbarSeverity("success");
+          setSnackbarOpen(true);
+        } else {
+          setQuestionResponse("Incorrect — try again or reveal the solution.");
+          setSnackbarMessage("Incorrect solution. Try again!");
+          setSnackbarSeverity("error");
+          setSnackbarOpen(true);
+          setPuzzleNavigationMode(true);
+          setCurrentFen(puzzleStartFen);
+          setCurrentMoveIndex(0);
+        }
+        return;
+      }
+    }
+
+    // Analysis mode: single digit selects a line (1–4)
+    if (analysisLines.length > 0 && /^[1-4]$/.test(question)) {
+      const lineIndex = parseInt(question, 10) - 1;
+      if (lineIndex >= 0 && lineIndex < analysisLines.length) {
+        handleSelectEngineLine(lineIndex, analysisLines[lineIndex]);
+        setQuestionText("");
+        return;
+      }
+    }
+
     // Clear previous agent statuses for new question
     setAgentStatuses([]);
 
@@ -1119,10 +1323,21 @@ export default function App() {
       }
 
       // Handle FEN rendering for Puzzle/Position responses
-      if ((finalResponseType === "Puzzle" || finalResponseType === "Position") && parsedResponse.fen) {
+      if (finalResponseType === "Puzzle" && parsedResponse.fen) {
         try {
-          // Validate FEN
-          const boardGame = new Chess(parsedResponse.fen);
+          new Chess(parsedResponse.fen); // validate
+          setCurrentFen(parsedResponse.fen);
+          setPuzzleStartFen(parsedResponse.fen);
+          setPuzzleSolution(Array.isArray(parsedResponse.solution) ? parsedResponse.solution : []);
+          setPuzzleAttemptMoves([]);
+          setPuzzleNavigationMode(false);
+          setCurrentMoveIndex(0);
+        } catch (fenError) {
+          setQuestionResponse("⚠️ Invalid puzzle FEN received — board not updated.");
+        }
+      } else if (finalResponseType === "Position" && parsedResponse.fen) {
+        try {
+          new Chess(parsedResponse.fen); // validate
           setCurrentFen(parsedResponse.fen);
         } catch (fenError) {
           setStatusMessage(`Invalid FEN in response: ${(fenError as Error).message}`);
@@ -1159,6 +1374,10 @@ export default function App() {
   }, [
     analysisLines,
     currentFen,
+    currentResponseType,
+    puzzleSolution,
+    puzzleStartFen,
+    handleSelectEngineLine,
     formState.analysisDepth,
     formState.explainLanguage,
     formState.ollamaBaseUrl,
@@ -1264,6 +1483,19 @@ export default function App() {
         <Stack spacing={2} alignItems="center">
           <CircularProgress color="inherit" />
           <Typography variant="h6">Loading application…</Typography>
+        </Stack>
+      </Backdrop>
+      <Backdrop
+        open={isExplanationLoading}
+        sx={{
+          position: "absolute",
+          zIndex: (theme) => theme.zIndex.drawer + 4,
+          color: "common.white"
+        }}
+      >
+        <Stack spacing={2} alignItems="center">
+          <CircularProgress color="inherit" />
+          <Typography variant="h6">Generating explanation…</Typography>
         </Stack>
       </Backdrop>
       {viewMode === "settings" || !engineStatus?.configured ? (
@@ -1541,6 +1773,7 @@ export default function App() {
                     onStartAnalysis={handleStartAnalysis}
                     onStopAnalysis={handleStopAnalysis}
                     isAnalysisRunning={isAnalysisRunning}
+                    onMoveAttempt={handleMoveAttempt}
                   />
                 </Box>
                 <Box sx={{ display: "flex", justifyContent: "space-between", pt: 1 }}>
@@ -1621,8 +1854,10 @@ export default function App() {
                   responseType={currentResponseType}
                   responseData={currentResponseData}
                   showSolution={showSolution}
-                  onShowSolution={() => setShowSolution(true)}
+                  onShowSolution={handleShowSolution}
                   agentStatuses={agentStatuses}
+                  isExplanationLoading={isExplanationLoading}
+                  puzzleNavigationMode={puzzleNavigationMode}
                   sx={{ flex: 1, minHeight: 0 }}
                 />
               </Box>

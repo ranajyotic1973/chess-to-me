@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="navy" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#131d30"/>
+      <stop offset="100%" stop-color="#0c1424"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#f5c832"/>
+      <stop offset="100%" stop-color="#b8820e"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="256" height="256" rx="36" fill="url(#navy)"/>
+
+  <!-- Queen crown silhouette (matches Staunton/Wikipedia piece) -->
+  <!-- Crown arch body — scalloped shape between the 5 stalks -->
+  <path d="
+    M 38 175
+    L 38 145
+    Q  52 115  68 108
+    Q  58  90  52  72
+    Q  60  78  68  88
+    Q  76  72  84  60
+    Q  90  74  96  84
+    Q 108  62 128  54
+    Q 148  62 160  84
+    Q 166  74 172  60
+    Q 180  72 188  88
+    Q 196  78 204  72
+    Q 198  90 188 108
+    Q 204 115 218 145
+    L 218 175
+    Q 175 192 128 194
+    Q  81 192  38 175
+    Z
+  " fill="url(#gold)"/>
+
+  <!-- 5 stalks topped with balls -->
+  <!-- Outer left ball -->
+  <circle cx="52"  cy="68" r="15" fill="url(#gold)"/>
+  <!-- Mid left ball -->
+  <circle cx="84"  cy="52" r="14" fill="url(#gold)"/>
+  <!-- Centre top ball -->
+  <circle cx="128" cy="44" r="16" fill="url(#gold)"/>
+  <!-- Mid right ball -->
+  <circle cx="172" cy="52" r="14" fill="url(#gold)"/>
+  <!-- Outer right ball -->
+  <circle cx="204" cy="68" r="15" fill="url(#gold)"/>
+
+  <!-- Specular highlights on balls -->
+  <circle cx="46"  cy="62" r="5"  fill="rgba(255,250,200,0.55)"/>
+  <circle cx="78"  cy="46" r="5"  fill="rgba(255,250,200,0.55)"/>
+  <circle cx="121" cy="38" r="6"  fill="rgba(255,250,200,0.55)"/>
+  <circle cx="166" cy="46" r="5"  fill="rgba(255,250,200,0.55)"/>
+  <circle cx="198" cy="62" r="5"  fill="rgba(255,250,200,0.55)"/>
+</svg>
