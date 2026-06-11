@@ -15,6 +15,7 @@ import {
   MenuItem,
   Paper,
   Select,
+  Slider,
   Stack,
   TextField,
   Typography,
@@ -508,6 +509,39 @@ export default function SettingsPanel({
             </Grid>
           )}
         </Grid>
+
+        {/* ── Puzzle Settings ─────────────────────────────────────────── */}
+        <Divider />
+        <Typography variant="h6" sx={{ mt: 1 }}>Puzzle Settings</Typography>
+        <Box>
+          <Typography variant="body2" gutterBottom>
+            Puzzle difficulty range (ELO rating): {formState.puzzleRatingMin ?? 1000} – {formState.puzzleRatingMax ?? 1500}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
+            Puzzles within this ELO range will be selected. Lower = easier, higher = harder.
+          </Typography>
+          <Slider
+            value={[formState.puzzleRatingMin ?? 1000, formState.puzzleRatingMax ?? 1500]}
+            onChange={(_event, value) => {
+              const [min, max] = value as number[];
+              onFieldChange("puzzleRatingMin", min);
+              onFieldChange("puzzleRatingMax", max);
+            }}
+            min={400}
+            max={3000}
+            step={50}
+            marks={[
+              { value: 400, label: "400" },
+              { value: 1000, label: "1000" },
+              { value: 1500, label: "1500" },
+              { value: 2000, label: "2000" },
+              { value: 2500, label: "2500" },
+              { value: 3000, label: "3000" }
+            ]}
+            valueLabelDisplay="auto"
+            disableSwap
+          />
+        </Box>
 
         {/* ── Databases ───────────────────────────────────────────────── */}
         <Divider />

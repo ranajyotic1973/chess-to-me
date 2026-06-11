@@ -4,7 +4,9 @@ import {
   comparePuzzleAttempt,
   makeExplanationCacheKey,
   isSingleLineNumber,
-  shouldSkipKeyboardNavigation
+  shouldSkipKeyboardNavigation,
+  canNavigateForward,
+  isBoardDraggingDisabled
 } from "./puzzleUtils";
 
 // ---------------------------------------------------------------------------
@@ -222,5 +224,39 @@ describe("shouldSkipKeyboardNavigation", () => {
 
   test("returns false when activeElement is null", () => {
     expect(shouldSkipKeyboardNavigation(null)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// canNavigateForward — forward arrow locked until solution is revealed
+// ---------------------------------------------------------------------------
+describe("canNavigateForward", () => {
+  test("returns true only when both puzzleNavigationMode and showSolution are true", () => {
+    expect(canNavigateForward(true, true)).toBe(true);
+  });
+
+  test("returns false when solution not yet revealed", () => {
+    expect(canNavigateForward(true, false)).toBe(false);
+  });
+
+  test("returns false when not in puzzle navigation mode", () => {
+    expect(canNavigateForward(false, true)).toBe(false);
+  });
+
+  test("returns false when both are false", () => {
+    expect(canNavigateForward(false, false)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isBoardDraggingDisabled — dragging disabled in puzzle mode
+// ---------------------------------------------------------------------------
+describe("isBoardDraggingDisabled", () => {
+  test("returns true in puzzle mode", () => {
+    expect(isBoardDraggingDisabled(true)).toBe(true);
+  });
+
+  test("returns false outside puzzle mode", () => {
+    expect(isBoardDraggingDisabled(false)).toBe(false);
   });
 });

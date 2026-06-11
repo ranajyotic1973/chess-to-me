@@ -34,6 +34,8 @@ interface Settings {
   llmProvider?: string;
   llmApiKey?: string;
   llmModel?: string;
+  puzzleRatingMin?: number;
+  puzzleRatingMax?: number;
   [key: string]: any;
 }
 
@@ -47,7 +49,9 @@ const DEFAULTS: Settings = {
   ollamaModel: "qwen3:8b",
   ollamaBaseUrl: "http://localhost:11434/api",
   llmProvider: "ollama",
-  llmApiKey: ""
+  llmApiKey: "",
+  puzzleRatingMin: 1000,
+  puzzleRatingMax: 1500
 };
 
 let cachedSettings: Settings | null = null;

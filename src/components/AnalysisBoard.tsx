@@ -20,7 +20,8 @@ export default function AnalysisBoard({
   size,
   onStartAnalysis,
   onStopAnalysis,
-  isAnalysisRunning = false
+  isAnalysisRunning = false,
+  puzzleMode = false
 }: AnalysisBoardProps) {
   const boardRef = useRef<HTMLDivElement>(null);
   const boardInstance = useRef<any>(null);
@@ -65,7 +66,7 @@ export default function AnalysisBoard({
     boardInstance.current?.destroy();
     chess.current.reset();
     boardInstance.current = ctor(boardRef.current, {
-      draggable: true,
+      draggable: !puzzleMode,
       pieceTheme: pieceThemePath,
       position: currentFen,
       onDrop: (source: string, target: string) => {
@@ -91,7 +92,7 @@ export default function AnalysisBoard({
       boardInstance.current?.destroy();
       boardInstance.current = null;
     };
-  }, [ctor, currentFen, onBoardMove, setCurrentFen, isAnalysisRunning, runAnalysis]);
+  }, [ctor, currentFen, onBoardMove, setCurrentFen, isAnalysisRunning, runAnalysis, puzzleMode]);
 
   useEffect(() => {
     if (!boardInstance.current) {

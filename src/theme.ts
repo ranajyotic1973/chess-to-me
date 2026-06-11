@@ -21,13 +21,13 @@ const theme = createTheme({
     }
   },
   shape: {
-    borderRadius: 14
+    borderRadius: 6
   },
   components: {
     MuiPaper: {
       styleOverrides: {
         root: {
-          borderRadius: 16,
+          borderRadius: 8,
           padding: "1rem"
         }
       }

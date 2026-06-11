@@ -31,9 +31,10 @@ describe("generateSystemPrompt — Puzzle", () => {
     expect(prompt).toContain("legal");
   });
 
-  test("prompt tells LLM not to reveal solution moves in explanation", () => {
-    // The spec requires explanation to describe theme WITHOUT revealing moves
-    expect(prompt).toMatch(/do not reveal|without revealing/i);
+  test("prompt instructs LLM to include a step-by-step walkthrough in the explanation", () => {
+    // explanation is gated by hidden_solution:true and only shown after "Reveal Solution"
+    // so it SHOULD include a full move walkthrough for educational value
+    expect(prompt.toLowerCase()).toMatch(/walkthrough|step-by-step/);
   });
 
   test("prompt requires a valid FEN string for the position", () => {

@@ -32,3 +32,19 @@ export function shouldSkipKeyboardNavigation(activeElement: Element | null): boo
   const tag = activeElement.tagName;
   return tag === "TEXTAREA" || tag === "INPUT";
 }
+
+/**
+ * Returns true when forward arrow-key navigation is allowed in puzzle mode.
+ * Forward navigation requires the solution to have been explicitly revealed.
+ */
+export function canNavigateForward(puzzleNavigationMode: boolean, showSolution: boolean): boolean {
+  return puzzleNavigationMode && showSolution;
+}
+
+/**
+ * Returns true when piece dragging should be disabled on the board.
+ * In puzzle mode children must type moves in the chat to visualise them first.
+ */
+export function isBoardDraggingDisabled(puzzleMode: boolean): boolean {
+  return puzzleMode;
+}
