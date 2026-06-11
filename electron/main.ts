@@ -3041,6 +3041,21 @@ ipcMain.handle("llm:ask-question", async (_event, payload) => {
       case "LOCAL_GAMES":
         result = await handleLocalGamesRequest(question, payload, llmProvider, llmApiKey, model, baseUrl);
         break;
+      case "OTHER":
+        result = {
+          ok: true,
+          answer: [
+            "I'm not sure what you'd like to do — I focus on chess topics. Here's what I can help with:\n",
+            "- **Chess puzzle** — *\"Give me a mate in 2\"* or *\"Find a fork puzzle\"*",
+            "- **Position analysis** — *\"Analyse this position\"* or *\"What are the best moves?\"*",
+            "- **Position setup** — *\"Show me a Sicilian opening\"* or *\"Create a rook endgame\"*",
+            "- **Player games** — *\"Show me Magnus Carlsen's games\"*",
+            "- **Historic games** — *\"Famous games from the 1972 Fischer vs Spassky match\"*",
+            "- **Local game files** — *\"Analyse my PGN file\"*\n",
+            "What would you like to explore? 🙂"
+          ].join("\n")
+        };
+        break;
       case "ANALYSIS":
       default:
         result = await handleAnalysisRequest(question, fen, lines, payload, llmProvider, llmApiKey, model, baseUrl);
