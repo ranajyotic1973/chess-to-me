@@ -3,6 +3,63 @@ import fs from "node:fs";
 import path from "node:path";
 import type { PuzzleRow, PuzzleSearchParams } from "../src/types";
 
+// Map user-friendly keywords to Lichess theme names stored in the DB
+const THEME_ALIASES: Record<string, string> = {
+  // Mate patterns
+  "mate in 1": "mateIn1",
+  "mate in 2": "mateIn2",
+  "mate in 3": "mateIn3",
+  "mate in 4": "mateIn4",
+  "mate in 5": "mateIn5",
+  "checkmate in 1": "mateIn1",
+  "checkmate in 2": "mateIn2",
+  "checkmate in 3": "mateIn3",
+  "checkmate in 4": "mateIn4",
+  "checkmate in 5": "mateIn5",
+  "smothered mate": "smotheredMate",
+  "back rank mate": "backRankMate",
+  "back rank": "backRankMate",
+  "arabian mate": "arabianMate",
+  "anastasia mate": "anastasiaMate",
+  "boden mate": "bodensMate",
+  // Tactics
+  "fork": "fork",
+  "pin": "pin",
+  "skewer": "skewer",
+  "discovered attack": "discoveredAttack",
+  "discovery": "discoveredAttack",
+  "double check": "doubleCheck",
+  "zwischenzug": "zwischenzug",
+  "in between move": "zwischenzug",
+  "interference": "interference",
+  "intermezzo": "zwischenzug",
+  "attraction": "attraction",
+  "deflection": "deflection",
+  "clearance": "clearance",
+  "sacrifice": "sacrifice",
+  "zugzwang": "zugzwang",
+  "quiet move": "quietMove",
+  "underpromotion": "underPromotion",
+  "under promotion": "underPromotion",
+  "promotion": "promotion",
+  // Phase
+  "endgame": "endgame",
+  "end game": "endgame",
+  "middlegame": "middlegame",
+  "middle game": "middlegame",
+  "opening": "opening",
+  // Evaluation
+  "winning": "crushing",
+  "crushing": "crushing",
+  "advantage": "advantage",
+  "equal": "equality",
+};
+
+export function normalizeThemeKeyword(keyword: string): string {
+  const lower = keyword.trim().toLowerCase();
+  return THEME_ALIASES[lower] ?? keyword;
+}
+
 export function initPuzzleDb(dbPath: string): Database.Database {
   const dir = path.dirname(dbPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -36,11 +93,10 @@ export function initPuzzleDb(dbPath: string): Database.Database {
 
 export function importPuzzlesFromCsv(
   db: Database.Database,
-  csvText: string,
+  csvBuffer: Buffer,
   onProgress: (pct: number) => void
 ): number {
-  const lines = csvText.split("\n");
-  const total = lines.length;
+  const total = csvBuffer.length;
   let imported = 0;
   let lastReported = 0;
 
@@ -68,24 +124,37 @@ export function importPuzzlesFromCsv(
   const BATCH_SIZE = 1000;
   let batch: string[][] = [];
   let firstLine = true;
+  let offset = 0;
 
-  for (let i = 0; i < total; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-    if (firstLine) { firstLine = false; continue; } // skip CSV header
+  // Scan the buffer line-by-line — never materialise the whole thing as a string
+  while (offset < total) {
+    let end = csvBuffer.indexOf(0x0a, offset); // 0x0a = '\n'
+    if (end === -1) end = total;
 
-    const cols = parseCSVLine(line);
-    batch.push(cols);
+    // Strip trailing \r for Windows-style line endings
+    const lineEnd = end > offset && csvBuffer[end - 1] === 0x0d ? end - 1 : end;
 
-    if (batch.length >= BATCH_SIZE) {
-      insertBatch(batch);
-      batch = [];
-      const pct = Math.floor((i / total) * 100);
-      if (pct >= lastReported + 5) {
-        onProgress(pct);
-        lastReported = pct;
+    if (lineEnd > offset) {
+      const line = csvBuffer.subarray(offset, lineEnd).toString("utf8");
+      if (firstLine) {
+        firstLine = false; // skip CSV header
+      } else {
+        const cols = parseCSVLine(line);
+        batch.push(cols);
+
+        if (batch.length >= BATCH_SIZE) {
+          insertBatch(batch);
+          batch = [];
+          const pct = Math.min(99, Math.floor((offset / total) * 100));
+          if (pct >= lastReported + 5) {
+            onProgress(pct);
+            lastReported = pct;
+          }
+        }
       }
     }
+
+    offset = end + 1;
   }
 
   if (batch.length > 0) insertBatch(batch);
@@ -113,6 +182,15 @@ function parseCSVLine(line: string): string[] {
   return cols;
 }
 
+export function hasPuzzles(db: Database.Database): boolean {
+  try {
+    const row = db.prepare("SELECT 1 FROM puzzles LIMIT 1").get();
+    return row !== undefined;
+  } catch {
+    return false;
+  }
+}
+
 export function searchPuzzles(db: Database.Database, params: PuzzleSearchParams): PuzzleRow[] {
   const { theme, minRating, maxRating, opening, limit = 5 } = params;
   const conditions: string[] = [];
@@ -120,7 +198,11 @@ export function searchPuzzles(db: Database.Database, params: PuzzleSearchParams)
 
   if (minRating !== undefined) { conditions.push("rating >= ?"); args.push(minRating); }
   if (maxRating !== undefined) { conditions.push("rating <= ?"); args.push(maxRating); }
-  if (theme) { conditions.push("themes LIKE ?"); args.push(`%${theme}%`); }
+  if (theme) {
+    const normalized = normalizeThemeKeyword(theme);
+    conditions.push("themes LIKE ?");
+    args.push(`%${normalized}%`);
+  }
   if (opening) { conditions.push("opening_tags LIKE ?"); args.push(`%${opening}%`); }
 
   // Only return puzzles with reasonable popularity

@@ -5,7 +5,7 @@ import { spawn, ChildProcess } from "node:child_process";
 import { Chess } from "chess.js";
 import type { AnalysisLine, PuzzleRow } from "../src/types";
 import { settings } from "./settings";
-import { initPuzzleDb, importPuzzlesFromCsv, searchPuzzles, getPuzzleDbStats } from "./puzzleDb";
+import { initPuzzleDb, importPuzzlesFromCsv, searchPuzzles, getPuzzleDbStats, hasPuzzles, normalizeThemeKeyword } from "./puzzleDb";
 import { initGamesDb, importPgnFile, searchGames, getGamesDbStats, rebuildFts, setGamesSource } from "./gamesDb";
 import { downloadPuzzleCsv, checkPuzzleUpdate, extract7z, findPgnFiles } from "./downloader";
 import {
@@ -16,10 +16,15 @@ import {
   PUZZLE_INTENT_SYSTEM_PROMPT,
   PUZZLE_GENERATION_SYSTEM_PROMPT,
   buildPuzzlePresentationPrompt,
+  buildThemeDescription,
+  buildIncorrectAnswerPrompt,
   POSITION_AGENT_SYSTEM_PROMPT,
   HISTORIC_GAME_AGENT_SYSTEM_PROMPT,
   LOCAL_GAMES_AGENT_SYSTEM_PROMPT,
-  PLAYER_GAMES_AGENT_SYSTEM_PROMPT
+  PLAYER_GAMES_AGENT_SYSTEM_PROMPT,
+  CLASSIFIER_RESPONSE_FORMAT,
+  PUZZLE_RESPONSE_FORMAT,
+  JSON_OBJECT_FORMAT
 } from "./agentPrompts";
 import type Database from "better-sqlite3";
 
@@ -1530,7 +1535,9 @@ ipcMain.handle("getEngineStatus", async () => {
       llmProvider: llmProvider,
       llmApiKey: llmApiKey,
       llmApiKeyLength: llmApiKey.length,
-      llmModel: llmModel // Include the provider-specific model
+      llmModel: llmModel, // Include the provider-specific model
+      puzzleRatingMin: Number(settings.get("puzzleRatingMin")) || 1000,
+      puzzleRatingMax: Number(settings.get("puzzleRatingMax")) || 1500
     }
   };
 });
@@ -1558,6 +1565,8 @@ ipcMain.handle("app:update-settings", async (_event, payload) => {
   settings.set("ollamaBaseUrl", payload?.ollamaBaseUrl || "http://localhost:11434/api");
   settings.set("selectedEngine", payload?.selectedEngine || settings.get("selectedEngine") || "lc0");
   settings.set("llmProvider", nextProvider);
+  if (payload?.puzzleRatingMin !== undefined) settings.set("puzzleRatingMin", Number(payload.puzzleRatingMin));
+  if (payload?.puzzleRatingMax !== undefined) settings.set("puzzleRatingMax", Number(payload.puzzleRatingMax));
 
   // Save model to the appropriate field based on provider
   if (nextProvider === "ollama") {
@@ -1918,10 +1927,13 @@ async function runLlmChat(params: {
   messages: Array<{ role: string; content: string }>;
   timeoutMs?: number;
   includeTools?: boolean;
+  responseFormat?: Record<string, any>;
 }): Promise<string> {
-  // Use shorter timeout for Ollama (it's usually fast), longer for cloud providers
-  const defaultTimeout = params.provider === "ollama" ? 60000 : 120000;
-  const { provider, baseUrl, model, apiKey, messages, timeoutMs = defaultTimeout, includeTools = true } = params;
+  // Reasoning models (e.g. grok-*-reasoning) can take several minutes for generation tasks.
+  // Classification calls already pass an explicit timeoutMs, so this default only affects PASS 2.
+  const isReasoningModel = params.model?.toLowerCase().includes("reasoning");
+  const defaultTimeout = params.provider === "ollama" ? 60000 : isReasoningModel ? 300000 : 120000;
+  const { provider, baseUrl, model, apiKey, messages, timeoutMs = defaultTimeout, includeTools = true, responseFormat } = params;
 
   // Validate required fields
   if (!provider || !model?.trim() || !baseUrl?.trim()) {
@@ -1970,9 +1982,9 @@ async function runLlmChat(params: {
 
     let result: string;
     if (provider === "ollama") {
-      result = await runOllamaChatInternal(baseUrl, model, messages, controller.signal);
+      result = await runOllamaChatInternal(baseUrl, model, messages, controller.signal, !!responseFormat);
     } else if (provider === "openai" || provider === "grok") {
-      result = await runOpenAICompatibleChat(provider, baseUrl, model, apiKey, messages, controller.signal, includeTools);
+      result = await runOpenAICompatibleChat(provider, baseUrl, model, apiKey, messages, controller.signal, includeTools, responseFormat);
     } else if (provider === "anthropic") {
       result = await runAnthropicChat(baseUrl, model, apiKey, messages, controller.signal, includeTools);
     } else if (provider === "gemini") {
@@ -2000,11 +2012,39 @@ async function runLlmChat(params: {
   }
 }
 
-async function runOllamaChatInternal(baseUrl: string, model: string, messages: Array<{ role: string; content: string }>, signal: AbortSignal): Promise<string> {
+/**
+ * Returns the response_format object to use for structured JSON output.
+ * - OpenAI/Grok standard models: full json_schema (strict)
+ * - OpenAI/Grok reasoning models: json_object (reasoning models don't support strict schemas)
+ * - Ollama: JSON_OBJECT_FORMAT sentinel (triggers format:"json" in request body)
+ * - Anthropic/Gemini: undefined (not yet supported; prompt-based JSON instructions used instead)
+ */
+function getStructuredOutputFormat(provider: string, model: string, schema: Record<string, any>): Record<string, any> | undefined {
+  if (provider === "ollama") return JSON_OBJECT_FORMAT;
+  if (provider === "openai" || provider === "grok") {
+    return model?.toLowerCase().includes("reasoning") ? JSON_OBJECT_FORMAT : schema;
+  }
+  return undefined;
+}
+
+/** Parse the raw LLM classification response — handles both JSON and plain-text forms. */
+function parseClassificationRaw(raw: string): string {
+  const trimmed = raw.trim();
+  try {
+    const parsed = JSON.parse(trimmed);
+    return String(parsed.category || "").toUpperCase();
+  } catch {
+    return trimmed.toUpperCase();
+  }
+}
+
+async function runOllamaChatInternal(baseUrl: string, model: string, messages: Array<{ role: string; content: string }>, signal: AbortSignal, forceJson = false): Promise<string> {
+  const body: Record<string, any> = { model, stream: false, messages };
+  if (forceJson) body.format = "json";
   const response = await fetch(`${baseUrl}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model, stream: false, messages }),
+    body: JSON.stringify(body),
     signal
   });
 
@@ -2017,7 +2057,7 @@ async function runOllamaChatInternal(baseUrl: string, model: string, messages: A
   return String(data?.message?.content || "").trim();
 }
 
-async function runOpenAICompatibleChat(provider: string, baseUrl: string, model: string, apiKey: string | undefined, messages: Array<{ role: string; content: string }>, signal: AbortSignal, includeTools: boolean = true): Promise<string> {
+async function runOpenAICompatibleChat(provider: string, baseUrl: string, model: string, apiKey: string | undefined, messages: Array<{ role: string; content: string }>, signal: AbortSignal, includeTools: boolean = true, responseFormat?: Record<string, any>): Promise<string> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (apiKey) {
     headers["Authorization"] = `Bearer ${apiKey.trim()}`;
@@ -2029,6 +2069,10 @@ async function runOpenAICompatibleChat(provider: string, baseUrl: string, model:
   // Tool calling loop - handle up to 3 rounds of tool calls
   for (let round = 0; round < 3; round++) {
     const requestBody: Record<string, any> = { model, messages: conversationMessages };
+
+    if (responseFormat) {
+      requestBody.response_format = responseFormat;
+    }
 
     if (includeTools) {
       const toolDefs = getLlmToolDefinitions();
@@ -2347,10 +2391,11 @@ ipcMain.handle("llm:classify-question", async (_event, payload) => {
       apiKey: llmApiKey,
       messages: classificationPrompt,
       timeoutMs: llmProvider === "ollama" ? 60000 : 120000,
-      includeTools: false
+      includeTools: false,
+      responseFormat: getStructuredOutputFormat(llmProvider, model, CLASSIFIER_RESPONSE_FORMAT)
     });
 
-    const type = classification.trim().toUpperCase() as "ANALYSIS" | "PUZZLE" | "POSITION" | "PLAYER_GAMES" | "HISTORIC_GAME" | "LOCAL_GAMES" | "OTHER";
+    const type = parseClassificationRaw(classification) as "ANALYSIS" | "PUZZLE" | "POSITION" | "PLAYER_GAMES" | "HISTORIC_GAME" | "LOCAL_GAMES" | "OTHER";
     const validTypes = ["ANALYSIS", "PUZZLE", "POSITION", "PLAYER_GAMES", "HISTORIC_GAME", "LOCAL_GAMES", "OTHER"];
     const responseType = validTypes.includes(type) ? type : "OTHER";
 
@@ -2565,19 +2610,29 @@ IMPORTANT:
 
 async function handlePuzzleRequest(question: string, payload: any, llmProvider: string, llmApiKey: string, model: string, baseUrl: string): Promise<{ ok: boolean; answer?: string; error?: string }> {
   console.log(`[LLM] PASS 2: PUZZLE - Checking database first`);
+  const puzzleRatingMin = Number(payload?.puzzleRatingMin ?? settings.get("puzzleRatingMin") ?? 1000);
+  const puzzleRatingMax = Number(payload?.puzzleRatingMax ?? settings.get("puzzleRatingMax") ?? 1500);
 
   // Parse, validate FEN, normalize solution moves (UCI or SAN → UCI), stamp required fields
   const tryParseAndValidate = (response: string): string | null => {
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return null;
     let data: any;
-    try { data = JSON.parse(jsonMatch[0]); } catch { return null; }
+    // Structured output gives clean JSON; fall back to regex extraction for plain-text responses
+    try {
+      data = JSON.parse(response.trim());
+    } catch {
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return null;
+      try { data = JSON.parse(jsonMatch[0]); } catch { return null; }
+    }
 
     if (!data.fen) return null;
-    try { const testChess = new Chess(); testChess.load(data.fen); } catch { return null; }
+    const fenBoard = new Chess();
+    try { fenBoard.load(data.fen); } catch { return null; }
 
     data.response_type = "Puzzle";
     data.hidden_solution = true;
+    // Derive side_to_move from the FEN — never trust the LLM for this
+    data.side_to_move = fenBoard.turn() === "w" ? "White" : "Black";
 
     let rawMoves: string[] = [];
     if (Array.isArray(data.solution)) rawMoves = data.solution.map(String);
@@ -2586,20 +2641,22 @@ async function handlePuzzleRequest(question: string, payload: any, llmProvider: 
     const board = new Chess();
     try { board.load(data.fen); } catch { board.reset(); }
     const validUci: string[] = [];
+    const validSan: string[] = [];
     for (const raw of rawMoves) {
       const move = raw.trim().toLowerCase();
       if (/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move)) {
         try {
           const result = board.move({ from: move.slice(0, 2), to: move.slice(2, 4), promotion: move[4] || undefined });
-          if (result) { validUci.push(result.from + result.to + (result.promotion || "")); continue; }
+          if (result) { validUci.push(result.from + result.to + (result.promotion || "")); validSan.push(result.san); continue; }
         } catch { /* fall through */ }
       }
       try {
         const result = board.move(raw);
-        if (result) { validUci.push(result.from + result.to + (result.promotion || "")); continue; }
+        if (result) { validUci.push(result.from + result.to + (result.promotion || "")); validSan.push(result.san); continue; }
       } catch { break; }
     }
     data.solution = validUci;
+    data.solution_san = validSan;
     console.log(`[LLM] PASS 2: PUZZLE ✓ Valid puzzle | FEN: ${data.fen} | Moves: ${validUci.join(" ")}`);
     return JSON.stringify(data);
   };
@@ -2620,7 +2677,10 @@ async function handlePuzzleRequest(question: string, payload: any, llmProvider: 
     } catch {
       console.warn("[DB] Intent extraction failed, using empty params");
     }
-    console.log("[DB] Puzzle intent:", searchParams);
+    // Apply settings rating range as defaults — user's explicit question overrides them
+    if (searchParams.minRating === undefined) searchParams.minRating = puzzleRatingMin;
+    if (searchParams.maxRating === undefined) searchParams.maxRating = puzzleRatingMax;
+    console.log("[DB] Puzzle intent (with rating defaults applied):", searchParams);
 
     // Step 2: Query DB
     try {
@@ -2628,18 +2688,91 @@ async function handlePuzzleRequest(question: string, payload: any, llmProvider: 
       const dbPuzzle = results[0];
       if (dbPuzzle) {
         console.log(`[DB] Found puzzle ${dbPuzzle.puzzle_id} (rating ${dbPuzzle.rating})`);
-        // Step 3: LLM wraps DB puzzle in story/explanation
-        const presentMessages = [
-          { role: "system", content: buildPuzzlePresentationPrompt(dbPuzzle) },
-          { role: "user", content: `Present this chess puzzle with an engaging story and step-by-step walkthrough.` }
-        ];
-        const presentResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages: presentMessages, includeTools: false });
-        const parsed = tryParseAndValidate(presentResponse);
-        if (parsed) {
-          console.log("[DB] Puzzle presentation succeeded");
-          return { ok: true, answer: parsed };
+
+        // Step 3: Apply the initial opponent move (moves[0]) to get the puzzle start FEN
+        const allMoves = dbPuzzle.moves.split(" ").filter(Boolean);
+        if (allMoves.length < 2) {
+          console.warn("[DB] Puzzle has fewer than 2 moves, skipping");
+        } else {
+          const setupBoard = new Chess();
+          try { setupBoard.load(dbPuzzle.fen); } catch { console.warn("[DB] Invalid FEN, skipping"); }
+          const setupUci = allMoves[0];
+          const setupResult = setupBoard.move({
+            from: setupUci.slice(0, 2), to: setupUci.slice(2, 4),
+            promotion: setupUci[4] as "q" | "r" | "b" | "n" | undefined
+          });
+          if (!setupResult) {
+            console.warn("[DB] Setup move invalid, skipping");
+          } else {
+            const puzzleFen = setupBoard.fen();
+            let solutionMoves = allMoves.slice(1); // remaining moves including opponent responses
+
+            // Step 4: Run engine analysis on the puzzle position to verify / get the solution
+            // (non-blocking — falls back to DB moves if engine not configured)
+            try {
+              const engineResult = await performAnalysis(
+                settings.get("selectedEngine") || "stockfish",
+                puzzleFen,
+                15, // depth — fast enough for a single line
+                1   // single PV
+              );
+              if (engineResult.ok && engineResult.analysis?.lines?.[0]) {
+                const pv: string = engineResult.analysis.lines[0].pv ||
+                  engineResult.analysis.lines[0].line || "";
+                const pvMoves = pv.trim().split(/\s+/).filter(Boolean);
+                if (pvMoves.length > 0) {
+                  // Cap engine line to DB solution length (avoid going beyond the puzzle)
+                  solutionMoves = pvMoves.slice(0, solutionMoves.length);
+                  console.log(`[DB] Engine solution: ${solutionMoves.join(" ")}`);
+                }
+              }
+            } catch (engineErr) {
+              console.warn("[DB] Engine analysis unavailable, using DB moves:", (engineErr as Error).message);
+            }
+
+            // Step 5: Validate and convert solution to UCI + SAN
+            const solutionBoard = new Chess();
+            solutionBoard.load(puzzleFen);
+            const validUci: string[] = [];
+            const validSan: string[] = [];
+            for (const uci of solutionMoves) {
+              try {
+                const r = solutionBoard.move({
+                  from: uci.slice(0, 2), to: uci.slice(2, 4),
+                  promotion: uci[4] as "q" | "r" | "b" | "n" | undefined
+                });
+                if (!r) break;
+                validUci.push(r.from + r.to + (r.promotion ?? ""));
+                validSan.push(r.san);
+              } catch { break; }
+            }
+
+            if (validUci.length > 0) {
+              const difficulty = dbPuzzle.rating < 1200 ? "easy" : dbPuzzle.rating < 1800 ? "medium" : "hard";
+              const themeDesc = buildThemeDescription(dbPuzzle.themes || "");
+              const openingHint = dbPuzzle.opening_tags ? ` Opening: ${dbPuzzle.opening_tags}.` : "";
+              const response = JSON.stringify({
+                response_type: "Puzzle",
+                fen: puzzleFen,
+                setup_move: setupUci,
+                setup_move_san: setupResult.san,
+                solution: validUci,
+                solution_san: validSan,
+                difficulty,
+                explanation: `${themeDesc}${openingHint} Type your moves to solve! (Puzzle rating: ${dbPuzzle.rating})`,
+                hidden_solution: true,
+                side_to_move: setupBoard.turn() === "w" ? "White" : "Black",
+                puzzle_id: dbPuzzle.puzzle_id,
+                themes: dbPuzzle.themes || "",
+                rating: dbPuzzle.rating,
+                opening_tags: dbPuzzle.opening_tags || "",
+              });
+              console.log(`[DB] Puzzle ready — FEN: ${puzzleFen} | Moves: ${validUci.join(" ")}`);
+              return { ok: true, answer: response };
+            }
+            console.warn("[DB] Solution validation failed, falling back to LLM generation");
+          }
         }
-        console.warn("[DB] Presentation parse failed, falling back to LLM generation");
       } else {
         console.log("[DB] No matching puzzle found in DB, falling back to LLM generation");
       }
@@ -2650,13 +2783,16 @@ async function handlePuzzleRequest(question: string, payload: any, llmProvider: 
 
   // LLM generation fallback (when DB miss or DB absent)
   console.log(`[LLM] PASS 2: PUZZLE - Generating chess puzzle via LLM`);
+  const ratingContext = `Target puzzle difficulty: ELO rating ${puzzleRatingMin}–${puzzleRatingMax}. `;
   const messages: Array<{ role: string; content: string }> = [
     { role: "system", content: PUZZLE_GENERATION_SYSTEM_PROMPT },
-    { role: "user", content: question }
+    { role: "user", content: ratingContext + question }
   ];
 
+  const puzzleFormat = getStructuredOutputFormat(llmProvider, model, PUZZLE_RESPONSE_FORMAT);
+
   try {
-    const firstResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: false });
+    const firstResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: false, responseFormat: puzzleFormat });
     const firstParsed = tryParseAndValidate(firstResponse);
     if (firstParsed) return { ok: true, answer: firstParsed };
 
@@ -2670,7 +2806,7 @@ async function handlePuzzleRequest(question: string, payload: any, llmProvider: 
         `"difficulty", "explanation" (story + move walkthrough), "hidden_solution"=true.`
     });
 
-    const retryResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: false });
+    const retryResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: false, responseFormat: puzzleFormat });
     const retryParsed = tryParseAndValidate(retryResponse);
     if (retryParsed) {
       console.log(`[LLM] PASS 2: PUZZLE ✓ Retry succeeded`);
@@ -2874,10 +3010,11 @@ ipcMain.handle("llm:ask-question", async (_event, payload) => {
       apiKey: llmApiKey,
       messages: classificationMessages,
       timeoutMs: llmProvider === "ollama" ? 60000 : 120000,
-      includeTools: false
+      includeTools: false,
+      responseFormat: getStructuredOutputFormat(llmProvider, model, CLASSIFIER_RESPONSE_FORMAT)
     });
 
-    const classified = classification.trim().toUpperCase();
+    const classified = parseClassificationRaw(classification);
     const validCategories = ["ANALYSIS", "PUZZLE", "POSITION", "PLAYER_GAMES", "HISTORIC_GAME", "LOCAL_GAMES", "OTHER"];
     const requestType = validCategories.includes(classified) ? classified : "ANALYSIS";
 
@@ -2996,6 +3133,15 @@ ipcMain.handle("db:download-puzzles", async (event) => {
   const { puzzleDbPath, puzzleVersionPath } = getDbPaths();
   const send = (phase: string, percent: number, message: string) =>
     event.sender.send("db:progress", { phase, percent, message });
+
+  // Skip download if DB already has puzzles — user must use Re-download to refresh
+  const existingDb = getPuzzleDb();
+  if (existingDb && hasPuzzles(existingDb)) {
+    const row = existingDb.prepare("SELECT COUNT(*) as cnt FROM puzzles").get() as { cnt: number };
+    send("complete", 100, `Database already contains ${row.cnt.toLocaleString()} puzzles. Use Re-download to update.`);
+    return { ok: true, count: row.cnt, skipped: true };
+  }
+
   try {
     if (puzzleDb) { puzzleDb.close(); puzzleDb = null; }
     const csvText = await downloadPuzzleCsv(
@@ -3049,6 +3195,51 @@ ipcMain.handle("db:search-puzzles", (_event, params) => {
   } catch (err) {
     console.error("[DB] Puzzle search failed:", err);
     return [];
+  }
+});
+
+ipcMain.handle("puzzle:explain-incorrect", async (_event, payload) => {
+  const {
+    puzzleFen, solutionUci, solutionSan, userMovesUci, userMovesSan,
+    themes, difficulty, rating,
+    llmProvider, llmApiKey, model, baseUrl
+  } = payload || {};
+
+  if (!puzzleFen || !solutionUci?.length) {
+    return { ok: false, error: "Missing puzzle data." };
+  }
+
+  const provider = llmProvider || settings.get("llmProvider") || "ollama";
+  const apiKey = llmApiKey || settings.get("llmApiKey") || "";
+  const llmModel = model || settings.get("llmModel") || settings.get("ollamaModel") || "";
+  const llmBaseUrl = baseUrl || settings.get("ollamaBaseUrl") || "http://localhost:11434";
+
+  const systemPrompt = buildIncorrectAnswerPrompt(
+    puzzleFen,
+    solutionUci ?? [],
+    solutionSan ?? [],
+    userMovesUci ?? [],
+    userMovesSan ?? [],
+    themes ?? "",
+    difficulty ?? "medium",
+    Number(rating) || 1200
+  );
+
+  try {
+    const response = await runLlmChat({
+      provider,
+      baseUrl: llmBaseUrl,
+      model: llmModel,
+      apiKey,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: "Explain why my answer was wrong and what the correct solution is." }
+      ],
+      includeTools: false
+    });
+    return { ok: true, explanation: response };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
   }
 });
 

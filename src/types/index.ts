@@ -76,6 +76,8 @@ export interface AppSettings {
   llmProvider: "ollama" | "openai" | "anthropic" | "gemini" | "grok";
   llmApiKey: string;
   llmModel?: string; // For non-Ollama providers (openai, anthropic, gemini, grok)
+  puzzleRatingMin?: number;
+  puzzleRatingMax?: number;
 }
 
 export type FormState = AppSettings;
@@ -104,6 +106,8 @@ export interface EngineStatus {
     llmApiKey?: string;
     llmApiKeyLength: number;
     llmModel?: string; // For non-Ollama providers
+    puzzleRatingMin?: number;
+    puzzleRatingMax?: number;
   };
 }
 
@@ -174,10 +178,20 @@ export interface LLMResponse {
   explanation?: string;
   fen?: string;
   solution?: string[];
+  solution_san?: string[];
+  side_to_move?: string;
   hidden_solution?: boolean;
   lines?: AnalysisLine[];
   annotations?: Record<number, "!!" | "!" | "*" | "!?" | "??">;
   error?: string;
+  // Puzzle metadata (from DB puzzles)
+  themes?: string;
+  difficulty?: string;
+  rating?: number;
+  opening_tags?: string;
+  puzzle_id?: string;
+  setup_move?: string;
+  setup_move_san?: string;
 }
 
 export interface OllamaMessage {
@@ -290,6 +304,20 @@ export interface IpcPayloads {
   "db:search-games": GameSearchParams;
   "db:delete-puzzles": Record<string, never>;
   "db:delete-games": Record<string, never>;
+  "puzzle:explain-incorrect": {
+    puzzleFen: string;
+    solutionUci: string[];
+    solutionSan: string[];
+    userMovesUci: string[];
+    userMovesSan: string[];
+    themes?: string;
+    difficulty?: string;
+    rating?: number;
+    llmProvider?: string;
+    llmApiKey?: string;
+    model?: string;
+    baseUrl?: string;
+  };
 }
 
 export interface IpcResponses {
@@ -320,6 +348,7 @@ export interface IpcResponses {
   "db:search-games": GameRow[];
   "db:delete-puzzles": { ok: boolean };
   "db:delete-games": { ok: boolean };
+  "puzzle:explain-incorrect": { ok: boolean; explanation?: string; error?: string };
 }
 
 // ============================================================================
@@ -406,6 +435,7 @@ export interface AnalysisBoardProps {
   onStartAnalysis?: () => void;
   onStopAnalysis?: () => void;
   isAnalysisRunning?: boolean;
+  puzzleMode?: boolean;
 }
 
 export interface StatusBannerProps {
@@ -437,6 +467,8 @@ export interface ChatPanelProps {
   responseData?: Record<string, any>;
   showSolution?: boolean;
   onShowSolution?: () => void;
+  puzzleIncorrect?: boolean;
+  onRetryPuzzle?: () => void;
   agentStatuses?: AgentProgressEvent[];
   isExplanationLoading?: boolean;
   puzzleNavigationMode?: boolean;
@@ -513,6 +545,9 @@ export interface ElectronAPI {
     systemPrompt?: string;
     llmProvider?: "ollama" | "openai" | "anthropic" | "gemini" | "grok";
     llmApiKey?: string;
+    puzzleRatingMin?: number;
+    puzzleRatingMax?: number;
+    conversationHistory?: Array<{ role: string; message: string }>;
   }): Promise<{ ok: true; answer: string; linesUsed: number } | { ok: false; error: string }>;
 
   // Logging
@@ -551,6 +586,7 @@ export interface ElectronAPI {
   dbDeleteGames(): Promise<{ ok: boolean }>;
   onDbProgress(callback: (data: DbProgressEvent) => void): () => void;
   onDbRefreshStatus(callback: () => void): () => void;
+  puzzleExplainIncorrect(payload: IpcPayloads["puzzle:explain-incorrect"]): Promise<{ ok: boolean; explanation?: string; error?: string }>;
 }
 
 declare global {

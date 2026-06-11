@@ -1,21 +1,66 @@
 import type { PuzzleRow } from "../src/types";
 
 // ============================================================================
+// Structured output schemas (OpenAI / Grok json_schema format)
+// ============================================================================
+
+export const CLASSIFIER_RESPONSE_FORMAT = {
+  type: "json_schema",
+  json_schema: {
+    name: "request_classification",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        category: {
+          type: "string",
+          enum: ["ANALYSIS", "PUZZLE", "POSITION", "PLAYER_GAMES", "HISTORIC_GAME", "LOCAL_GAMES", "OTHER"]
+        }
+      },
+      required: ["category"],
+      additionalProperties: false
+    }
+  }
+};
+
+export const PUZZLE_RESPONSE_FORMAT = {
+  type: "json_schema",
+  json_schema: {
+    name: "chess_puzzle",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        response_type: { type: "string", enum: ["Puzzle"] },
+        fen: { type: "string" },
+        solution: { type: "array", items: { type: "string" } },
+        solution_san: { type: "array", items: { type: "string" } },
+        difficulty: { type: "string", enum: ["easy", "medium", "hard"] },
+        explanation: { type: "string" },
+        hidden_solution: { type: "boolean" }
+      },
+      required: ["response_type", "fen", "solution", "solution_san", "difficulty", "explanation", "hidden_solution"],
+      additionalProperties: false
+    }
+  }
+};
+
+// json_object format — for providers/models that don't support full json_schema
+export const JSON_OBJECT_FORMAT = { type: "json_object" };
+
+// ============================================================================
 // Classifier
 // ============================================================================
 
-export const CLASSIFIER_SYSTEM_PROMPT = `You are a chess request classifier. Respond with ONLY the category name.
-
-Categories:
-- ANALYSIS: Analyze a chess position, best moves, evaluate lines, tactical analysis
-- PUZZLE: Create or generate a chess puzzle or tactical problem
-- POSITION: Create or generate a chess position
-- PLAYER_GAMES: Find or show games by a specific named chess player (e.g. "show Carlsen's games", "Kasparov Sicilian")
-- HISTORIC_GAME: Famous or historic chess games from tournaments or chess history
-- LOCAL_GAMES: User's own local chess game files on their machine
-- OTHER: Not chess-related
-
-Respond with ONLY one category name.`;
+export const CLASSIFIER_SYSTEM_PROMPT =
+  `Classify the chess request into exactly one category:
+- ANALYSIS: position evaluation, best moves, engine lines, tactical analysis
+- PUZZLE: create or generate a chess puzzle or tactical problem
+- POSITION: create or describe a chess position
+- PLAYER_GAMES: games by a specific named player (e.g. "Carlsen's games")
+- HISTORIC_GAME: famous or historical games from tournaments
+- LOCAL_GAMES: user's own local chess game files
+- OTHER: not chess-related`;
 
 // ============================================================================
 // Analysis agents
@@ -52,41 +97,120 @@ Markdown bullet points. Concise — 1-2 lines per point. Piece glyphs ♔♕♖�
 
 export const PUZZLE_INTENT_SYSTEM_PROMPT =
   `Extract chess puzzle search parameters from a user question.
-Return ONLY a JSON object with these optional fields:
+Return a JSON object with these optional fields:
 {"theme":"<fork|pin|skewer|discoveredAttack|mateIn1|mateIn2|mateIn3|mateIn4|mateIn5|backRankMate|smotheredMate|sacrifice|attraction|deflection|clearance|interference|zugzwang|endgame|middlegame|opening|mate|advantage|crushing|veryLong|short|long>","minRating":<int>,"maxRating":<int>,"opening":"<name fragment>"}
-Single rating → minRating=rating-200, maxRating=rating+200. No constraints → {}.
-Output ONLY the JSON.`;
+Single rating → minRating=rating-200, maxRating=rating+200. No constraints → {}.`;
 
 export const PUZZLE_GENERATION_SYSTEM_PROMPT =
-  `You are a chess puzzle generator. Respond with ONLY a valid JSON object — no markdown, no surrounding text.
+  `Generate a legal chess puzzle with these fields:
+- fen: a valid FEN position loadable by chess.js
+- solution: array of legal UCI moves from the FEN (e.g. ["d5e4","e5e6","e7e8q"])
+- solution_san: same moves in Standard Algebraic Notation (e.g. ["Nxe4","e6","e8=Q"])
+- difficulty: "easy", "medium", or "hard"
+- explanation: position story, tactical theme, and step-by-step walkthrough using SAN notation
+- hidden_solution: always true
 
-Required structure:
-{"response_type":"Puzzle","fen":"<valid FEN>","solution":["<uci-1>","<uci-2>"],"difficulty":"easy|medium|hard","explanation":"<story + move-by-move walkthrough>","hidden_solution":true}
+Every solution move must be legal given the FEN and all prior moves.`;
 
-Rules:
-1. fen must be loadable by chess.js
-2. solution: UCI array (from+to+optional promo), e.g. ["d5e4","e5e6","e7e8q"]
-3. Every move must be legal given the FEN and all prior solution moves
-4. explanation: position story, tactical theme, step-by-step move walkthrough
-Output ONLY the JSON object.`;
+/** Map raw Lichess theme tags to child-friendly descriptions */
+const THEME_LABELS: Record<string, string> = {
+  mateIn1: "Find checkmate in 1 move!",
+  mateIn2: "Find checkmate in 2 moves!",
+  mateIn3: "Find checkmate in 3 moves!",
+  mateIn4: "Find checkmate in 4 moves!",
+  mateIn5: "Find checkmate in 5 moves!",
+  mate: "Find checkmate!",
+  fork: "There's a fork in this position — can you find it?",
+  pin: "Look for a pin!",
+  skewer: "There's a skewer here!",
+  discoveredAttack: "Can you spot the discovered attack?",
+  doubleCheck: "Double check is in the air!",
+  zugzwang: "This is a zugzwang position — every move hurts!",
+  sacrifice: "A sacrifice wins here!",
+  attraction: "Can you lure the enemy king into danger?",
+  deflection: "Deflect the defender!",
+  clearance: "Clear the way!",
+  interference: "Cut off the defender!",
+  smotheredMate: "The king is smothered — find the finish!",
+  backRankMate: "The back rank is weak!",
+  endgame: "An endgame puzzle — technique wins!",
+  middlegame: "Your turn in the middlegame!",
+  promotion: "Can you promote a pawn?",
+};
 
+/**
+ * Build a child-friendly introduction line from a puzzle's theme tags.
+ * E.g. "mateIn2 fork" → "Find checkmate in 2 moves! There's also a fork."
+ */
+export function buildThemeDescription(themes: string): string {
+  if (!themes) return "Your turn! Find the best move.";
+  const tags = themes.split(/\s+/);
+  // Pick the most specific / dramatic theme first
+  const priority = ["mateIn1","mateIn2","mateIn3","mateIn4","mateIn5","mate",
+    "smotheredMate","backRankMate","fork","pin","skewer","discoveredAttack",
+    "doubleCheck","zugzwang","sacrifice","attraction","deflection","clearance",
+    "interference","endgame","middlegame","promotion"];
+  for (const p of priority) {
+    if (tags.includes(p) && THEME_LABELS[p]) return THEME_LABELS[p];
+  }
+  return "Your turn! Find the best move.";
+}
+
+/**
+ * Build the system prompt used when the child answers a DB puzzle incorrectly
+ * and we need the LLM to explain the correct solution in a kind, encouraging way.
+ */
+export function buildIncorrectAnswerPrompt(
+  puzzleFen: string,
+  solutionUci: string[],
+  solutionSan: string[],
+  userMovesUci: string[],
+  userMovesSan: string[],
+  themes: string,
+  difficulty: string,
+  rating: number
+): string {
+  const solutionLine = solutionSan.length > 0
+    ? solutionSan.join(", ")
+    : solutionUci.join(", ");
+  const userLine = userMovesSan.length > 0
+    ? userMovesSan.join(", ")
+    : (userMovesUci.length > 0 ? userMovesUci.join(", ") : "an incorrect move");
+
+  return `You are a kind chess coach for children aged 4–18.
+The child just tried to solve a puzzle but answered incorrectly.
+
+Puzzle FEN: ${puzzleFen}
+Puzzle themes: ${themes}
+Difficulty: ${difficulty} (rating ${rating})
+Correct solution: ${solutionLine}
+Child's answer: ${userLine}
+
+Write a warm, encouraging response (3–5 sentences, no headers):
+1. Acknowledge their effort positively.
+2. Briefly explain why their move(s) didn't work (1 sentence, simple language).
+3. Walk through the correct solution move-by-move in SAN notation, explaining the idea behind each move simply.
+4. End with an encouraging note to try another puzzle.
+Never use intimidating language. Use piece symbols ♔♕♖♗♘♙♚♛♜♝♞♟ where helpful.`;
+}
+
+/** @deprecated  Use formatDbPuzzleResponse for new code — LLM presentation is no longer used for DB puzzles */
 export function buildPuzzlePresentationPrompt(puzzle: PuzzleRow): string {
   const moves = puzzle.moves.split(" ");
   const moveList = moves.map(m => `"${m}"`).join(", ");
   const difficulty = puzzle.rating < 1200 ? "easy" : puzzle.rating < 1800 ? "medium" : "hard";
-  return `You are a chess puzzle presenter. Respond with ONLY a valid JSON object — no text, no markdown.
+  return `Present this chess puzzle as a JSON object with these fields:
+- response_type: "Puzzle"
+- fen: "${puzzle.fen}" (use exactly as given)
+- solution: [${moveList}] (use exactly as given)
+- solution_san: same moves in Standard Algebraic Notation
+- difficulty: "${difficulty}"
+- explanation: position story and step-by-step move walkthrough
+- hidden_solution: true
 
-Puzzle data (use EXACTLY as given):
-FEN: ${puzzle.fen}
-Solution: [${moveList}]
 Themes: ${puzzle.themes}
 Opening: ${puzzle.opening_tags}
-Rating: ${puzzle.rating}
-
-Required structure:
-{"response_type":"Puzzle","fen":"${puzzle.fen}","solution":[${moveList}],"difficulty":"${difficulty}","explanation":"<position story + step-by-step move walkthrough>","hidden_solution":true}
-
-Output ONLY the JSON object.`;
+Rating: ${puzzle.rating}`;
 }
 
 // ============================================================================

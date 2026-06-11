@@ -43,7 +43,6 @@ import {
   validateLLMResponse,
   formatConversationHistory
 } from "./utils/llmResponseParser";
-import { generateSystemPrompt } from "./utils/systemPromptGenerator";
 import {
   loadConversationHistory,
   saveConversationHistory,
@@ -52,7 +51,8 @@ import {
   clearConversationHistory
 } from "./utils/conversationMemory";
 import { loadGameMemory, saveGameMemory, addGameToMemory, parseAnnotationsFromResponse } from "./utils/gameMemory";
-import { determineRequestType, quickDetectAnalysisRequired } from "./utils/twoStepLLMProcessing";
+import { quickDetectAnalysisRequired } from "./utils/twoStepLLMProcessing";
+import { parseChessNotation, uciSequenceToSan, looksLikeMoveAttempt } from "./utils/chessNotationParser";
 import type {
   AnalysisEntry,
   AnalysisLine,
@@ -78,7 +78,9 @@ const DEFAULT_FORM: AppSettings = {
   ollamaBaseUrl: "http://localhost:11434/api",
   llmProvider: "ollama" as const,
   llmApiKey: "",
-  llmModel: "grok-3" // Default model for non-Ollama providers
+  llmModel: "grok-3", // Default model for non-Ollama providers
+  puzzleRatingMin: 1000,
+  puzzleRatingMax: 1500
 };
 
 const VALID_PROVIDERS = ["ollama", "openai", "anthropic", "gemini", "grok"] as const;
@@ -176,6 +178,7 @@ export default function App() {
   const [activeLogTab, setActiveLogTab] = useState<number>(0);
   const logContainerRefs = useRef<{ stockfish: HTMLDivElement | null; ollama: HTMLDivElement | null }>({ stockfish: null, ollama: null });
   const [appLoading, setAppLoading] = useState<boolean>(true);
+  const [settingsLoaded, setSettingsLoaded] = useState<boolean>(false);
   const [lineDialogOpen, setLineDialogOpen] = useState<boolean>(false);
   const [activeLine, setActiveLine] = useState<AnalysisEntry | null>(null);
   const [lineAnalysisText, setLineAnalysisText] = useState<string>("");
@@ -210,9 +213,16 @@ export default function App() {
   const userSelectedModelRef = useRef<boolean>(false);
   // Puzzle state
   const [puzzleSolution, setPuzzleSolution] = useState<string[]>([]);
+  const [puzzleSolutionSan, setPuzzleSolutionSan] = useState<string[]>([]);
   const [puzzleAttemptMoves, setPuzzleAttemptMoves] = useState<string[]>([]);
   const [puzzleStartFen, setPuzzleStartFen] = useState<string>("");
   const [puzzleNavigationMode, setPuzzleNavigationMode] = useState<boolean>(false);
+  const [puzzleIncorrect, setPuzzleIncorrect] = useState<boolean>(false);
+  const [puzzleExplainLoading, setPuzzleExplainLoading] = useState<boolean>(false);
+  // Metadata from the current DB puzzle — needed to request deferred LLM explanation
+  const [puzzleMeta, setPuzzleMeta] = useState<{
+    themes: string; difficulty: string; rating: number;
+  } | null>(null);
   // Per-move explanation
   const [isExplanationLoading, setIsExplanationLoading] = useState<boolean>(false);
   const explanationCache = useRef<Map<string, string>>(new Map());
@@ -289,10 +299,13 @@ export default function App() {
           ollamaBaseUrl: status.settings?.ollamaBaseUrl || prev.ollamaBaseUrl,
           llmProvider: validProvider,
           llmApiKey: status.settings?.llmApiKey || prev.llmApiKey || "",
-          llmModel: status.settings?.llmModel || prev.llmModel
+          llmModel: status.settings?.llmModel || prev.llmModel,
+          puzzleRatingMin: status.settings?.puzzleRatingMin ?? prev.puzzleRatingMin ?? 1000,
+          puzzleRatingMax: status.settings?.puzzleRatingMax ?? prev.puzzleRatingMax ?? 1500
         };
       });
       userSelectedModelRef.current = Boolean(status.settings?.ollamaModel);
+      setSettingsLoaded(true);
     } catch (err) {
       setStatusMessage("Unable to read saved engine settings.");
     }
@@ -370,8 +383,9 @@ export default function App() {
 
   // Separate effect: Warm up Ollama when provider or model changes (after settings are loaded)
   useEffect(() => {
+    if (!settingsLoaded) return;
     warmupOllama();
-  }, [formState.llmProvider, formState.ollamaModel, formState.ollamaBaseUrl, warmupOllama]);
+  }, [settingsLoaded, formState.llmProvider, formState.ollamaModel, formState.ollamaBaseUrl, warmupOllama]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -653,13 +667,16 @@ export default function App() {
 
     // Puzzle solution navigation mode
     if (puzzleNavigationMode && puzzleSolution.length > 0) {
-      event.preventDefault();
       if (event.key === "ArrowRight") {
+        // Forward navigation only allowed after solution is revealed
+        if (!showSolution) return;
+        event.preventDefault();
         const next = currentMoveIndex + 1;
         if (next > puzzleSolution.length) return;
         setCurrentMoveIndex(next);
         applyPuzzleSolutionMove(next - 1);
       } else {
+        event.preventDefault();
         if (currentMoveIndex <= 0) return;
         const prev = currentMoveIndex - 1;
         setCurrentMoveIndex(prev);
@@ -716,7 +733,7 @@ export default function App() {
     }
   }, [
     puzzleNavigationMode, puzzleSolution, currentMoveIndex, applyPuzzleSolutionMove,
-    selectedEngineLineIndex, selectedEngineLineData, selectedLineBaseFen, fetchPerMoveExplanation
+    showSolution, selectedEngineLineIndex, selectedEngineLineData, selectedLineBaseFen, fetchPerMoveExplanation
   ]);
 
   useEffect(() => {
@@ -781,11 +798,40 @@ export default function App() {
       setSnackbarMessage("Incorrect move! Try again or reveal the solution.");
       setSnackbarSeverity("error");
       setSnackbarOpen(true);
-      setQuestionResponse("Incorrect — try again or reveal the solution.");
       setPuzzleAttemptMoves([]);
       setCurrentFen(puzzleStartFen);
       setCurrentMoveIndex(0);
-      setPuzzleNavigationMode(true);
+      setPuzzleIncorrect(true);
+
+      // Deferred LLM explanation on incorrect drag attempt
+      if (electronAPI?.puzzleExplainIncorrect && puzzleMeta && puzzleStartFen) {
+        setPuzzleExplainLoading(true);
+        setQuestionResponse("Working out what went wrong…");
+        const userMovesUci = [uciMove];
+        const userMovesSan = uciSequenceToSan(puzzleStartFen, userMovesUci);
+        electronAPI.puzzleExplainIncorrect({
+          puzzleFen: puzzleStartFen,
+          solutionUci: puzzleSolution,
+          solutionSan: puzzleSolutionSan,
+          userMovesUci,
+          userMovesSan,
+          themes: puzzleMeta.themes,
+          difficulty: puzzleMeta.difficulty,
+          rating: puzzleMeta.rating,
+        }).then((res) => {
+          if (res?.ok && res.explanation) {
+            setQuestionResponse(res.explanation);
+          } else {
+            setQuestionResponse("Incorrect — try again or reveal the solution.");
+          }
+        }).catch(() => {
+          setQuestionResponse("Incorrect — try again or reveal the solution.");
+        }).finally(() => {
+          setPuzzleExplainLoading(false);
+        });
+      } else {
+        setQuestionResponse("Incorrect — try again or reveal the solution.");
+      }
       return;
     }
     const newAttemptMoves = [...puzzleAttemptMoves, uciMove];
@@ -797,10 +843,22 @@ export default function App() {
       setQuestionResponse("Correct! Well done. You solved the puzzle!");
       setPuzzleAttemptMoves([]);
     }
-  }, [currentResponseType, puzzleSolution, puzzleAttemptMoves, puzzleStartFen]);
+  }, [currentResponseType, puzzleSolution, puzzleSolutionSan, puzzleAttemptMoves, puzzleStartFen, puzzleMeta]);
+
+  const handleRetryPuzzle = useCallback(() => {
+    if (!puzzleStartFen) return;
+    setCurrentFen(puzzleStartFen);
+    setCurrentMoveIndex(0);
+    setPuzzleAttemptMoves([]);
+    setPuzzleIncorrect(false);
+    setPuzzleExplainLoading(false);
+    const explanation = currentResponseData?.explanation || currentResponseData?.answer || "";
+    setQuestionResponse(explanation || "");
+  }, [puzzleStartFen, currentResponseData]);
 
   const handleShowSolution = useCallback(() => {
     setShowSolution(true);
+    setPuzzleIncorrect(false);
     // Restore the original puzzle explanation that was overwritten by the "incorrect" message
     const explanation = currentResponseData?.explanation || currentResponseData?.answer || "";
     if (explanation) {
@@ -971,7 +1029,9 @@ export default function App() {
         ollamaBaseUrl: formState.ollamaBaseUrl,
         llmProvider: formState.llmProvider,
         llmModel: formState.llmModel,
-        llmApiKey: formState.llmApiKey
+        llmApiKey: formState.llmApiKey,
+        puzzleRatingMin: formState.puzzleRatingMin ?? 1000,
+        puzzleRatingMax: formState.puzzleRatingMax ?? 1500
       });
       if (!configResult?.ok) {
         setStatusMessage("Failed to persist application settings.");
@@ -1158,28 +1218,68 @@ export default function App() {
 
     // Puzzle mode: detect typed move sequence attempt (handle locally, no LLM call)
     if (currentResponseType === "Puzzle" && puzzleSolution.length > 0 && puzzleStartFen) {
-      const QUESTION_WORDS = /\b(what|how|why|can|should|is|are|was|were|will|would|could|did|do|does|explain|show|tell|help|please|analyze|analysis)\b/i;
-      const UCI_MOVE = /^[a-h][1-8][a-h][1-8][qrbn]?$/i;
-      const tokens = question.split(/\s+/);
-      if (!QUESTION_WORDS.test(question) && !question.includes("?") && tokens.length > 0 && tokens.every((t) => UCI_MOVE.test(t))) {
-        const normalized = tokens.map((t) => t.toLowerCase().substring(0, 4));
-        const solutionNorm = puzzleSolution.map((m) => m.substring(0, 4));
-        const isCorrect = normalized.length === solutionNorm.length && normalized.every((m, i) => m === solutionNorm[i]);
-        if (isCorrect) {
-          setQuestionResponse("Correct! Well done. You solved the puzzle!");
-          setSnackbarMessage("Correct! Well done.");
-          setSnackbarSeverity("success");
-          setSnackbarOpen(true);
-        } else {
-          setQuestionResponse("Incorrect — try again or reveal the solution.");
-          setSnackbarMessage("Incorrect solution. Try again!");
-          setSnackbarSeverity("error");
-          setSnackbarOpen(true);
-          setPuzzleNavigationMode(true);
-          setCurrentFen(puzzleStartFen);
-          setCurrentMoveIndex(0);
+      if (looksLikeMoveAttempt(question)) {
+        const parsedMoves = parseChessNotation(question, puzzleStartFen);
+        if (parsedMoves.length > 0) {
+          // Compare only the player's moves (player moves are at even indices 0,2,4…)
+          // puzzleSolution contains alternating player/opponent moves starting with player's
+          const playerMoves = parsedMoves;
+          const solutionPlayerMoves = puzzleSolution.filter((_, i) => i % 2 === 0);
+          const norm = (arr: string[]) => arr.map(m => m.substring(0, 4));
+          const isCorrect =
+            norm(playerMoves).length >= norm(solutionPlayerMoves).length &&
+            norm(solutionPlayerMoves).every((m, i) => m === norm(playerMoves)[i]);
+
+          setQuestionText("");
+          if (isCorrect) {
+            setQuestionResponse("Correct! Well done. You solved the puzzle!");
+            setSnackbarMessage("Correct! Well done.");
+            setSnackbarSeverity("success");
+            setSnackbarOpen(true);
+            setPuzzleIncorrect(false);
+          } else {
+            setPuzzleIncorrect(true);
+            setCurrentFen(puzzleStartFen);
+            setCurrentMoveIndex(0);
+            setSnackbarMessage("Incorrect — try again or reveal the solution.");
+            setSnackbarSeverity("error");
+            setSnackbarOpen(true);
+
+            // Deferred LLM explanation — only now that the answer is wrong
+            if (electronAPI?.puzzleExplainIncorrect && puzzleMeta) {
+              setPuzzleExplainLoading(true);
+              setQuestionResponse("Working out what went wrong…");
+              const userMovesSan = uciSequenceToSan(puzzleStartFen, parsedMoves);
+              electronAPI.puzzleExplainIncorrect({
+                puzzleFen: puzzleStartFen,
+                solutionUci: puzzleSolution,
+                solutionSan: puzzleSolutionSan,
+                userMovesUci: parsedMoves,
+                userMovesSan,
+                themes: puzzleMeta.themes,
+                difficulty: puzzleMeta.difficulty,
+                rating: puzzleMeta.rating,
+                llmProvider: formState.llmProvider,
+                llmApiKey: formState.llmApiKey,
+                model: getModelForProvider(formState.llmProvider, formState.ollamaModel, formState.llmModel),
+                baseUrl: getBaseUrlForProvider(formState.llmProvider, formState.ollamaBaseUrl),
+              }).then((res) => {
+                if (res?.ok && res.explanation) {
+                  setQuestionResponse(res.explanation);
+                } else {
+                  setQuestionResponse("Incorrect — try again or reveal the solution.");
+                }
+              }).catch(() => {
+                setQuestionResponse("Incorrect — try again or reveal the solution.");
+              }).finally(() => {
+                setPuzzleExplainLoading(false);
+              });
+            } else {
+              setQuestionResponse("Incorrect — try again or reveal the solution.");
+            }
+          }
+          return;
         }
-        return;
       }
     }
 
@@ -1214,27 +1314,9 @@ export default function App() {
     setShowSolution(false); // Reset solution visibility
 
     try {
-      // STEP 1: Determine request type WITHOUT invoking engine
-      const requestTypeResult = await determineRequestType(
-        electronAPI,
-        question,
-        currentFen,
-        {
-          llmProvider: formState.llmProvider,
-          model: getModelForProvider(formState.llmProvider, formState.ollamaModel, formState.llmModel),
-          baseUrl: getBaseUrlForProvider(formState.llmProvider, formState.ollamaBaseUrl),
-          llmApiKey: formState.llmApiKey,
-          language: formState.explainLanguage
-        }
-      );
-
-      const requestType = requestTypeResult.type;
-      let requiresEngine = requestTypeResult.requiresEngineAnalysis;
-
-      // Fallback to keyword detection if LLM step has low confidence
-      if (requestTypeResult.confidence < 0.6) {
-        requiresEngine = quickDetectAnalysisRequired(question);
-      }
+      // STEP 1: Determine if engine analysis is needed via local keyword check
+      // main.ts handles full classification internally; no pre-flight LLM call needed
+      let requiresEngine = quickDetectAnalysisRequired(question);
 
       // STEP 2: If analysis is required, run engine first
       let engineAnalysisLines: AnalysisLine[] = [];
@@ -1255,24 +1337,18 @@ export default function App() {
         }
       }
 
-      // STEP 3: Send final request to LLM with engine analysis (if available)
-      const responseType: "Analysis" | "Puzzle" | "Position" | "Game" = requestType;
-      const systemPrompt = generateSystemPrompt({
-        responseType,
-        language: formState.explainLanguage
-      });
-
+      // STEP 3: Send request to LLM (main.ts handles classification and routing)
       const finalResponse = await electronAPI.askQuestion({
         question,
         fen: currentFen,
         lines: engineAnalysisLines.length > 0 ? engineAnalysisLines : undefined,
         language: formState.explainLanguage,
-        model: getModelForProvider(formState.llmProvider, formState.ollamaModel),
+        model: getModelForProvider(formState.llmProvider, formState.ollamaModel, formState.llmModel),
         baseUrl: getBaseUrlForProvider(formState.llmProvider, formState.ollamaBaseUrl),
         llmProvider: formState.llmProvider,
         llmApiKey: formState.llmApiKey,
-        systemPrompt,
-        responseType,
+        puzzleRatingMin: formState.puzzleRatingMin ?? 1000,
+        puzzleRatingMax: formState.puzzleRatingMax ?? 1500,
         conversationHistory
       });
 
@@ -1292,7 +1368,7 @@ export default function App() {
       }
 
       // Set response type and data
-      const finalResponseType = parsedResponse.response_type || parsedResponse.type || responseType;
+      const finalResponseType = parsedResponse.response_type || parsedResponse.type || "Analysis";
       setCurrentResponseType(finalResponseType);
       setCurrentResponseData(parsedResponse);
 
@@ -1328,10 +1404,20 @@ export default function App() {
           new Chess(parsedResponse.fen); // validate
           setCurrentFen(parsedResponse.fen);
           setPuzzleStartFen(parsedResponse.fen);
-          setPuzzleSolution(Array.isArray(parsedResponse.solution) ? parsedResponse.solution : []);
+          const sol = Array.isArray(parsedResponse.solution) ? parsedResponse.solution : [];
+          setPuzzleSolution(sol);
+          setPuzzleSolutionSan(Array.isArray(parsedResponse.solution_san) ? parsedResponse.solution_san : []);
           setPuzzleAttemptMoves([]);
           setPuzzleNavigationMode(false);
+          setPuzzleIncorrect(false);
+          setPuzzleExplainLoading(false);
+          setShowSolution(false);
           setCurrentMoveIndex(0);
+          setPuzzleMeta({
+            themes: parsedResponse.themes ?? "",
+            difficulty: parsedResponse.difficulty ?? "medium",
+            rating: Number(parsedResponse.rating) || 0,
+          });
         } catch (fenError) {
           setQuestionResponse("⚠️ Invalid puzzle FEN received — board not updated.");
         }
@@ -1376,7 +1462,9 @@ export default function App() {
     currentFen,
     currentResponseType,
     puzzleSolution,
+    puzzleSolutionSan,
     puzzleStartFen,
+    puzzleMeta,
     handleSelectEngineLine,
     formState.analysisDepth,
     formState.explainLanguage,
@@ -1384,6 +1472,7 @@ export default function App() {
     formState.ollamaModel,
     formState.llmProvider,
     formState.llmApiKey,
+    formState.llmModel,
     questionText,
     conversationHistory,
     gameMemory
@@ -1774,6 +1863,7 @@ export default function App() {
                     onStopAnalysis={handleStopAnalysis}
                     isAnalysisRunning={isAnalysisRunning}
                     onMoveAttempt={handleMoveAttempt}
+                    puzzleMode={currentResponseType === "Puzzle"}
                   />
                 </Box>
                 <Box sx={{ display: "flex", justifyContent: "space-between", pt: 1 }}>
@@ -1855,8 +1945,10 @@ export default function App() {
                   responseData={currentResponseData}
                   showSolution={showSolution}
                   onShowSolution={handleShowSolution}
+                  puzzleIncorrect={puzzleIncorrect}
+                  onRetryPuzzle={handleRetryPuzzle}
                   agentStatuses={agentStatuses}
-                  isExplanationLoading={isExplanationLoading}
+                  isExplanationLoading={isExplanationLoading || puzzleExplainLoading}
                   puzzleNavigationMode={puzzleNavigationMode}
                   sx={{ flex: 1, minHeight: 0 }}
                 />

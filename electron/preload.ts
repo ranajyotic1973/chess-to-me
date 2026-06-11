@@ -93,6 +93,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("db:delete-puzzles") as Promise<IpcResponses["db:delete-puzzles"]>,
   dbDeleteGames: () =>
     ipcRenderer.invoke("db:delete-games") as Promise<IpcResponses["db:delete-games"]>,
+  puzzleExplainIncorrect: (payload: IpcPayloads["puzzle:explain-incorrect"]) =>
+    ipcRenderer.invoke("puzzle:explain-incorrect", payload) as Promise<IpcResponses["puzzle:explain-incorrect"]>,
   onDbProgress: (callback: (data: any) => void) => {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on("db:progress", handler);
