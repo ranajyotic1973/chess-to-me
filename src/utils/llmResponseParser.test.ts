@@ -86,6 +86,67 @@ describe("parseLLMResponse — Puzzle solution field", () => {
 });
 
 // ---------------------------------------------------------------------------
+// parseLLMResponse — DB puzzle metadata fields
+// ---------------------------------------------------------------------------
+describe("parseLLMResponse — DB puzzle metadata fields", () => {
+  const dbPuzzleJson = JSON.stringify({
+    response_type: "Puzzle",
+    fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+    solution: ["d7d5"],
+    solution_san: ["d5"],
+    side_to_move: "Black",
+    hidden_solution: true,
+    explanation: "Find the best move. **Black to move.**",
+    themes: "mateIn3 fork",
+    difficulty: "medium",
+    rating: 1428,
+    opening_tags: "Sicilian Defense",
+    puzzle_id: "nJfvE",
+    setup_move: "e2e4",
+    setup_move_san: "e4"
+  });
+
+  test("extracts side_to_move", () => {
+    expect(parseLLMResponse(dbPuzzleJson).side_to_move).toBe("Black");
+  });
+
+  test("extracts solution_san", () => {
+    expect(parseLLMResponse(dbPuzzleJson).solution_san).toEqual(["d5"]);
+  });
+
+  test("extracts themes", () => {
+    expect(parseLLMResponse(dbPuzzleJson).themes).toBe("mateIn3 fork");
+  });
+
+  test("extracts difficulty", () => {
+    expect(parseLLMResponse(dbPuzzleJson).difficulty).toBe("medium");
+  });
+
+  test("extracts rating", () => {
+    expect(parseLLMResponse(dbPuzzleJson).rating).toBe(1428);
+  });
+
+  test("extracts puzzle_id", () => {
+    expect(parseLLMResponse(dbPuzzleJson).puzzle_id).toBe("nJfvE");
+  });
+
+  test("extracts setup_move_san", () => {
+    expect(parseLLMResponse(dbPuzzleJson).setup_move_san).toBe("e4");
+  });
+
+  test("side_to_move is undefined when absent", () => {
+    const raw = JSON.stringify({
+      response_type: "Puzzle",
+      fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+      solution: ["d7d5"],
+      explanation: "No metadata.",
+      hidden_solution: true
+    });
+    expect(parseLLMResponse(raw).side_to_move).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // parseLLMResponse — general response parsing
 // ---------------------------------------------------------------------------
 describe("parseLLMResponse — response type normalization", () => {
@@ -104,10 +165,18 @@ describe("parseLLMResponse — response type normalization", () => {
     expect(parseLLMResponse(raw).response_type).toBe("Analysis");
   });
 
-  test("returns ok:false for invalid JSON", () => {
-    const result = parseLLMResponse("not-json");
+  test("treats non-JSON text as a plain Analysis answer (ok:true)", () => {
+    // ANALYSIS handler returns plain markdown — parser must not reject it
+    const result = parseLLMResponse("### Why the king cannot capture\n- The rook controls h8.");
+    expect(result.ok).toBe(true);
+    expect(result.response_type).toBe("Analysis");
+    expect(result.answer).toContain("Why the king");
+  });
+
+  test("returns ok:false for empty string", () => {
+    const result = parseLLMResponse("   ");
     expect(result.ok).toBe(false);
-    expect(result.error).toMatch(/Failed to parse/);
+    expect(result.error).toBe("Empty response from LLM");
   });
 
   test("extracts fen field for Puzzle type (task 13.1 — FEN applied to board)", () => {

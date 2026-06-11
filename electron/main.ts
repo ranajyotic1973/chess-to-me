@@ -2705,33 +2705,11 @@ async function handlePuzzleRequest(question: string, payload: any, llmProvider: 
             console.warn("[DB] Setup move invalid, skipping");
           } else {
             const puzzleFen = setupBoard.fen();
-            let solutionMoves = allMoves.slice(1); // remaining moves including opponent responses
+            // Lichess puzzle moves are already Stockfish-verified at high depth —
+            // no need to re-run the engine here (and avoids cold-start latency / timeouts).
+            const solutionMoves = allMoves.slice(1); // remaining moves including opponent responses
 
-            // Step 4: Run engine analysis on the puzzle position to verify / get the solution
-            // Use shallow depth (8) — forced puzzle sequences need very little search
-            // (non-blocking — falls back to DB moves if engine not configured or times out)
-            try {
-              const engineResult = await performAnalysis(
-                settings.get("selectedEngine") || "stockfish",
-                puzzleFen,
-                8, // shallow depth — fast on all engines, sufficient for forced sequences
-                1  // single PV
-              );
-              if (engineResult.ok && engineResult.analysis?.lines?.[0]) {
-                const pv: string = engineResult.analysis.lines[0].pv ||
-                  engineResult.analysis.lines[0].line || "";
-                const pvMoves = pv.trim().split(/\s+/).filter(Boolean);
-                if (pvMoves.length > 0) {
-                  // Cap engine line to DB solution length (avoid going beyond the puzzle)
-                  solutionMoves = pvMoves.slice(0, solutionMoves.length);
-                  console.log(`[DB] Engine solution: ${solutionMoves.join(" ")}`);
-                }
-              }
-            } catch (engineErr) {
-              console.warn("[DB] Engine analysis unavailable, using DB moves:", (engineErr as Error).message);
-            }
-
-            // Step 5: Validate and convert solution to UCI + SAN
+            // Step 4: Validate and convert solution to UCI + SAN
             const solutionBoard = new Chess();
             solutionBoard.load(puzzleFen);
             const validUci: string[] = [];

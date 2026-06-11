@@ -14,17 +14,38 @@ export function parseLLMResponse(responseText: string): LLMResponse {
       explanation: parsed.explanation || parsed.answer || "",
       fen: parsed.fen,
       solution: Array.isArray(parsed.solution) ? parsed.solution : undefined,
+      solution_san: Array.isArray(parsed.solution_san) ? parsed.solution_san : undefined,
+      side_to_move: parsed.side_to_move,
       hidden_solution: parsed.hidden_solution || false,
       lines: parsed.lines,
       annotations: parsed.annotations,
+      // Puzzle metadata from DB responses
+      themes: parsed.themes,
+      difficulty: parsed.difficulty,
+      rating: parsed.rating,
+      opening_tags: parsed.opening_tags,
+      puzzle_id: parsed.puzzle_id,
+      setup_move: parsed.setup_move,
+      setup_move_san: parsed.setup_move_san,
       error: undefined
     };
-  } catch (e) {
+  } catch (_e) {
+    // Non-JSON response (plain text / markdown from ANALYSIS handler) — treat as answer
+    const trimmed = responseText.trim();
+    if (trimmed) {
+      return {
+        ok: true,
+        response_type: "Analysis",
+        type: "Analysis",
+        answer: trimmed,
+        explanation: trimmed
+      };
+    }
     return {
       ok: false,
       response_type: "Analysis",
       type: "Analysis",
-      error: `Failed to parse LLM response: ${e instanceof Error ? e.message : String(e)}`
+      error: "Empty response from LLM"
     };
   }
 }
