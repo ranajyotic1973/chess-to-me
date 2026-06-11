@@ -1246,37 +1246,24 @@ export default function App() {
     return fens;
   }, []);
 
-  const loadGameFromRow = useCallback((game: import("./types").GameRow): void => {
+  // Returns true if the game was loaded successfully; false if PGN could not be parsed.
+  const loadGameFromRow = useCallback((game: import("./types").GameRow): boolean => {
     const fens = parsePgnToFens(game.pgn_moves);
-    if (fens.length === 0) {
-      setQuestionResponse("Could not parse moves for that game.");
-      return;
-    }
+    if (fens.length === 0) return false;
     setGamePgnFens(fens);
     setGameMoveIndex(0);
     setCurrentFen(fens[0]);
     setGameMode(true);
     setGameList(null);
-    setCurrentResponseType("Game");
     setShowSolution(false);
     setAnalysisLines([]);
     setSelectedEngineLineIndex(null);
     setSelectedEngineLineData(null);
-
-    const result   = game.result ?? "?";
-    const event    = game.event  ? `*${game.event}*  ` : "";
-    const date     = game.date   ? `(${game.date})`  : "";
-    const opening  = game.opening ? `\nOpening: ${game.opening}` : "";
-    const elos     = (game.white_elo > 0 || game.black_elo > 0)
-      ? ` (${game.white_elo} vs ${game.black_elo})`
-      : "";
-    setQuestionResponse(
-      `**${game.white}** vs **${game.black}**${elos}\n${event}${date}\n\nResult: **${result}**${opening}\n\nUse ← → arrow keys to step through moves. Ask any question about the current position!`
-    );
+    return true;
   }, [parsePgnToFens]);
 
   const handleQuestion = useCallback(async (): Promise<void> => {
-    const question = String(questionText || "").trim();
+    let question = String(questionText || "").trim();
     if (!question) {
       setStatusMessage("Ask a question about the current position.");
       return;
@@ -1286,13 +1273,27 @@ export default function App() {
       return;
     }
 
-    // Game list: user types a number to select a game (no LLM call)
+    // Game list: user types a number to select a game.
+    // Load the game onto the board, then fall through to the LLM so it can
+    // give a contextual introduction instead of a static hardcoded message.
     if (gameList !== null && gameList.length > 0 && /^\d+$/.test(question)) {
       const num = parseInt(question, 10);
       if (num >= 1 && num <= gameList.length) {
-        loadGameFromRow(gameList[num - 1]);
+        const game = gameList[num - 1];
+        const loaded = loadGameFromRow(game);
+        if (!loaded) {
+          setQuestionResponse("Sorry, I couldn't parse the moves for that game.");
+          setQuestionText("");
+          return;
+        }
+        const result = game.result ?? "?";
+        const ctx    = [
+          game.event  ? `at ${game.event}`  : "",
+          game.date   ? `(${game.date})`     : "",
+        ].filter(Boolean).join(" ");
+        question = `I've selected the game: ${game.white} vs ${game.black}, result ${result}${ctx ? " " + ctx : ""}. Please briefly introduce these two players and what I should watch for as I step through the moves.`;
         setQuestionText("");
-        return;
+        // fall through to LLM
       }
     }
 

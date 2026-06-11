@@ -2930,7 +2930,7 @@ async function handlePlayerGamesRequest(question: string, _llmProvider: string, 
   const playerName = extractPlayerNameFromQuestion(question);
   console.log(`[LLM] PASS 2: PLAYER_GAMES - Extracted player: "${playerName}"`);
 
-  const games = searchGames(db, { player: playerName, limit: 10 });
+  const games = searchGames(db, { player: playerName, limit: 20 });
 
   if (games.length === 0) {
     return {
@@ -2945,10 +2945,7 @@ async function handlePlayerGamesRequest(question: string, _llmProvider: string, 
 
   const listLines = games.map((g, i) => {
     const result = normalizeGameResult(g.result);
-    const opening = g.opening ? ` · ${g.opening}` : "";
-    const event   = g.event   ? ` — ${g.event}`   : "";
-    const date    = g.date    ? ` (${g.date})`     : "";
-    return `${i + 1}. **${g.white}** vs **${g.black}** — **${result}**${opening}${event}${date}`;
+    return `${i + 1}. ${g.white} vs ${g.black} — ${result}`;
   });
 
   const explanation =
