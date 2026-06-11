@@ -2708,13 +2708,14 @@ async function handlePuzzleRequest(question: string, payload: any, llmProvider: 
             let solutionMoves = allMoves.slice(1); // remaining moves including opponent responses
 
             // Step 4: Run engine analysis on the puzzle position to verify / get the solution
-            // (non-blocking — falls back to DB moves if engine not configured)
+            // Use shallow depth (8) — forced puzzle sequences need very little search
+            // (non-blocking — falls back to DB moves if engine not configured or times out)
             try {
               const engineResult = await performAnalysis(
                 settings.get("selectedEngine") || "stockfish",
                 puzzleFen,
-                15, // depth — fast enough for a single line
-                1   // single PV
+                8, // shallow depth — fast on all engines, sufficient for forced sequences
+                1  // single PV
               );
               if (engineResult.ok && engineResult.analysis?.lines?.[0]) {
                 const pv: string = engineResult.analysis.lines[0].pv ||
@@ -2751,6 +2752,7 @@ async function handlePuzzleRequest(question: string, payload: any, llmProvider: 
               const difficulty = dbPuzzle.rating < 1200 ? "easy" : dbPuzzle.rating < 1800 ? "medium" : "hard";
               const themeDesc = buildThemeDescription(dbPuzzle.themes || "");
               const openingHint = dbPuzzle.opening_tags ? ` Opening: ${dbPuzzle.opening_tags}.` : "";
+              const sideToMove = setupBoard.turn() === "w" ? "White" : "Black";
               const response = JSON.stringify({
                 response_type: "Puzzle",
                 fen: puzzleFen,
@@ -2759,9 +2761,9 @@ async function handlePuzzleRequest(question: string, payload: any, llmProvider: 
                 solution: validUci,
                 solution_san: validSan,
                 difficulty,
-                explanation: `${themeDesc}${openingHint} Type your moves to solve! (Puzzle rating: ${dbPuzzle.rating})`,
+                explanation: `${themeDesc} **${sideToMove} to move.**${openingHint} Type your moves to solve! (Puzzle rating: ${dbPuzzle.rating})`,
                 hidden_solution: true,
-                side_to_move: setupBoard.turn() === "w" ? "White" : "Black",
+                side_to_move: sideToMove,
                 puzzle_id: dbPuzzle.puzzle_id,
                 themes: dbPuzzle.themes || "",
                 rating: dbPuzzle.rating,
