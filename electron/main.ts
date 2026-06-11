@@ -1303,6 +1303,7 @@ async function checkOllamaQwen3(): Promise<{ ollamaRunning: boolean; qwen3Instal
 }
 
 let mainWindow: BrowserWindow | null = null;
+let downloadInProgress = false;
 
 async function createWindow(): Promise<void> {
   // In dev: __dirname = electron/dist → ../../build/icon.ico
@@ -1350,6 +1351,26 @@ async function createWindow(): Promise<void> {
     }
   });
 
+  win.on("close", (event) => {
+    if (!downloadInProgress) return;
+    event.preventDefault();
+    const choice = dialog.showMessageBoxSync(win, {
+      type: "warning",
+      buttons: ["Cancel", "Close Anyway"],
+      defaultId: 0,
+      cancelId: 0,
+      title: "Download In Progress",
+      message: "A download is currently in progress.",
+      detail:
+        "Closing the app now will interrupt the download. " +
+        "You will need to start the download again when you reopen the app.",
+    });
+    if (choice === 1) {
+      downloadInProgress = false;
+      win.close();
+    }
+  });
+
   mainWindow = win;
   win.on("closed", () => {
     mainWindow = null;
@@ -1362,6 +1383,7 @@ async function doImportGamesFile(
   sendProgress: (phase: string, pct: number, msg: string) => void
 ): Promise<{ ok: boolean; count?: number; error?: string }> {
   const { gamesDbPath, gamesExtractDir } = getDbPaths();
+  downloadInProgress = true;
   try {
     let pgnFiles: string[];
     const lower = filePath.toLowerCase();
@@ -1408,6 +1430,8 @@ async function doImportGamesFile(
   } catch (err) {
     console.error("[DB] Games import failed:", err);
     return { ok: false, error: (err as Error).message };
+  } finally {
+    downloadInProgress = false;
   }
 }
 
@@ -3137,6 +3161,7 @@ ipcMain.handle("db:download-puzzles", async (event) => {
     return { ok: true, count: row.cnt, skipped: true };
   }
 
+  downloadInProgress = true;
   try {
     if (puzzleDb) { puzzleDb.close(); puzzleDb = null; }
     const csvText = await downloadPuzzleCsv(
@@ -3151,6 +3176,8 @@ ipcMain.handle("db:download-puzzles", async (event) => {
   } catch (err) {
     console.error("[DB] Puzzle download/import failed:", err);
     return { ok: false, error: (err as Error).message };
+  } finally {
+    downloadInProgress = false;
   }
 });
 
