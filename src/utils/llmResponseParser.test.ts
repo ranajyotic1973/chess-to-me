@@ -281,6 +281,85 @@ describe("parseLLMResponse — Game type", () => {
 });
 
 // ---------------------------------------------------------------------------
+// parseLLMResponse — GameList type
+// ---------------------------------------------------------------------------
+describe("parseLLMResponse — GameList type", () => {
+  const sampleGame = {
+    game_id: 1,
+    white: "Carlsen, Magnus",
+    black: "Caruana, Fabiano",
+    result: "1/2-1/2",
+    white_elo: 2835,
+    black_elo: 2832,
+    eco: "C65",
+    opening: "Ruy Lopez",
+    date: "2018.11.28",
+    event: "WCh 2018",
+    pgn_moves: "1. e4 e5 2. Nf3"
+  };
+
+  test("normalises 'GameList' response_type", () => {
+    const raw = JSON.stringify({ response_type: "GameList", game_list: [sampleGame], explanation: "Found 1 game." });
+    expect(parseLLMResponse(raw).response_type).toBe("GameList");
+  });
+
+  test("normalises lowercase 'gamelist'", () => {
+    const raw = JSON.stringify({ response_type: "gamelist", game_list: [], explanation: "No games." });
+    expect(parseLLMResponse(raw).response_type).toBe("GameList");
+  });
+
+  test("extracts game_list array", () => {
+    const raw = JSON.stringify({ response_type: "GameList", game_list: [sampleGame], explanation: "Found 1 game." });
+    const result = parseLLMResponse(raw);
+    expect(result.game_list).toHaveLength(1);
+    expect(result.game_list![0].white).toBe("Carlsen, Magnus");
+    expect(result.game_list![0].result).toBe("1/2-1/2");
+  });
+
+  test("game_list is undefined when field is absent", () => {
+    const raw = JSON.stringify({ response_type: "GameList", explanation: "No games." });
+    expect(parseLLMResponse(raw).game_list).toBeUndefined();
+  });
+
+  test("game_list is undefined when field is not an array", () => {
+    const raw = JSON.stringify({ response_type: "GameList", game_list: "bad", explanation: "Bad." });
+    expect(parseLLMResponse(raw).game_list).toBeUndefined();
+  });
+
+  test("empty game_list array is preserved", () => {
+    const raw = JSON.stringify({ response_type: "GameList", game_list: [], explanation: "None found." });
+    expect(parseLLMResponse(raw).game_list).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateLLMResponse — GameList
+// ---------------------------------------------------------------------------
+describe("validateLLMResponse — GameList", () => {
+  test("GameList with explanation passes without answer field", () => {
+    const result = validateLLMResponse({
+      ok: true,
+      response_type: "GameList",
+      type: "GameList",
+      explanation: "Found 3 games.",
+      game_list: []
+    });
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  test("GameList does not require annotations", () => {
+    const result = validateLLMResponse({
+      ok: true,
+      response_type: "GameList",
+      type: "GameList",
+      explanation: "Found games."
+    });
+    expect(result.errors).not.toContain("Game response requires annotations field");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // formatConversationHistory
 // ---------------------------------------------------------------------------
 describe("formatConversationHistory", () => {

@@ -147,7 +147,7 @@ export interface ProcessLogs {
 // LLM Types
 // ============================================================================
 
-export type ResponseType = "Analysis" | "Puzzle" | "Position" | "Game";
+export type ResponseType = "Analysis" | "Puzzle" | "Position" | "Game" | "GameList";
 
 export interface AgentProgressEvent {
   agentId: number;       // 1-based
@@ -192,6 +192,8 @@ export interface LLMResponse {
   puzzle_id?: string;
   setup_move?: string;
   setup_move_san?: string;
+  // Game list (from PLAYER_GAMES DB search)
+  game_list?: GameRow[];
 }
 
 export interface OllamaMessage {
@@ -472,6 +474,9 @@ export interface ChatPanelProps {
   agentStatuses?: AgentProgressEvent[];
   isExplanationLoading?: boolean;
   puzzleNavigationMode?: boolean;
+  gameMode?: boolean;
+  gameMoveIndex?: number;
+  gameTotalMoves?: number;
   sx?: any;
 }
 

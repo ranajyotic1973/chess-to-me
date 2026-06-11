@@ -192,6 +192,7 @@ export function searchGames(db: Database.Database, params: GameSearchParams): Ga
       WHERE games_fts MATCH ?
         ${eco       ? "AND g.eco = ?"                                        : ""}
         ${minElo !== undefined ? "AND g.white_elo >= ? AND g.black_elo >= ?" : ""}
+      ORDER BY g.date DESC
       LIMIT ?
     `;
     const args: (string | number)[] = [ftsQuery];
@@ -214,7 +215,7 @@ export function searchGames(db: Database.Database, params: GameSearchParams): Ga
     args.push(minElo, minElo);
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  const sql = `SELECT * FROM games ${where} ORDER BY RANDOM() LIMIT ?`;
+  const sql = `SELECT * FROM games ${where} ORDER BY date DESC LIMIT ?`;
   args.push(limit);
   return db.prepare(sql).all(...args) as GameRow[];
 }

@@ -2883,24 +2883,86 @@ async function handlePositionRequest(question: string, payload: any, llmProvider
   }
 }
 
-async function handlePlayerGamesRequest(question: string, llmProvider: string, llmApiKey: string, model: string, baseUrl: string): Promise<{ ok: boolean; answer?: string; error?: string }> {
-  console.log(`[LLM] PASS 2: PLAYER_GAMES - Searching local games database`);
+function extractPlayerNameFromQuestion(question: string): string {
+  const q = question.trim();
 
-  const messages: Array<{ role: string; content: string }> = [
-    { role: "system", content: PLAYER_GAMES_AGENT_SYSTEM_PROMPT },
-    { role: "user", content: question }
-  ];
+  // "games by X", "games of X", "games from X", "games played by X"
+  const byMatch = q.match(/games?\s+(?:by|of|from|played?\s+by)\s+([A-Za-z][A-Za-z\s,\-.']+?)(?:\s*$|\s+(?:in|from|at|since|before|after|\d{4}))/i);
+  if (byMatch) return byMatch[1].trim();
 
-  try {
-    // includeTools: true so the LLM can call search_player_games
-    const answer = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: true });
-    console.log(`[LLM] PASS 2: PLAYER_GAMES ✓`);
-    return { ok: true, answer };
-  } catch (err) {
-    const errorMsg = (err as Error)?.message || "Player games search failed.";
-    console.error(`[LLM] PASS 2: PLAYER_GAMES failed: ${errorMsg}`);
-    return { ok: false, error: errorMsg };
+  // "X's games"
+  const possessiveMatch = q.match(/([A-Za-z][A-Za-z\s,\-.']+?)'s?\s+games?/i);
+  if (possessiveMatch) return possessiveMatch[1].trim();
+
+  // Collect capitalized words (likely player name), skip common stop words
+  const stopWords = new Set(["Show", "Find", "Give", "Get", "Me", "My", "What", "Which", "Who", "How", "When", "Where", "Games", "Game", "Some", "The", "A", "An", "By", "Of", "From", "With", "In", "At", "Any", "All"]);
+  const capitalizedWords = q.match(/\b[A-Z][a-z]{1,}\b/g) ?? [];
+  const names = capitalizedWords.filter(w => !stopWords.has(w));
+  if (names.length > 0) return names.join(" ");
+
+  return q;
+}
+
+function normalizeGameResult(result: string): string {
+  switch (result?.trim()) {
+    case "1-0":     return "1-0";
+    case "0-1":     return "0-1";
+    case "1/2-1/2": return "1/2-1/2";
+    default:        return result || "?";
   }
+}
+
+async function handlePlayerGamesRequest(question: string, _llmProvider: string, _llmApiKey: string, _model: string, _baseUrl: string): Promise<{ ok: boolean; answer?: string; error?: string }> {
+  console.log(`[LLM] PASS 2: PLAYER_GAMES - Searching local games database directly`);
+
+  const db = getGamesDb();
+  if (!db) {
+    return {
+      ok: true,
+      answer: JSON.stringify({
+        response_type: "GameList",
+        game_list: [],
+        explanation: "No games database found. Import games in Settings to use this feature."
+      })
+    };
+  }
+
+  const playerName = extractPlayerNameFromQuestion(question);
+  console.log(`[LLM] PASS 2: PLAYER_GAMES - Extracted player: "${playerName}"`);
+
+  const games = searchGames(db, { player: playerName, limit: 10 });
+
+  if (games.length === 0) {
+    return {
+      ok: true,
+      answer: JSON.stringify({
+        response_type: "GameList",
+        game_list: [],
+        explanation: `No games found for "${playerName}" in the database. Try a different spelling or name.`
+      })
+    };
+  }
+
+  const listLines = games.map((g, i) => {
+    const result = normalizeGameResult(g.result);
+    const opening = g.opening ? ` · ${g.opening}` : "";
+    const event   = g.event   ? ` — ${g.event}`   : "";
+    const date    = g.date    ? ` (${g.date})`     : "";
+    return `${i + 1}. **${g.white}** vs **${g.black}** — **${result}**${opening}${event}${date}`;
+  });
+
+  const explanation =
+    `Found **${games.length}** game${games.length !== 1 ? "s" : ""}. Type the number to load a game:\n\n${listLines.join("\n")}`;
+
+  console.log(`[LLM] PASS 2: PLAYER_GAMES ✓ Found ${games.length} games`);
+  return {
+    ok: true,
+    answer: JSON.stringify({
+      response_type: "GameList",
+      game_list: games,
+      explanation
+    })
+  };
 }
 
 async function handleHistoricGameRequest(question: string, llmProvider: string, llmApiKey: string, model: string, baseUrl: string): Promise<{ ok: boolean; answer?: string; error?: string }> {

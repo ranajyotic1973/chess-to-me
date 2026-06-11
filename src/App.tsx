@@ -189,7 +189,7 @@ export default function App() {
   const [questionResponse, setQuestionResponse] = useState<string>("");
   const [questionLoading, setQuestionLoading] = useState<boolean>(false);
   const [agentStatuses, setAgentStatuses] = useState<AgentProgressEvent[]>([]);
-  const [currentResponseType, setCurrentResponseType] = useState<"Analysis" | "Puzzle" | "Position" | "Game">("Analysis");
+  const [currentResponseType, setCurrentResponseType] = useState<import("./types").ResponseType>("Analysis");
   const [currentResponseData, setCurrentResponseData] = useState<Record<string, any>>({});
   const [showSolution, setShowSolution] = useState<boolean>(false);
   const [conversationHistory, setConversationHistory] = useState<Array<{ role: "user" | "assistant"; message: string; timestamp: number }>>([]);
@@ -228,6 +228,11 @@ export default function App() {
   const explanationCache = useRef<Map<string, string>>(new Map());
   // Base FEN at the time a line was selected (correct starting point for move replay)
   const [selectedLineBaseFen, setSelectedLineBaseFen] = useState<string>("");
+  // Game browsing state
+  const [gameList, setGameList] = useState<import("./types").GameRow[] | null>(null);
+  const [gameMode, setGameMode] = useState<boolean>(false);
+  const [gamePgnFens, setGamePgnFens] = useState<string[]>([]);
+  const [gameMoveIndex, setGameMoveIndex] = useState<number>(0);
 
   const fetchSystemStatus = useCallback(async (): Promise<void> => {
     if (!electronAPI?.getSystemStatus) {
@@ -665,6 +670,21 @@ export default function App() {
       return;
     }
 
+    // Game mode navigation (arrow keys step through game moves)
+    if (gameMode && gamePgnFens.length > 0) {
+      event.preventDefault();
+      if (event.key === "ArrowRight") {
+        const next = Math.min(gameMoveIndex + 1, gamePgnFens.length - 1);
+        setGameMoveIndex(next);
+        setCurrentFen(gamePgnFens[next]);
+      } else {
+        const prev = Math.max(gameMoveIndex - 1, 0);
+        setGameMoveIndex(prev);
+        setCurrentFen(gamePgnFens[prev]);
+      }
+      return;
+    }
+
     // Puzzle solution navigation mode
     if (puzzleNavigationMode && puzzleSolution.length > 0) {
       if (event.key === "ArrowRight") {
@@ -732,19 +752,20 @@ export default function App() {
       }
     }
   }, [
+    gameMode, gamePgnFens, gameMoveIndex,
     puzzleNavigationMode, puzzleSolution, currentMoveIndex, applyPuzzleSolutionMove,
     showSolution, selectedEngineLineIndex, selectedEngineLineData, selectedLineBaseFen, fetchPerMoveExplanation
   ]);
 
   useEffect(() => {
-    if (selectedEngineLineIndex === null && !puzzleNavigationMode) {
+    if (selectedEngineLineIndex === null && !puzzleNavigationMode && !gameMode) {
       return;
     }
     document.addEventListener("keydown", handleKeyboardNavigation);
     return () => {
       document.removeEventListener("keydown", handleKeyboardNavigation);
     };
-  }, [selectedEngineLineIndex, puzzleNavigationMode, handleKeyboardNavigation]);
+  }, [selectedEngineLineIndex, puzzleNavigationMode, gameMode, handleKeyboardNavigation]);
 
   const applyLineMove = useCallback((moveIndex: number) => {
     if (!selectedEngineLineData) {
@@ -1205,6 +1226,55 @@ export default function App() {
     setImportLoading(false);
   }, [applyPositions, importText]);
 
+  // Parse PGN moves text into an ordered array of FEN strings (position 0 = start)
+  const parsePgnToFens = useCallback((pgnMoves: string): string[] => {
+    const cleanMoves = pgnMoves.replace(/\s*(1-0|0-1|1\/2-1\/2|\*)\s*$/, "").trim();
+    if (!cleanMoves) return [];
+    const parser = new Chess();
+    try {
+      parser.loadPgn(cleanMoves);
+    } catch {
+      return [];
+    }
+    const history = parser.history({ verbose: true });
+    const board = new Chess();
+    const fens: string[] = [board.fen()];
+    for (const mv of history) {
+      try { board.move(mv.san); } catch { break; }
+      fens.push(board.fen());
+    }
+    return fens;
+  }, []);
+
+  const loadGameFromRow = useCallback((game: import("./types").GameRow): void => {
+    const fens = parsePgnToFens(game.pgn_moves);
+    if (fens.length === 0) {
+      setQuestionResponse("Could not parse moves for that game.");
+      return;
+    }
+    setGamePgnFens(fens);
+    setGameMoveIndex(0);
+    setCurrentFen(fens[0]);
+    setGameMode(true);
+    setGameList(null);
+    setCurrentResponseType("Game");
+    setShowSolution(false);
+    setAnalysisLines([]);
+    setSelectedEngineLineIndex(null);
+    setSelectedEngineLineData(null);
+
+    const result   = game.result ?? "?";
+    const event    = game.event  ? `*${game.event}*  ` : "";
+    const date     = game.date   ? `(${game.date})`  : "";
+    const opening  = game.opening ? `\nOpening: ${game.opening}` : "";
+    const elos     = (game.white_elo > 0 || game.black_elo > 0)
+      ? ` (${game.white_elo} vs ${game.black_elo})`
+      : "";
+    setQuestionResponse(
+      `**${game.white}** vs **${game.black}**${elos}\n${event}${date}\n\nResult: **${result}**${opening}\n\nUse ← → arrow keys to step through moves. Ask any question about the current position!`
+    );
+  }, [parsePgnToFens]);
+
   const handleQuestion = useCallback(async (): Promise<void> => {
     const question = String(questionText || "").trim();
     if (!question) {
@@ -1214,6 +1284,25 @@ export default function App() {
     if (!electronAPI?.askQuestion) {
       setStatusMessage("LLM question API unavailable.");
       return;
+    }
+
+    // Game list: user types a number to select a game (no LLM call)
+    if (gameList !== null && gameList.length > 0 && /^\d+$/.test(question)) {
+      const num = parseInt(question, 10);
+      if (num >= 1 && num <= gameList.length) {
+        loadGameFromRow(gameList[num - 1]);
+        setQuestionText("");
+        return;
+      }
+    }
+
+    // Game mode: "another game" → re-display the last game list or clear so user can re-ask
+    if (gameMode && /\b(another|more|next|different)\b.{0,20}\bgame\b|\bgame\b.{0,20}\b(another|more|next|different)\b/i.test(question)) {
+      setGameMode(false);
+      setGamePgnFens([]);
+      setGameMoveIndex(0);
+      setCurrentFen("start");
+      // Fall through so the question is processed as a new search
     }
 
     // Puzzle mode: detect typed move sequence attempt (handle locally, no LLM call)
@@ -1428,6 +1517,12 @@ export default function App() {
         } catch (fenError) {
           setStatusMessage(`Invalid FEN in response: ${(fenError as Error).message}`);
         }
+      } else if (finalResponseType === "GameList") {
+        // Store game list for number-based selection; clear any active game session
+        setGameList(Array.isArray(parsedResponse.game_list) ? parsedResponse.game_list : []);
+        setGameMode(false);
+        setGamePgnFens([]);
+        setGameMoveIndex(0);
       }
 
       // Auto-detect if user mentioned a line in their question
@@ -1466,6 +1561,9 @@ export default function App() {
     puzzleStartFen,
     puzzleMeta,
     handleSelectEngineLine,
+    gameList,
+    gameMode,
+    loadGameFromRow,
     formState.analysisDepth,
     formState.explainLanguage,
     formState.ollamaBaseUrl,
@@ -1863,7 +1961,7 @@ export default function App() {
                     onStopAnalysis={handleStopAnalysis}
                     isAnalysisRunning={isAnalysisRunning}
                     onMoveAttempt={handleMoveAttempt}
-                    puzzleMode={currentResponseType === "Puzzle"}
+                    puzzleMode={currentResponseType === "Puzzle" || gameMode}
                   />
                 </Box>
                 <Box sx={{ display: "flex", justifyContent: "space-between", pt: 1 }}>
@@ -1950,6 +2048,9 @@ export default function App() {
                   agentStatuses={agentStatuses}
                   isExplanationLoading={isExplanationLoading || puzzleExplainLoading}
                   puzzleNavigationMode={puzzleNavigationMode}
+                  gameMode={gameMode}
+                  gameMoveIndex={gameMoveIndex}
+                  gameTotalMoves={gamePgnFens.length}
                   sx={{ flex: 1, minHeight: 0 }}
                 />
               </Box>

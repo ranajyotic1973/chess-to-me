@@ -27,6 +27,7 @@ export function parseLLMResponse(responseText: string): LLMResponse {
       puzzle_id: parsed.puzzle_id,
       setup_move: parsed.setup_move,
       setup_move_san: parsed.setup_move_san,
+      game_list: Array.isArray(parsed.game_list) ? parsed.game_list : undefined,
       error: undefined
     };
   } catch (_e) {
@@ -62,6 +63,8 @@ function normalizeResponseType(type: any): ResponseType {
       return "Position";
     case "game":
       return "Game";
+    case "gamelist":
+      return "GameList";
     case "analysis":
     default:
       return "Analysis";
@@ -92,7 +95,7 @@ export function validateLLMResponse(response: LLMResponse): { valid: boolean; er
     }
   }
 
-  if (!response.answer && !response.explanation) {
+  if (responseType !== "GameList" && !response.answer && !response.explanation) {
     errors.push("Response must include answer or explanation");
   }
 

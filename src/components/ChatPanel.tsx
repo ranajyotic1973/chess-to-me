@@ -12,6 +12,7 @@ import {
 } from "@mui/material";
 import SettingsIcon from "@mui/icons-material/Settings";
 import ClearIcon from "@mui/icons-material/Clear";
+import ReplayIcon from "@mui/icons-material/Replay";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import ReactMarkdown from "react-markdown";
@@ -55,9 +56,14 @@ export default function ChatPanel({
   responseData = {},
   showSolution = false,
   onShowSolution,
+  puzzleIncorrect = false,
+  onRetryPuzzle,
   agentStatuses = [],
   isExplanationLoading = false,
   puzzleNavigationMode = false,
+  gameMode = false,
+  gameMoveIndex = 0,
+  gameTotalMoves = 0,
   sx
 }: ChatPanelProps) {
   const [showInlineLines, setShowInlineLines] = useState(false);
@@ -213,6 +219,15 @@ export default function ChatPanel({
             </Box>
           )}
 
+          {/* Game navigation hint */}
+          {gameMode && gameTotalMoves > 0 && (
+            <Box sx={{ p: 1.5, backgroundColor: "success.lighter", borderRadius: 1, border: 1, borderColor: "success.light" }}>
+              <Typography variant="caption" sx={{ color: "success.dark", fontWeight: 600 }}>
+                Move {gameMoveIndex} / {gameTotalMoves - 1} — use ← → to navigate. Ask any question about the position!
+              </Typography>
+            </Box>
+          )}
+
           {/* Main conversation content */}
           {!questionResponse && !questionLoading ? (
             <Typography variant="body2" color="text.secondary" sx={{ color: "#999" }}>
@@ -304,8 +319,54 @@ export default function ChatPanel({
                     </Box>
                   )}
 
-                  {/* Hidden solution reveal button for puzzles */}
-                  {responseType === "Puzzle" && responseData?.hidden_solution && !showSolution && (
+                  {/* Side-to-move badge for puzzles */}
+                  {responseType === "Puzzle" && responseData?.side_to_move && (
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+                      <Chip
+                        label={`${responseData.side_to_move} to move`}
+                        size="small"
+                        color={responseData.side_to_move === "White" ? "default" : "primary"}
+                        variant="filled"
+                        sx={{
+                          fontWeight: 700,
+                          backgroundColor: responseData.side_to_move === "White" ? "#f5f5f5" : "#1a1a2e",
+                          color: responseData.side_to_move === "White" ? "#333" : "#fff",
+                          border: "1px solid",
+                          borderColor: responseData.side_to_move === "White" ? "#ccc" : "#1a1a2e"
+                        }}
+                      />
+                    </Box>
+                  )}
+
+                  {/* Incorrect attempt: retry + reveal buttons */}
+                  {responseType === "Puzzle" && puzzleIncorrect && (
+                    <Box sx={{ display: "flex", gap: 1, alignItems: "center", py: 1 }}>
+                      <Tooltip title="Retry puzzle from the start">
+                        <IconButton
+                          size="small"
+                          color="warning"
+                          onClick={onRetryPuzzle}
+                          aria-label="retry puzzle"
+                        >
+                          <ReplayIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      {responseData?.hidden_solution && !showSolution && (
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          color="primary"
+                          onClick={onShowSolution}
+                          sx={{ textTransform: "none" }}
+                        >
+                          Reveal Solution
+                        </Button>
+                      )}
+                    </Box>
+                  )}
+
+                  {/* Hidden solution reveal button (no incorrect attempt yet) */}
+                  {responseType === "Puzzle" && responseData?.hidden_solution && !showSolution && !puzzleIncorrect && (
                     <Box sx={{ py: 2, textAlign: "center" }}>
                       <Button
                         variant="contained"
@@ -315,6 +376,25 @@ export default function ChatPanel({
                       >
                         Reveal Solution
                       </Button>
+                    </Box>
+                  )}
+
+                  {/* SAN solution move list (shown after reveal) */}
+                  {responseType === "Puzzle" && showSolution && Array.isArray(responseData?.solution_san) && responseData.solution_san.length > 0 && (
+                    <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", alignItems: "center", mb: 1 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 600, color: "text.secondary" }}>
+                        Solution:
+                      </Typography>
+                      {(responseData.solution_san as string[]).map((san: string, idx: number) => (
+                        <Chip
+                          key={idx}
+                          label={`${idx + 1}. ${san}`}
+                          size="small"
+                          variant="outlined"
+                          color="primary"
+                          sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}
+                        />
+                      ))}
                     </Box>
                   )}
 
