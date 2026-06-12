@@ -1,4 +1,4 @@
-import { parseChessNotation, uciSequenceToSan, looksLikeMoveAttempt } from "./chessNotationParser";
+import { parseChessNotation, uciSequenceToSan, looksLikeMoveAttempt, parsePuzzlePlayerMoves } from "./chessNotationParser";
 
 const START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -111,6 +111,51 @@ describe("uciSequenceToSan", () => {
 
   it("returns [] for empty sequence", () => {
     expect(uciSequenceToSan(START, [])).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Puzzle FEN used in parsePuzzlePlayerMoves tests
+// Solution UCI (alternating player/opponent): h1h8 g8h8 e2h5 h8g8 h5h7
+// Player moves only: h1h8 e2h5 h5h7  (SAN: Rh8+ Qh5+ Qh7#)
+// ---------------------------------------------------------------------------
+const PUZZLE_FEN = "r1b2rk1/pp2q1p1/4p3/4ppN1/5b2/P2B4/1P2Q1P1/3RK2R w K - 0 22";
+const FULL_SOLUTION = ["h1h8", "g8h8", "e2h5", "h8g8", "h5h7"];
+const PLAYER_UCI = ["h1h8", "e2h5", "h5h7"];
+
+describe("parsePuzzlePlayerMoves", () => {
+  it("parses player-only SAN moves (space-separated)", () => {
+    expect(parsePuzzlePlayerMoves("Rh8+ Qh5+ Qh7#", PUZZLE_FEN, FULL_SOLUTION)).toEqual(PLAYER_UCI);
+  });
+
+  it("parses player-only SAN moves (comma-separated)", () => {
+    expect(parsePuzzlePlayerMoves("Rh8+, Qh5+, Qh7#", PUZZLE_FEN, FULL_SOLUTION)).toEqual(PLAYER_UCI);
+  });
+
+  it("parses player-only SAN without annotations", () => {
+    expect(parsePuzzlePlayerMoves("Rh8 Qh5 Qh7", PUZZLE_FEN, FULL_SOLUTION)).toEqual(PLAYER_UCI);
+  });
+
+  it("parses player-only UCI moves", () => {
+    expect(parsePuzzlePlayerMoves("h1h8 e2h5 h5h7", PUZZLE_FEN, FULL_SOLUTION)).toEqual(PLAYER_UCI);
+  });
+
+  it("parses single correct player move (partial solution)", () => {
+    expect(parsePuzzlePlayerMoves("Rh8+", PUZZLE_FEN, FULL_SOLUTION)).toEqual(["h1h8"]);
+  });
+
+  it("returns [] for a wrong first move", () => {
+    // Qe5 is not the right move; the opponent solution response won't apply cleanly
+    // after Rh8+ was not played, so opponent 'g8h8' (Kxh8) is illegal
+    expect(parsePuzzlePlayerMoves("Qe5 Qh5 Qh7", PUZZLE_FEN, FULL_SOLUTION)).toEqual([]);
+  });
+
+  it("returns [] for empty input", () => {
+    expect(parsePuzzlePlayerMoves("", PUZZLE_FEN, FULL_SOLUTION)).toEqual([]);
+  });
+
+  it("returns [] for invalid FEN", () => {
+    expect(parsePuzzlePlayerMoves("Rh8+", "bad fen", FULL_SOLUTION)).toEqual([]);
   });
 });
 

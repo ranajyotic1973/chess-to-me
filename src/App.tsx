@@ -52,7 +52,7 @@ import {
 } from "./utils/conversationMemory";
 import { loadGameMemory, saveGameMemory, addGameToMemory, parseAnnotationsFromResponse } from "./utils/gameMemory";
 import { quickDetectAnalysisRequired } from "./utils/twoStepLLMProcessing";
-import { parseChessNotation, uciSequenceToSan, looksLikeMoveAttempt } from "./utils/chessNotationParser";
+import { parseChessNotation, uciSequenceToSan, looksLikeMoveAttempt, parsePuzzlePlayerMoves } from "./utils/chessNotationParser";
 import type {
   AnalysisEntry,
   AnalysisLine,
@@ -1315,75 +1315,84 @@ export default function App() {
       // Fall through so the question is processed as a new search
     }
 
-    // Puzzle mode: detect typed move sequence attempt (handle locally, no LLM call)
+    // Puzzle mode: detect typed move sequence attempt (handle locally, no LLM call).
+    // When the input looks like moves we ALWAYS handle it here and never fall through
+    // to the LLM — otherwise the LLM treats it as a general chess question.
     if (currentResponseType === "Puzzle" && puzzleSolution.length > 0 && puzzleStartFen) {
       if (looksLikeMoveAttempt(question)) {
-        const parsedMoves = parseChessNotation(question, puzzleStartFen);
-        if (parsedMoves.length > 0) {
-          // puzzleSolution alternates player/opponent moves (indices 0,2,4 = player).
-          // The child may type ONLY their moves ("Rh8+ Qh5+ Qh7#") OR the full
-          // sequence including opponent responses ("Rh8+ Kxh8 Qh5+ Kg8 Qh7#").
-          // Extract accordingly so both inputs are accepted as correct.
-          const solutionPlayerMoves = puzzleSolution.filter((_, i) => i % 2 === 0);
-          const norm = (arr: string[]) => arr.map(m => m.substring(0, 4));
-          const extractedPlayerMoves =
-            parsedMoves.length === puzzleSolution.length
-              ? parsedMoves.filter((_, i) => i % 2 === 0)
-              : parsedMoves;
-          const isCorrect =
-            norm(extractedPlayerMoves).length >= norm(solutionPlayerMoves).length &&
-            norm(solutionPlayerMoves).every((m, i) => m === norm(extractedPlayerMoves)[i]);
+        // Step 1 — try the straightforward path: parse the full sequence the
+        // child typed (works when they include opponent responses).
+        const fullParsed = parseChessNotation(question, puzzleStartFen);
 
-          setQuestionText("");
-          if (isCorrect) {
-            setQuestionResponse("Correct! Well done. You solved the puzzle!");
-            setSnackbarMessage("Correct! Well done.");
-            setSnackbarSeverity("success");
-            setSnackbarOpen(true);
-            setPuzzleIncorrect(false);
-          } else {
-            setPuzzleIncorrect(true);
-            setCurrentFen(puzzleStartFen);
-            setCurrentMoveIndex(0);
-            setSnackbarMessage("Incorrect — try again or reveal the solution.");
-            setSnackbarSeverity("error");
-            setSnackbarOpen(true);
+        // Step 2 — if that returned nothing, the child typed only their own
+        // moves ("Rh8+ Qh5+ Qh7#").  Interleave the solution's opponent moves
+        // so each child token is evaluated at the correct board state.
+        const rawPlayerMoves: string[] =
+          fullParsed.length > 0
+            ? (fullParsed.length === puzzleSolution.length
+                ? fullParsed.filter((_, i) => i % 2 === 0)  // full sequence — keep player moves
+                : fullParsed)                                // already player-only
+            : parsePuzzlePlayerMoves(question, puzzleStartFen, puzzleSolution);
 
-            // Deferred LLM explanation — only now that the answer is wrong
-            if (electronAPI?.puzzleExplainIncorrect && puzzleMeta) {
-              setPuzzleExplainLoading(true);
-              setQuestionResponse("Working out what went wrong…");
-              const userMovesSan = uciSequenceToSan(puzzleStartFen, parsedMoves);
-              electronAPI.puzzleExplainIncorrect({
-                puzzleFen: puzzleStartFen,
-                solutionUci: puzzleSolution,
-                solutionSan: puzzleSolutionSan,
-                userMovesUci: parsedMoves,
-                userMovesSan,
-                themes: puzzleMeta.themes,
-                difficulty: puzzleMeta.difficulty,
-                rating: puzzleMeta.rating,
-                llmProvider: formState.llmProvider,
-                llmApiKey: formState.llmApiKey,
-                model: getModelForProvider(formState.llmProvider, formState.ollamaModel, formState.llmModel),
-                baseUrl: getBaseUrlForProvider(formState.llmProvider, formState.ollamaBaseUrl),
-              }).then((res) => {
-                if (res?.ok && res.explanation) {
-                  setQuestionResponse(res.explanation);
-                } else {
-                  setQuestionResponse("Incorrect — try again or reveal the solution.");
-                }
-              }).catch(() => {
+        // Step 3 — compare against the solution's player moves (4-char UCI prefix).
+        const solutionPlayerMoves = puzzleSolution.filter((_, i) => i % 2 === 0);
+        const norm = (arr: string[]) => arr.map(m => m.substring(0, 4));
+        const isCorrect =
+          rawPlayerMoves.length > 0 &&
+          norm(rawPlayerMoves).length >= norm(solutionPlayerMoves).length &&
+          norm(solutionPlayerMoves).every((m, i) => m === norm(rawPlayerMoves)[i]);
+
+        setQuestionText("");
+        if (isCorrect) {
+          setQuestionResponse("Correct! Well done. You solved the puzzle!");
+          setSnackbarMessage("Correct! Well done.");
+          setSnackbarSeverity("success");
+          setSnackbarOpen(true);
+          setPuzzleIncorrect(false);
+        } else {
+          setPuzzleIncorrect(true);
+          setCurrentFen(puzzleStartFen);
+          setCurrentMoveIndex(0);
+          setSnackbarMessage("Incorrect — try again or reveal the solution.");
+          setSnackbarSeverity("error");
+          setSnackbarOpen(true);
+
+          // Deferred LLM explanation — only triggered for wrong answers.
+          // Pass the best UCI representation of what the child tried.
+          const userMovesUci = rawPlayerMoves.length > 0 ? rawPlayerMoves : fullParsed;
+          if (electronAPI?.puzzleExplainIncorrect && puzzleMeta) {
+            setPuzzleExplainLoading(true);
+            setQuestionResponse("Working out what went wrong…");
+            const userMovesSan = uciSequenceToSan(puzzleStartFen, userMovesUci);
+            electronAPI.puzzleExplainIncorrect({
+              puzzleFen: puzzleStartFen,
+              solutionUci: puzzleSolution,
+              solutionSan: puzzleSolutionSan,
+              userMovesUci,
+              userMovesSan,
+              themes: puzzleMeta.themes,
+              difficulty: puzzleMeta.difficulty,
+              rating: puzzleMeta.rating,
+              llmProvider: formState.llmProvider,
+              llmApiKey: formState.llmApiKey,
+              model: getModelForProvider(formState.llmProvider, formState.ollamaModel, formState.llmModel),
+              baseUrl: getBaseUrlForProvider(formState.llmProvider, formState.ollamaBaseUrl),
+            }).then((res) => {
+              if (res?.ok && res.explanation) {
+                setQuestionResponse(res.explanation);
+              } else {
                 setQuestionResponse("Incorrect — try again or reveal the solution.");
-              }).finally(() => {
-                setPuzzleExplainLoading(false);
-              });
-            } else {
+              }
+            }).catch(() => {
               setQuestionResponse("Incorrect — try again or reveal the solution.");
-            }
+            }).finally(() => {
+              setPuzzleExplainLoading(false);
+            });
+          } else {
+            setQuestionResponse("Incorrect — try again or reveal the solution.");
           }
-          return;
         }
+        return;
       }
     }
 

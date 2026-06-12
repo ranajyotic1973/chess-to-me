@@ -90,6 +90,72 @@ export function uciSequenceToSan(startFen: string, uciMoves: string[]): string[]
 }
 
 /**
+ * Parse a puzzle answer where the child typed ONLY their own moves (skipping
+ * the opponent's responses).  The solution's opponent moves are interleaved
+ * between the child's tokens so each child move is validated at the correct
+ * board state.
+ *
+ * Returns the child's moves as UCI strings, or [] if any move is illegal or
+ * cannot be recognised.  Use this as a fallback when parseChessNotation
+ * returns [] (which happens because after the first move it's the opponent's
+ * turn and the next token is invalid for that side).
+ *
+ * @param input         Raw user text ("Rh8+ Qh5+ Qh7#")
+ * @param startFen      FEN of the puzzle starting position
+ * @param fullSolution  Full UCI solution alternating player/opponent moves
+ */
+export function parsePuzzlePlayerMoves(
+  input: string,
+  startFen: string,
+  fullSolution: string[]
+): string[] {
+  const cleaned = input
+    .replace(/\d+\.\.\./g, " ")
+    .replace(/\d+\./g, " ")
+    .replace(/,/g, " ")
+    .replace(/[!?+#]/g, "")
+    .trim();
+
+  const tokens = cleaned.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return [];
+
+  const chess = new Chess();
+  try { chess.load(startFen); } catch { return []; }
+
+  const UCI_RE = /^[a-h][1-8][a-h][1-8][qrbn]?$/i;
+  const playerUci: string[] = [];
+
+  for (let i = 0; i < tokens.length; i++) {
+    // Apply the child's i-th move
+    let moveResult;
+    try {
+      const t = tokens[i];
+      if (UCI_RE.test(t)) {
+        moveResult = chess.move({ from: t.slice(0, 2) as Parameters<Chess["move"]>[0]["from"], to: t.slice(2, 4) as Parameters<Chess["move"]>[0]["to"], promotion: t[4] as "q" | "r" | "b" | "n" | undefined });
+      } else {
+        moveResult = chess.move(t);
+      }
+    } catch { return []; }
+    if (!moveResult) return [];
+    playerUci.push(moveResult.from + moveResult.to + (moveResult.promotion ?? ""));
+
+    // After the child's move, apply the opponent's solution response so the
+    // board is in the right state for the child's next move.
+    // Skip after the last child token — the puzzle may be over.
+    const opponentIdx = i * 2 + 1;
+    if (i < tokens.length - 1 && opponentIdx < fullSolution.length) {
+      const opp = fullSolution[opponentIdx];
+      try {
+        const oppResult = chess.move({ from: opp.slice(0, 2) as Parameters<Chess["move"]>[0]["from"], to: opp.slice(2, 4) as Parameters<Chess["move"]>[0]["to"], promotion: opp[4] as "q" | "r" | "b" | "n" | undefined });
+        if (!oppResult) return [];
+      } catch { return []; }
+    }
+  }
+
+  return playerUci;
+}
+
+/**
  * Return true if the input looks like a chess move attempt rather than a
  * natural-language question.  Used to skip LLM classification and handle the
  * move directly.
