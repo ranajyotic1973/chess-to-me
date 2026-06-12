@@ -180,44 +180,72 @@ export function importPgnText(db: Database.Database, pgnText: string): number {
   return games.length;
 }
 
-export function searchGames(db: Database.Database, params: GameSearchParams): GameRow[] {
-  const { player, eco, minElo, limit = 10 } = params;
+/** Build extra WHERE conditions and bind args for optional filters.
+ *  alias: table alias prefix, e.g. "g" → column refs become "g.result", "g.date" etc. */
+function buildExtraConditions(
+  params: Pick<GameSearchParams, "result" | "year_from" | "year_to" | "eco" | "minElo">,
+  alias = ""
+): { conditions: string[]; args: (string | number)[] } {
+  const p = alias ? `${alias}.` : "";
+  const conditions: string[] = [];
+  const args: (string | number)[] = [];
+  if (params.result)                  { conditions.push(`${p}result = ?`);                                     args.push(params.result); }
+  if (params.year_from !== undefined) { conditions.push(`CAST(SUBSTR(${p}date,1,4) AS INTEGER) >= ?`);        args.push(params.year_from); }
+  if (params.year_to   !== undefined) { conditions.push(`CAST(SUBSTR(${p}date,1,4) AS INTEGER) <= ?`);        args.push(params.year_to); }
+  if (params.eco)                     { conditions.push(`${p}eco = ?`);                                        args.push(params.eco); }
+  if (params.minElo !== undefined)    { conditions.push(`${p}white_elo >= ?`); conditions.push(`${p}black_elo >= ?`); args.push(params.minElo, params.minElo); }
+  return { conditions, args };
+}
 
-  // Use FTS5 when searching by player name or opening text
+export function searchGames(db: Database.Database, params: GameSearchParams): GameRow[] {
+  const { player, opponent, result, year_from, year_to, eco, minElo, limit = 10 } = params;
+  const filterParams = { result, year_from, year_to, eco, minElo };
+
+  // Two-player search: find games where both players appear on either side
+  if (player && opponent) {
+    const pp = `%${player.replace(/[%_]/g, "")}%`;
+    const op = `%${opponent.replace(/[%_]/g, "")}%`;
+    const { conditions: extra, args: extraArgs } = buildExtraConditions(filterParams);
+    const where = [
+      "(white LIKE ? OR black LIKE ?)",
+      "(white LIKE ? OR black LIKE ?)",
+      ...extra
+    ].join(" AND ");
+    return db.prepare(
+      `SELECT * FROM games WHERE ${where} ORDER BY date DESC LIMIT ?`
+    ).all(pp, pp, op, op, ...extraArgs, limit) as GameRow[];
+  }
+
+  // Single-player FTS search
   if (player) {
     const ftsQuery = player.trim().split(/\s+/).map(t => `"${t}"`).join(" OR ");
-    const sql = `
-      SELECT g.* FROM games_fts f
-      JOIN games g ON g.game_id = f.rowid
-      WHERE games_fts MATCH ?
-        ${eco       ? "AND g.eco = ?"                                        : ""}
-        ${minElo !== undefined ? "AND g.white_elo >= ? AND g.black_elo >= ?" : ""}
-      ORDER BY g.date DESC
-      LIMIT ?
-    `;
-    const args: (string | number)[] = [ftsQuery];
-    if (eco)             args.push(eco);
-    if (minElo !== undefined) args.push(minElo, minElo);
-    args.push(limit);
+    const { conditions: ftsExtra, args: ftsExtraArgs } = buildExtraConditions(filterParams, "g");
+    const ftsWhere = ftsExtra.map(c => `AND ${c}`).join(" ");
     try {
-      return db.prepare(sql).all(...args) as GameRow[];
+      return db.prepare(`
+        SELECT g.* FROM games_fts f
+        JOIN games g ON g.game_id = f.rowid
+        WHERE games_fts MATCH ?
+        ${ftsWhere}
+        ORDER BY g.date DESC LIMIT ?
+      `).all(ftsQuery, ...ftsExtraArgs, limit) as GameRow[];
     } catch {
-      // FTS not yet built — fall through to plain query
+      // FTS not yet built — fall through to LIKE
+      const pp = `%${player.replace(/[%_]/g, "")}%`;
+      const { conditions: likeExtra, args: likeExtraArgs } = buildExtraConditions(filterParams);
+      const likeWhere = ["(white LIKE ? OR black LIKE ?)", ...likeExtra].join(" AND ");
+      return db.prepare(
+        `SELECT * FROM games WHERE ${likeWhere} ORDER BY date DESC LIMIT ?`
+      ).all(pp, pp, ...likeExtraArgs, limit) as GameRow[];
     }
   }
 
-  // Plain indexed query (eco / elo filters without text)
-  const conditions: string[] = [];
-  const args: (string | number)[] = [];
-  if (eco)  { conditions.push("eco = ?"); args.push(eco); }
-  if (minElo !== undefined) {
-    conditions.push("white_elo >= ? AND black_elo >= ?");
-    args.push(minElo, minElo);
-  }
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  const sql = `SELECT * FROM games ${where} ORDER BY date DESC LIMIT ?`;
-  args.push(limit);
-  return db.prepare(sql).all(...args) as GameRow[];
+  // No player specified — filter by result / year / eco / elo only
+  const { conditions: extra, args: extraArgs } = buildExtraConditions(filterParams);
+  const where = extra.length ? `WHERE ${extra.join(" AND ")}` : "";
+  return db.prepare(
+    `SELECT * FROM games ${where} ORDER BY date DESC LIMIT ?`
+  ).all(...extraArgs, limit) as GameRow[];
 }
 
 export function getGamesDbStats(dbPath: string): { count: number; sizeBytes: number; source: string } | null {

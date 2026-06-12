@@ -419,6 +419,10 @@ export interface PuzzleSearchParams {
 
 export interface GameSearchParams {
   player?: string;
+  opponent?: string;
+  result?: string;
+  year_from?: number;
+  year_to?: number;
   eco?: string;
   minElo?: number;
   limit?: number;

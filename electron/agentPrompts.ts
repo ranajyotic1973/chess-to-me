@@ -45,8 +45,47 @@ export const PUZZLE_RESPONSE_FORMAT = {
   }
 };
 
+export const GAME_SEARCH_PARAMS_FORMAT = {
+  type: "json_schema",
+  json_schema: {
+    name: "game_search_params",
+    strict: false,
+    schema: {
+      type: "object",
+      properties: {
+        player:    { type: "string",  description: "Primary player name as likely stored in a chess DB (e.g. 'Kasparov', 'Carlsen')" },
+        opponent:  { type: "string",  description: "Second player when query is about games between two specific players" },
+        result:    { type: "string",  enum: ["1-0", "0-1", "1/2-1/2"], description: "Game result filter" },
+        year_from: { type: "integer", description: "Earliest year (inclusive)" },
+        year_to:   { type: "integer", description: "Latest year (inclusive)" }
+      },
+      required: ["player"]
+    }
+  }
+};
+
 // json_object format — for providers/models that don't support full json_schema
 export const JSON_OBJECT_FORMAT = { type: "json_object" };
+
+// ============================================================================
+// Game search parameter extraction
+// ============================================================================
+
+export const GAME_SEARCH_SYSTEM_PROMPT =
+  `Extract chess game search parameters from the user's query and respond with JSON only.
+
+Fields:
+- player (required): primary player name as it likely appears in a chess database — use last name or "Lastname, Firstname" form (e.g. "Kasparov", "Carlsen", "Tal")
+- opponent (optional): second player when the query asks for games between two specific players
+- result (optional): "1-0" if the user asks for wins for the primary player as White, "0-1" for wins as Black, "1/2-1/2" for draws — omit if not specified
+- year_from (optional): earliest year as an integer
+- year_to (optional): latest year as an integer
+
+Examples:
+"show me Kasparov games" → {"player":"Kasparov"}
+"games between Magnus and Karpov" → {"player":"Carlsen","opponent":"Karpov"}
+"Kasparov wins against Karpov from 1984 to 1986" → {"player":"Kasparov","opponent":"Karpov","result":"1-0","year_from":1984,"year_to":1986}
+"Tal draws in 1960" → {"player":"Tal","result":"1/2-1/2","year_from":1960,"year_to":1960}`;
 
 // ============================================================================
 // Classifier

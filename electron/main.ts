@@ -24,7 +24,9 @@ import {
   PLAYER_GAMES_AGENT_SYSTEM_PROMPT,
   CLASSIFIER_RESPONSE_FORMAT,
   PUZZLE_RESPONSE_FORMAT,
-  JSON_OBJECT_FORMAT
+  JSON_OBJECT_FORMAT,
+  GAME_SEARCH_PARAMS_FORMAT,
+  GAME_SEARCH_SYSTEM_PROMPT
 } from "./agentPrompts";
 import type Database from "better-sqlite3";
 
@@ -2883,24 +2885,63 @@ async function handlePositionRequest(question: string, payload: any, llmProvider
   }
 }
 
+/** Regex fallback used only when the LLM extraction call fails. */
 function extractPlayerNameFromQuestion(question: string): string {
   const q = question.trim();
-
-  // "games by X", "games of X", "games from X", "games played by X"
   const byMatch = q.match(/games?\s+(?:by|of|from|played?\s+by)\s+([A-Za-z][A-Za-z\s,\-.']+?)(?:\s*$|\s+(?:in|from|at|since|before|after|\d{4}))/i);
   if (byMatch) return byMatch[1].trim();
-
-  // "X's games"
   const possessiveMatch = q.match(/([A-Za-z][A-Za-z\s,\-.']+?)'s?\s+games?/i);
   if (possessiveMatch) return possessiveMatch[1].trim();
-
-  // Collect capitalized words (likely player name), skip common stop words
   const stopWords = new Set(["Show", "Find", "Give", "Get", "Me", "My", "What", "Which", "Who", "How", "When", "Where", "Games", "Game", "Some", "The", "A", "An", "By", "Of", "From", "With", "In", "At", "Any", "All"]);
   const capitalizedWords = q.match(/\b[A-Z][a-z]{1,}\b/g) ?? [];
   const names = capitalizedWords.filter(w => !stopWords.has(w));
   if (names.length > 0) return names.join(" ");
-
   return q;
+}
+
+interface GameSearchExtracted {
+  player?: string;
+  opponent?: string;
+  result?: string;
+  year_from?: number;
+  year_to?: number;
+}
+
+async function extractGameSearchParams(
+  question: string,
+  llmProvider: string,
+  llmApiKey: string,
+  model: string,
+  baseUrl: string
+): Promise<GameSearchExtracted> {
+  const responseFormat = getStructuredOutputFormat(llmProvider, model, GAME_SEARCH_PARAMS_FORMAT);
+  try {
+    const raw = await runLlmChat({
+      provider: llmProvider,
+      baseUrl,
+      model,
+      apiKey: llmApiKey,
+      messages: [
+        { role: "system", content: GAME_SEARCH_SYSTEM_PROMPT },
+        { role: "user",   content: question }
+      ],
+      timeoutMs: llmProvider === "ollama" ? 30000 : 60000,
+      includeTools: false,
+      responseFormat
+    });
+    const p = JSON.parse(raw.trim());
+    const validResults = new Set(["1-0", "0-1", "1/2-1/2"]);
+    return {
+      player:    typeof p.player   === "string" && p.player.trim()   ? p.player.trim()   : undefined,
+      opponent:  typeof p.opponent === "string" && p.opponent.trim() ? p.opponent.trim() : undefined,
+      result:    validResults.has(p.result)                          ? p.result          : undefined,
+      year_from: Number.isInteger(p.year_from)                       ? p.year_from       : undefined,
+      year_to:   Number.isInteger(p.year_to)                         ? p.year_to         : undefined,
+    };
+  } catch (err) {
+    console.warn(`[LLM] Game search param extraction failed, using regex fallback: ${(err as Error).message}`);
+    return { player: extractPlayerNameFromQuestion(question) };
+  }
 }
 
 function normalizeGameResult(result: string): string {
@@ -2912,8 +2953,8 @@ function normalizeGameResult(result: string): string {
   }
 }
 
-async function handlePlayerGamesRequest(question: string, payload: unknown, _llmProvider: string, _llmApiKey: string, _model: string, _baseUrl: string): Promise<{ ok: boolean; answer?: string; error?: string }> {
-  console.log(`[LLM] PASS 2: PLAYER_GAMES - Searching local games database directly`);
+async function handlePlayerGamesRequest(question: string, payload: unknown, llmProvider: string, llmApiKey: string, model: string, baseUrl: string): Promise<{ ok: boolean; answer?: string; error?: string }> {
+  console.log(`[LLM] PASS 2: PLAYER_GAMES - Searching local games database`);
 
   const db = getGamesDb();
   if (!db) {
@@ -2928,25 +2969,22 @@ async function handlePlayerGamesRequest(question: string, payload: unknown, _llm
   }
 
   // If user typed just a number, check conversation history to find which game they're selecting.
-  // This is the fallback for when the frontend gameList state check doesn't catch it.
+  // This is the fallback for when the frontend gameListRef check doesn't catch it.
   const selectionMatch = question.trim().match(/^(\d+)$/);
   if (selectionMatch) {
     const selectionNum = parseInt(selectionMatch[1], 10);
     const history = Array.isArray((payload as any)?.conversationHistory)
       ? ((payload as any).conversationHistory as Array<{ role: string; message: string }>)
       : [];
-
     const historyReversed = [...history].reverse();
     const listMsgIdx = historyReversed.findIndex(
       h => h.role === "assistant" && typeof h.message === "string" && h.message.includes("Type the number to load a game")
     );
-
     if (listMsgIdx >= 0) {
-      // Find the user query that preceded the game list
       const prevUserMsg = historyReversed.slice(listMsgIdx + 1).find(h => h.role === "user");
       if (prevUserMsg) {
-        const originalPlayer = extractPlayerNameFromQuestion(prevUserMsg.message);
-        const allGames = searchGames(db, { player: originalPlayer, limit: 20 });
+        const prevParams = await extractGameSearchParams(prevUserMsg.message, llmProvider, llmApiKey, model, baseUrl);
+        const allGames = searchGames(db, { ...prevParams, limit: 20 });
         if (selectionNum >= 1 && selectionNum <= allGames.length) {
           const selected = allGames[selectionNum - 1];
           const displayResult = normalizeGameResult(selected.result);
@@ -2963,21 +3001,25 @@ async function handlePlayerGamesRequest(question: string, payload: unknown, _llm
         }
       }
     }
-    // If we couldn't resolve the number, fall through to a normal search
+    // Couldn't resolve the number — fall through to a normal search
   }
 
-  const playerName = extractPlayerNameFromQuestion(question);
-  console.log(`[LLM] PASS 2: PLAYER_GAMES - Extracted player: "${playerName}"`);
+  // Extract structured search params from the question using a fast LLM sub-call
+  const searchParams = await extractGameSearchParams(question, llmProvider, llmApiKey, model, baseUrl);
+  console.log(`[LLM] PASS 2: PLAYER_GAMES - Search params:`, searchParams);
 
-  const games = searchGames(db, { player: playerName, limit: 20 });
+  const games = searchGames(db, { ...searchParams, limit: 20 });
 
   if (games.length === 0) {
+    const who = searchParams.opponent
+      ? `${searchParams.player} vs ${searchParams.opponent}`
+      : (searchParams.player ?? question);
     return {
       ok: true,
       answer: JSON.stringify({
         response_type: "GameList",
         game_list: [],
-        explanation: `No games found for "${playerName}" in the database. Try a different spelling or name.`
+        explanation: `No games found for "${who}" in the database. Try a different spelling or name.`
       })
     };
   }
@@ -2987,8 +3029,20 @@ async function handlePlayerGamesRequest(question: string, payload: unknown, _llm
     return `${i + 1}. ${g.white} vs ${g.black} — ${result}`;
   });
 
+  // Build a human-readable summary of the filters applied
+  const filterParts: string[] = [];
+  if (searchParams.opponent)   filterParts.push(`vs ${searchParams.opponent}`);
+  if (searchParams.result)     filterParts.push({ "1-0": "White wins", "0-1": "Black wins", "1/2-1/2": "draws" }[searchParams.result] ?? searchParams.result);
+  if (searchParams.year_from && searchParams.year_to && searchParams.year_from === searchParams.year_to) {
+    filterParts.push(`in ${searchParams.year_from}`);
+  } else {
+    if (searchParams.year_from) filterParts.push(`from ${searchParams.year_from}`);
+    if (searchParams.year_to)   filterParts.push(`to ${searchParams.year_to}`);
+  }
+  const filterSuffix = filterParts.length ? ` (${filterParts.join(", ")})` : "";
+
   const explanation =
-    `Found **${games.length}** game${games.length !== 1 ? "s" : ""}. Type the number to load a game:\n\n${listLines.join("\n")}`;
+    `Found **${games.length}** game${games.length !== 1 ? "s" : ""} for **${searchParams.player ?? "?"}**${filterSuffix}. Type the number to load a game:\n\n${listLines.join("\n")}`;
 
   console.log(`[LLM] PASS 2: PLAYER_GAMES ✓ Found ${games.length} games`);
   return {

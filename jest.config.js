@@ -14,6 +14,9 @@ module.exports = {
   ],
   setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
   moduleNameMapper: {
-    "^@/(.*)$": "<rootDir>/src/$1"
+    "^@/(.*)$": "<rootDir>/src/$1",
+    // better-sqlite3 is compiled against Electron's Node.js ABI and cannot
+    // load in the system Node.js test environment. The mock uses node:sqlite.
+    "^better-sqlite3$": "<rootDir>/__mocks__/better-sqlite3.js"
   }
 };
