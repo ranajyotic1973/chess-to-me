@@ -85,6 +85,84 @@ const DEFAULT_FORM: AppSettings = {
 
 const VALID_PROVIDERS = ["ollama", "openai", "anthropic", "gemini", "grok"] as const;
 
+interface GamePlayerInfo {
+  white: string;
+  black: string;
+  whiteElo?: number;
+  blackElo?: number;
+  whiteChesscomRating?: number;
+  blackChesscomRating?: number;
+}
+
+/**
+ * Try to fetch a player's current rating from the chess.com public API.
+ * The DB stores names as "LastName, FirstName"; we derive several username
+ * candidates and try each until one returns data.
+ * Returns the FIDE rating if linked, otherwise rapid, otherwise blitz.
+ * Returns null on any failure (network error, player not found, etc.).
+ */
+function PlayerBar({ name, elo, pieceColor }: { name: string; elo?: number; pieceColor: "white" | "black" }) {
+  const pawn = pieceColor === "white" ? "♙" : "♟";
+  const eloLabel = elo && elo > 0 ? ` (${elo})` : "";
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 0.75,
+        px: 1.5,
+        py: 0.5,
+        borderRadius: 1,
+        bgcolor: pieceColor === "white" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.25)",
+        border: "1px solid",
+        borderColor: pieceColor === "white" ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.4)",
+        maxWidth: "100%",
+        overflow: "hidden",
+      }}
+    >
+      <Typography component="span" sx={{ fontSize: "1rem", lineHeight: 1, userSelect: "none" }}>
+        {pawn}
+      </Typography>
+      <Typography
+        variant="body2"
+        noWrap
+        sx={{ fontWeight: 600, fontSize: "0.82rem", letterSpacing: 0.2 }}
+      >
+        {name}{eloLabel}
+      </Typography>
+    </Box>
+  );
+}
+
+async function fetchChesscomRating(playerName: string): Promise<number | null> {
+  const parts = playerName.split(",").map(p => p.trim());
+  const lastName = parts[0] ?? "";
+  const firstName = parts[1] ?? "";
+
+  const candidates: string[] = [];
+  if (firstName) candidates.push(firstName);                         // "Hikaru"
+  if (firstName && lastName) candidates.push(`${firstName}${lastName}`); // "MagnusCarlsen"
+  if (lastName) candidates.push(lastName);                           // "Nakamura"
+
+  for (const username of candidates) {
+    try {
+      const res = await fetch(
+        `https://api.chess.com/pub/player/${encodeURIComponent(username)}/stats`
+      );
+      if (!res.ok) continue;
+      const data = await res.json() as Record<string, any>;
+      if (typeof data.fide === "number" && data.fide > 0) return data.fide;
+      const rapid = data.chess_rapid?.last?.rating;
+      if (typeof rapid === "number" && rapid > 0) return rapid;
+      const blitz = data.chess_blitz?.last?.rating;
+      if (typeof blitz === "number" && blitz > 0) return blitz;
+    } catch {
+      // try next candidate
+    }
+  }
+  return null;
+}
+
 const normalizeModelName = (value: string | null | undefined): string => String(value || "").trim();
 
 const getModelForProvider = (provider: string, ollamaModel: string, llmModel?: string): string => {
@@ -234,6 +312,7 @@ export default function App() {
   // without needing to re-create the callback on every list update.
   const gameListRef = useRef<import("./types").GameRow[] | null>(null);
   const [gameMode, setGameMode] = useState<boolean>(false);
+  const [currentGameInfo, setCurrentGameInfo] = useState<GamePlayerInfo | null>(null);
   const [gamePgnFens, setGamePgnFens] = useState<string[]>([]);
   const [gameMoveIndex, setGameMoveIndex] = useState<number>(0);
 
@@ -770,6 +849,25 @@ export default function App() {
     };
   }, [selectedEngineLineIndex, puzzleNavigationMode, gameMode, handleKeyboardNavigation]);
 
+  // When a game loads, attempt to fetch the players' current ratings from
+  // chess.com to supplement (or replace) the historical ELO stored in the DB.
+  // Fires whenever the white/black names change (i.e. a different game is loaded).
+  const chesscomWhite = gameMode ? (currentGameInfo?.white ?? null) : null;
+  const chesscomBlack = gameMode ? (currentGameInfo?.black ?? null) : null;
+  useEffect(() => {
+    if (!chesscomWhite || !chesscomBlack) return;
+    let cancelled = false;
+    Promise.all([fetchChesscomRating(chesscomWhite), fetchChesscomRating(chesscomBlack)])
+      .then(([wRating, bRating]) => {
+        if (cancelled) return;
+        setCurrentGameInfo(prev =>
+          prev ? { ...prev, whiteChesscomRating: wRating ?? undefined, blackChesscomRating: bRating ?? undefined } : null
+        );
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [chesscomWhite, chesscomBlack]);
+
   const applyLineMove = useCallback((moveIndex: number) => {
     if (!selectedEngineLineData) {
       return;
@@ -1259,6 +1357,12 @@ export default function App() {
     setGameMoveIndex(1);
     setCurrentFen(fens[1]);
     setGameMode(true);
+    setCurrentGameInfo({
+      white: game.white,
+      black: game.black,
+      whiteElo: game.white_elo > 0 ? game.white_elo : undefined,
+      blackElo: game.black_elo > 0 ? game.black_elo : undefined,
+    });
     gameListRef.current = null;
     setGameList(null);
     setShowSolution(false);
@@ -1266,7 +1370,7 @@ export default function App() {
     setSelectedEngineLineIndex(null);
     setSelectedEngineLineData(null);
     return true;
-  }, [parsePgnToFens]);
+  }, [parsePgnToFens, setCurrentGameInfo]);
 
   const handleQuestion = useCallback(async (): Promise<void> => {
     let question = String(questionText || "").trim();
@@ -1309,6 +1413,7 @@ export default function App() {
     // Game mode: "another game" → re-display the last game list or clear so user can re-ask
     if (gameMode && /\b(another|more|next|different)\b.{0,20}\bgame\b|\bgame\b.{0,20}\b(another|more|next|different)\b/i.test(question)) {
       setGameMode(false);
+      setCurrentGameInfo(null);
       setGamePgnFens([]);
       setGameMoveIndex(0);
       setCurrentFen("start");
@@ -1355,6 +1460,8 @@ export default function App() {
             setCurrentFen("start");
             setCurrentResponseType("Analysis");
             setCurrentResponseData({});
+            setGameMode(false);
+            setCurrentGameInfo(null);
             setPuzzleSolution([]);
             setPuzzleSolutionSan([]);
             setPuzzleAttemptMoves([]);
@@ -1574,6 +1681,7 @@ export default function App() {
           gameListRef.current = incomingGames.length > 0 ? incomingGames : null;
           setGameList(incomingGames.length > 0 ? incomingGames : null);
           setGameMode(false);
+          setCurrentGameInfo(null);
           setGamePgnFens([]);
           setGameMoveIndex(0);
         }
@@ -1996,6 +2104,14 @@ export default function App() {
                   boxSizing: "border-box"
                 }}
               >
+                {/* Black player bar — shown above the board when a DB game is loaded */}
+                {gameMode && currentGameInfo && (
+                  <PlayerBar
+                    name={currentGameInfo.black}
+                    elo={currentGameInfo.blackChesscomRating ?? currentGameInfo.blackElo}
+                    pieceColor="black"
+                  />
+                )}
                 <Box
                   sx={{
                     flex: 1,
@@ -2018,6 +2134,14 @@ export default function App() {
                     puzzleMode={currentResponseType === "Puzzle" || gameMode}
                   />
                 </Box>
+                {/* White player bar — shown below the board when a DB game is loaded */}
+                {gameMode && currentGameInfo && (
+                  <PlayerBar
+                    name={currentGameInfo.white}
+                    elo={currentGameInfo.whiteChesscomRating ?? currentGameInfo.whiteElo}
+                    pieceColor="white"
+                  />
+                )}
                 <Box sx={{ display: "flex", justifyContent: "space-between", pt: 1 }}>
                   <Stack direction="row" spacing={1}>
                     <Tooltip title="Import position">
