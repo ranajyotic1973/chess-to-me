@@ -3396,7 +3396,10 @@ ipcMain.handle("puzzle:explain-incorrect", async (_event, payload) => {
   const provider = llmProvider || settings.get("llmProvider") || "ollama";
   const apiKey = llmApiKey || settings.get("llmApiKey") || "";
   const llmModel = model || settings.get("llmModel") || settings.get("ollamaModel") || "";
-  const llmBaseUrl = baseUrl || settings.get("ollamaBaseUrl") || "http://localhost:11434";
+  // Only Ollama needs a base URL — cloud providers use their own fixed endpoints.
+  const llmBaseUrl = provider === "ollama"
+    ? (baseUrl || settings.get("ollamaBaseUrl") || "http://localhost:11434")
+    : (baseUrl || "");
 
   const systemPrompt = buildIncorrectAnswerPrompt(
     puzzleFen,

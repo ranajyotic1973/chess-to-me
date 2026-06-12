@@ -1252,10 +1252,12 @@ export default function App() {
   // Returns true if the game was loaded successfully; false if PGN could not be parsed.
   const loadGameFromRow = useCallback((game: import("./types").GameRow): boolean => {
     const fens = parsePgnToFens(game.pgn_moves);
-    if (fens.length === 0) return false;
+    // fens[0] is always the starting position; if that's all we have, no moves parsed.
+    if (fens.length <= 1) return false;
     setGamePgnFens(fens);
-    setGameMoveIndex(0);
-    setCurrentFen(fens[0]);
+    // Start at move 1 so the board shows a changed position — visual proof the game loaded.
+    setGameMoveIndex(1);
+    setCurrentFen(fens[1]);
     setGameMode(true);
     gameListRef.current = null;
     setGameList(null);
@@ -1318,14 +1320,19 @@ export default function App() {
       if (looksLikeMoveAttempt(question)) {
         const parsedMoves = parseChessNotation(question, puzzleStartFen);
         if (parsedMoves.length > 0) {
-          // Compare only the player's moves (player moves are at even indices 0,2,4…)
-          // puzzleSolution contains alternating player/opponent moves starting with player's
-          const playerMoves = parsedMoves;
+          // puzzleSolution alternates player/opponent moves (indices 0,2,4 = player).
+          // The child may type ONLY their moves ("Rh8+ Qh5+ Qh7#") OR the full
+          // sequence including opponent responses ("Rh8+ Kxh8 Qh5+ Kg8 Qh7#").
+          // Extract accordingly so both inputs are accepted as correct.
           const solutionPlayerMoves = puzzleSolution.filter((_, i) => i % 2 === 0);
           const norm = (arr: string[]) => arr.map(m => m.substring(0, 4));
+          const extractedPlayerMoves =
+            parsedMoves.length === puzzleSolution.length
+              ? parsedMoves.filter((_, i) => i % 2 === 0)
+              : parsedMoves;
           const isCorrect =
-            norm(playerMoves).length >= norm(solutionPlayerMoves).length &&
-            norm(solutionPlayerMoves).every((m, i) => m === norm(playerMoves)[i]);
+            norm(extractedPlayerMoves).length >= norm(solutionPlayerMoves).length &&
+            norm(solutionPlayerMoves).every((m, i) => m === norm(extractedPlayerMoves)[i]);
 
           setQuestionText("");
           if (isCorrect) {
@@ -1530,7 +1537,10 @@ export default function App() {
         if (parsedResponse.auto_load && incomingGames.length === 1) {
           // Backend resolved a game-number selection via conversation history — auto-load it.
           // loadGameFromRow also clears gameList state and ref internally.
-          loadGameFromRow(incomingGames[0]);
+          const loaded = loadGameFromRow(incomingGames[0]);
+          if (!loaded) {
+            setQuestionResponse("⚠️ Couldn't load that game onto the board — the PGN may be missing or unreadable.");
+          }
         } else {
           // Normal list response — store for manual selection by typing a number.
           gameListRef.current = incomingGames.length > 0 ? incomingGames : null;
