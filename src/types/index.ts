@@ -304,6 +304,7 @@ export interface IpcPayloads {
   "db:check-puzzle-update": Record<string, never>;
   "db:browse-games-file": Record<string, never>;
   "db:import-games-7z": { filePath: string };
+  "db:import-status": Record<string, never>;
   "db:search-puzzles": PuzzleSearchParams;
   "db:search-games": GameSearchParams;
   "db:delete-puzzles": Record<string, never>;
@@ -347,7 +348,8 @@ export interface IpcResponses {
   "db:download-puzzles": { ok: boolean; count?: number; error?: string };
   "db:check-puzzle-update": { hasUpdate: boolean; serverDate: string };
   "db:browse-games-file": { filePath: string | null };
-  "db:import-games-7z": { ok: boolean; count?: number; error?: string };
+  "db:import-games-7z": { ok: boolean; started?: boolean; count?: number; error?: string };
+  "db:import-status": GamesImportState;
   "db:search-puzzles": PuzzleRow[];
   "db:search-games": GameRow[];
   "db:delete-puzzles": { ok: boolean };
@@ -406,6 +408,12 @@ export interface DbStatus {
 export interface DbProgressEvent {
   phase: "downloading" | "decompressing" | "importing";
   percent: number;
+  message: string;
+}
+
+export interface GamesImportState {
+  status: "idle" | "importing" | "complete" | "error";
+  count: number;
   message: string;
 }
 
@@ -590,13 +598,15 @@ export interface ElectronAPI {
   dbDownloadPuzzles(): Promise<{ ok: boolean; count?: number; error?: string }>;
   dbCheckPuzzleUpdate(): Promise<{ hasUpdate: boolean; serverDate: string }>;
   dbBrowseGamesFile(): Promise<{ filePath: string | null }>;
-  dbImportGames7z(filePath: string): Promise<{ ok: boolean; count?: number; error?: string }>;
+  dbImportGames7z(filePath: string): Promise<{ ok: boolean; started?: boolean; count?: number; error?: string }>;
+  dbImportStatus(): Promise<GamesImportState>;
   dbSearchPuzzles(params: PuzzleSearchParams): Promise<PuzzleRow[]>;
   dbSearchGames(params: GameSearchParams): Promise<GameRow[]>;
   dbDeletePuzzles(): Promise<{ ok: boolean }>;
   dbDeleteGames(): Promise<{ ok: boolean }>;
   onDbProgress(callback: (data: DbProgressEvent) => void): () => void;
   onDbRefreshStatus(callback: () => void): () => void;
+  onDbImportComplete(callback: (data: { ok: boolean; count?: number; error?: string }) => void): () => void;
   puzzleExplainIncorrect(payload: IpcPayloads["puzzle:explain-incorrect"]): Promise<{ ok: boolean; explanation?: string; error?: string }>;
 }
 

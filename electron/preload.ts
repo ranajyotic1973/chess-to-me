@@ -85,6 +85,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("db:browse-games-file") as Promise<IpcResponses["db:browse-games-file"]>,
   dbImportGames7z: (filePath: string) =>
     ipcRenderer.invoke("db:import-games-7z", { filePath }) as Promise<IpcResponses["db:import-games-7z"]>,
+  dbImportStatus: () =>
+    ipcRenderer.invoke("db:import-status") as Promise<IpcResponses["db:import-status"]>,
   dbSearchPuzzles: (params: IpcPayloads["db:search-puzzles"]) =>
     ipcRenderer.invoke("db:search-puzzles", params) as Promise<IpcResponses["db:search-puzzles"]>,
   dbSearchGames: (params: IpcPayloads["db:search-games"]) =>
@@ -104,5 +106,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     const handler = () => callback();
     ipcRenderer.on("db:refresh-status", handler);
     return () => ipcRenderer.removeListener("db:refresh-status", handler);
+  },
+  onDbImportComplete: (callback: (data: { ok: boolean; count?: number; error?: string }) => void) => {
+    const handler = (_event: any, data: { ok: boolean; count?: number; error?: string }) => callback(data);
+    ipcRenderer.on("db:import-complete", handler);
+    return () => ipcRenderer.removeListener("db:import-complete", handler);
   }
 } as ElectronAPI);

@@ -85,6 +85,7 @@ export default function SettingsPanel({
   const [dbProgress, setDbProgress] = useState<DbProgressEvent | null>(null);
   const [dbActionMessage, setDbActionMessage] = useState<string>("");
   const [deleteConfirm, setDeleteConfirm] = useState<"puzzles" | "games" | null>(null);
+  const [gamesImporting, setGamesImporting] = useState<boolean>(false);
   const dbProgressUnsubRef = useRef<(() => void) | null>(null);
 
   const fetchModelsForProvider = async (apiKey: string, provider: string) => {
@@ -151,11 +152,36 @@ export default function SettingsPanel({
 
   useEffect(() => {
     fetchDbStatus();
+    // Check if import is already running (e.g. user navigated away and back)
+    electronAPI?.dbImportStatus?.().then(state => {
+      if (state?.status === "importing") {
+        setGamesImporting(true);
+        setDbActionLoading("games");
+        subscribeToProgress();
+      }
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
     if (!electronAPI?.onDbRefreshStatus) return;
     const unsub = electronAPI.onDbRefreshStatus(() => fetchDbStatus());
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    if (!electronAPI?.onDbImportComplete) return;
+    const unsub = electronAPI.onDbImportComplete((data) => {
+      setGamesImporting(false);
+      setDbActionLoading(null);
+      setDbProgress(null);
+      if (dbProgressUnsubRef.current) { dbProgressUnsubRef.current(); dbProgressUnsubRef.current = null; }
+      if (data.ok) {
+        setDbActionMessage(`Import complete: ${data.count?.toLocaleString()} games indexed`);
+      } else {
+        setDbActionMessage(`Error: ${data.error}`);
+      }
+      fetchDbStatus();
+    });
     return unsub;
   }, []);
 
@@ -215,18 +241,28 @@ export default function SettingsPanel({
     subscribeToProgress();
     try {
       const result = await electronAPI.dbImportGames7z(filePath);
-      if (result.ok) {
+      if (result.started) {
+        // Import running in background — progress arrives via db:progress events,
+        // completion arrives via onDbImportComplete.
+        setGamesImporting(true);
+        setDbActionMessage("Import started in background. You can continue using the app!");
+      } else if (result.ok) {
         setDbActionMessage(`Import complete: ${result.count?.toLocaleString()} games indexed`);
+        setDbActionLoading(null);
+        setDbProgress(null);
+        if (dbProgressUnsubRef.current) { dbProgressUnsubRef.current(); dbProgressUnsubRef.current = null; }
+        fetchDbStatus();
       } else {
         setDbActionMessage(`Error: ${result.error}`);
+        setDbActionLoading(null);
+        setDbProgress(null);
+        if (dbProgressUnsubRef.current) { dbProgressUnsubRef.current(); dbProgressUnsubRef.current = null; }
       }
     } catch (err: any) {
       setDbActionMessage(`Error: ${err.message}`);
-    } finally {
       setDbActionLoading(null);
       setDbProgress(null);
       if (dbProgressUnsubRef.current) { dbProgressUnsubRef.current(); dbProgressUnsubRef.current = null; }
-      fetchDbStatus();
     }
   };
 
@@ -613,16 +649,21 @@ export default function SettingsPanel({
           <Grid item xs={12} sm={6}>
             <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, p: 2 }}>
               <Typography variant="subtitle1" fontWeight="bold">Games Database</Typography>
-              {dbStatus?.games ? (
+              {gamesImporting && (
+                <Typography variant="body2" color="info.main" sx={{ mt: 0.5 }}>
+                  Importing in background… {dbProgress ? dbProgress.message : ""}
+                </Typography>
+              )}
+              {!gamesImporting && dbStatus?.games ? (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                   {dbStatus.games.count.toLocaleString()} games &bull; {fmtBytes(dbStatus.games.sizeBytes)}
                   {dbStatus.games.source ? ` · ${dbStatus.games.source}` : ""}
                 </Typography>
-              ) : (
+              ) : !gamesImporting ? (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                  Loading bundled DB on first launch…
+                  No database — import a PGN or .7z file below.
                 </Typography>
-              )}
+              ) : null}
               <Typography variant="caption" color="text.disabled" sx={{ display: "block", mt: 0.5 }}>
                 Monthly OTB updates:{" "}
                 <Link
@@ -633,7 +674,7 @@ export default function SettingsPanel({
                 >
                   lumbrasgigabase.com
                 </Link>
-                {" "}— download latest OTB file, then click Import.
+                {" "}— download the latest OTB file (.7z or .pgn), then click Import.
               </Typography>
               <Stack direction="row" spacing={1} sx={{ mt: 1.5 }} flexWrap="wrap">
                 <Button
@@ -642,7 +683,7 @@ export default function SettingsPanel({
                   onClick={handleImportGames7z}
                   disabled={!!dbActionLoading}
                 >
-                  Import monthly update…
+                  {gamesImporting ? <><CircularProgress size={14} sx={{ mr: 0.75 }} />Importing…</> : "Import PGN / .7z…"}
                 </Button>
                 {dbStatus?.games && (
                   <Button

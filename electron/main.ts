@@ -1307,6 +1307,13 @@ async function checkOllamaQwen3(): Promise<{ ollamaRunning: boolean; qwen3Instal
 let mainWindow: BrowserWindow | null = null;
 let downloadInProgress = false;
 
+interface GamesImportState {
+  status: "idle" | "importing" | "complete" | "error";
+  count: number;
+  message: string;
+}
+let gamesImportState: GamesImportState = { status: "idle", count: 0, message: "" };
+
 async function createWindow(): Promise<void> {
   // In dev: __dirname = electron/dist → ../../build/icon.ico
   // In prod: icon is embedded in the exe by electron-builder; path is best-effort
@@ -2956,6 +2963,20 @@ function normalizeGameResult(result: string): string {
 async function handlePlayerGamesRequest(question: string, payload: unknown, llmProvider: string, llmApiKey: string, model: string, baseUrl: string): Promise<{ ok: boolean; answer?: string; error?: string }> {
   console.log(`[LLM] PASS 2: PLAYER_GAMES - Searching local games database`);
 
+  if (gamesImportState.status === "importing") {
+    const countMsg = gamesImportState.count > 0
+      ? `${gamesImportState.count.toLocaleString()} games indexed so far`
+      : "this may take several minutes";
+    return {
+      ok: true,
+      answer: JSON.stringify({
+        response_type: "GameList",
+        game_list: [],
+        explanation: `The games database is still being imported — ${countMsg}. Please try again once the import finishes!`
+      })
+    };
+  }
+
   const db = getGamesDb();
   if (!db) {
     return {
@@ -3365,11 +3386,37 @@ ipcMain.handle("db:browse-games-file", async () => {
   return { filePath: result.canceled ? null : (result.filePaths[0] ?? null) };
 });
 
-ipcMain.handle("db:import-games-7z", async (event, { filePath }: { filePath: string }) => {
-  return doImportGamesFile(filePath, (phase, pct, msg) =>
-    event.sender.send("db:progress", { phase, percent: pct, message: msg })
-  );
+ipcMain.handle("db:import-games-7z", (event, { filePath }: { filePath: string }) => {
+  if (gamesImportState.status === "importing") {
+    return { ok: false, error: "Import already in progress." };
+  }
+
+  gamesImportState = { status: "importing", count: 0, message: "Starting…" };
+
+  doImportGamesFile(filePath, (phase, pct, msg) => {
+    const countMatch = msg.match(/[\d,]+/);
+    const parsedCount = countMatch ? parseInt(countMatch[0].replace(/,/g, ""), 10) : 0;
+    gamesImportState = {
+      status: "importing",
+      count: parsedCount > 0 ? parsedCount : gamesImportState.count,
+      message: msg
+    };
+    event.sender.send("db:progress", { phase, percent: pct, message: msg });
+  }).then(result => {
+    gamesImportState = result.ok
+      ? { status: "complete", count: result.count ?? 0, message: `${(result.count ?? 0).toLocaleString()} games indexed` }
+      : { status: "error", count: 0, message: result.error ?? "Import failed" };
+    mainWindow?.webContents.send("db:import-complete", { ok: result.ok, count: result.count, error: result.error });
+    mainWindow?.webContents.send("db:refresh-status");
+  }).catch(err => {
+    gamesImportState = { status: "error", count: 0, message: (err as Error).message };
+    mainWindow?.webContents.send("db:import-complete", { ok: false, error: (err as Error).message });
+  });
+
+  return { ok: true, started: true };
 });
+
+ipcMain.handle("db:import-status", () => gamesImportState);
 
 ipcMain.handle("db:search-puzzles", (_event, params) => {
   const db = getPuzzleDb();
