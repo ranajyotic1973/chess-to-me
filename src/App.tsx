@@ -1344,11 +1344,30 @@ export default function App() {
 
         setQuestionText("");
         if (isCorrect) {
-          setQuestionResponse("Correct! Well done. You solved the puzzle!");
+          setQuestionResponse("Well done! You solved the puzzle! 🎉 Ask me for another puzzle or type any chess question.");
           setSnackbarMessage("Correct! Well done.");
           setSnackbarSeverity("success");
           setSnackbarOpen(true);
           setPuzzleIncorrect(false);
+          // After a short celebration window, reset board and all puzzle state so
+          // the user is in a clean Analysis state ready for the next question.
+          setTimeout(() => {
+            setCurrentFen("start");
+            setCurrentResponseType("Analysis");
+            setCurrentResponseData({});
+            setPuzzleSolution([]);
+            setPuzzleSolutionSan([]);
+            setPuzzleAttemptMoves([]);
+            setPuzzleStartFen("");
+            setPuzzleNavigationMode(false);
+            setPuzzleIncorrect(false);
+            setShowSolution(false);
+            setPuzzleMeta(null);
+            setCurrentMoveIndex(0);
+            setAnalysisLines([]);
+            setPuzzleExplainLoading(false);
+            setQuestionResponse("");
+          }, 2500);
         } else {
           setPuzzleIncorrect(true);
           setCurrentFen(puzzleStartFen);
