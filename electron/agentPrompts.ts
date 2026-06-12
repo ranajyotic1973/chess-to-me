@@ -57,7 +57,7 @@ export const CLASSIFIER_SYSTEM_PROMPT =
 - ANALYSIS: position evaluation, best moves, engine lines, tactical analysis
 - PUZZLE: create or generate a chess puzzle or tactical problem
 - POSITION: create or describe a chess position
-- PLAYER_GAMES: games by a specific named player (e.g. "Carlsen's games")
+- PLAYER_GAMES: games by a specific named player (e.g. "Carlsen's games") OR selecting a game by number from a previously shown list (user types just "1", "2", etc.)
 - HISTORIC_GAME: famous or historical games from tournaments
 - LOCAL_GAMES: user's own local chess game files
 - OTHER: not chess-related`;

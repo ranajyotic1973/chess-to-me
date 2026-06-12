@@ -2912,7 +2912,7 @@ function normalizeGameResult(result: string): string {
   }
 }
 
-async function handlePlayerGamesRequest(question: string, _llmProvider: string, _llmApiKey: string, _model: string, _baseUrl: string): Promise<{ ok: boolean; answer?: string; error?: string }> {
+async function handlePlayerGamesRequest(question: string, payload: unknown, _llmProvider: string, _llmApiKey: string, _model: string, _baseUrl: string): Promise<{ ok: boolean; answer?: string; error?: string }> {
   console.log(`[LLM] PASS 2: PLAYER_GAMES - Searching local games database directly`);
 
   const db = getGamesDb();
@@ -2925,6 +2925,45 @@ async function handlePlayerGamesRequest(question: string, _llmProvider: string, 
         explanation: "No games database found. Import games in Settings to use this feature."
       })
     };
+  }
+
+  // If user typed just a number, check conversation history to find which game they're selecting.
+  // This is the fallback for when the frontend gameList state check doesn't catch it.
+  const selectionMatch = question.trim().match(/^(\d+)$/);
+  if (selectionMatch) {
+    const selectionNum = parseInt(selectionMatch[1], 10);
+    const history = Array.isArray((payload as any)?.conversationHistory)
+      ? ((payload as any).conversationHistory as Array<{ role: string; message: string }>)
+      : [];
+
+    const historyReversed = [...history].reverse();
+    const listMsgIdx = historyReversed.findIndex(
+      h => h.role === "assistant" && typeof h.message === "string" && h.message.includes("Type the number to load a game")
+    );
+
+    if (listMsgIdx >= 0) {
+      // Find the user query that preceded the game list
+      const prevUserMsg = historyReversed.slice(listMsgIdx + 1).find(h => h.role === "user");
+      if (prevUserMsg) {
+        const originalPlayer = extractPlayerNameFromQuestion(prevUserMsg.message);
+        const allGames = searchGames(db, { player: originalPlayer, limit: 20 });
+        if (selectionNum >= 1 && selectionNum <= allGames.length) {
+          const selected = allGames[selectionNum - 1];
+          const displayResult = normalizeGameResult(selected.result);
+          console.log(`[LLM] PASS 2: PLAYER_GAMES - Game selection ${selectionNum} via conversation history ✓`);
+          return {
+            ok: true,
+            answer: JSON.stringify({
+              response_type: "GameList",
+              game_list: [selected],
+              auto_load: true,
+              explanation: `**${selected.white}** vs **${selected.black}** (${displayResult})\n\nGame loaded! Use ← → arrow keys to step through moves. Ask me about any position.`
+            })
+          };
+        }
+      }
+    }
+    // If we couldn't resolve the number, fall through to a normal search
   }
 
   const playerName = extractPlayerNameFromQuestion(question);
@@ -3061,9 +3100,19 @@ ipcMain.handle("llm:ask-question", async (_event, payload) => {
     // PASS 1: Classify the request
     console.log(`[LLM] PASS 1: Classification - Starting | Provider: ${llmProvider} | Model: ${model} | Question: "${question.substring(0, 60)}..."`);
 
-    const classificationMessages = [
-      { role: "system" as const, content: CLASSIFIER_SYSTEM_PROMPT },
-      { role: "user" as const, content: question }
+    // Include last 4 conversation turns so the classifier has context for
+    // short/ambiguous inputs like "1" (game selection after a game list).
+    const recentHistory = Array.isArray(payload?.conversationHistory)
+      ? (payload.conversationHistory as Array<{ role: string; message: string }>).slice(-4)
+      : [];
+
+    const classificationMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+      { role: "system", content: CLASSIFIER_SYSTEM_PROMPT },
+      ...recentHistory.map(h => ({
+        role: (h.role === "assistant" ? "assistant" : "user") as "user" | "assistant",
+        content: h.message
+      })),
+      { role: "user", content: question }
     ];
 
     const classification = await runLlmChat({
@@ -3094,7 +3143,7 @@ ipcMain.handle("llm:ask-question", async (_event, payload) => {
         result = await handlePositionRequest(question, payload, llmProvider, llmApiKey, model, baseUrl);
         break;
       case "PLAYER_GAMES":
-        result = await handlePlayerGamesRequest(question, llmProvider, llmApiKey, model, baseUrl);
+        result = await handlePlayerGamesRequest(question, payload, llmProvider, llmApiKey, model, baseUrl);
         break;
       case "HISTORIC_GAME":
         result = await handleHistoricGameRequest(question, llmProvider, llmApiKey, model, baseUrl);

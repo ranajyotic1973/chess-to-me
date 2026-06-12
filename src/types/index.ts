@@ -194,6 +194,8 @@ export interface LLMResponse {
   setup_move_san?: string;
   // Game list (from PLAYER_GAMES DB search)
   game_list?: GameRow[];
+  // Set to true by backend when this is a single-game selection (auto-loads without user picking "1")
+  auto_load?: boolean;
 }
 
 export interface OllamaMessage {

@@ -230,6 +230,9 @@ export default function App() {
   const [selectedLineBaseFen, setSelectedLineBaseFen] = useState<string>("");
   // Game browsing state
   const [gameList, setGameList] = useState<import("./types").GameRow[] | null>(null);
+  // Ref mirrors gameList so useCallback closures always see the latest value
+  // without needing to re-create the callback on every list update.
+  const gameListRef = useRef<import("./types").GameRow[] | null>(null);
   const [gameMode, setGameMode] = useState<boolean>(false);
   const [gamePgnFens, setGamePgnFens] = useState<string[]>([]);
   const [gameMoveIndex, setGameMoveIndex] = useState<number>(0);
@@ -1254,6 +1257,7 @@ export default function App() {
     setGameMoveIndex(0);
     setCurrentFen(fens[0]);
     setGameMode(true);
+    gameListRef.current = null;
     setGameList(null);
     setShowSolution(false);
     setAnalysisLines([]);
@@ -1276,10 +1280,13 @@ export default function App() {
     // Game list: user types a number to select a game.
     // Load the game onto the board, then fall through to the LLM so it can
     // give a contextual introduction instead of a static hardcoded message.
-    if (gameList !== null && gameList.length > 0 && /^\d+$/.test(question)) {
+    // Use the ref (not state) so this closure always sees the latest list
+    // regardless of when the callback was last recreated.
+    const activeGameList = gameListRef.current ?? gameList;
+    if (activeGameList !== null && activeGameList.length > 0 && /^\d+$/.test(question)) {
       const num = parseInt(question, 10);
-      if (num >= 1 && num <= gameList.length) {
-        const game = gameList[num - 1];
+      if (num >= 1 && num <= activeGameList.length) {
+        const game = activeGameList[num - 1];
         const loaded = loadGameFromRow(game);
         if (!loaded) {
           setQuestionResponse("Sorry, I couldn't parse the moves for that game.");
@@ -1519,11 +1526,19 @@ export default function App() {
           setStatusMessage(`Invalid FEN in response: ${(fenError as Error).message}`);
         }
       } else if (finalResponseType === "GameList") {
-        // Store game list for number-based selection; clear any active game session
-        setGameList(Array.isArray(parsedResponse.game_list) ? parsedResponse.game_list : []);
-        setGameMode(false);
-        setGamePgnFens([]);
-        setGameMoveIndex(0);
+        const incomingGames = Array.isArray(parsedResponse.game_list) ? parsedResponse.game_list : [];
+        if (parsedResponse.auto_load && incomingGames.length === 1) {
+          // Backend resolved a game-number selection via conversation history — auto-load it.
+          // loadGameFromRow also clears gameList state and ref internally.
+          loadGameFromRow(incomingGames[0]);
+        } else {
+          // Normal list response — store for manual selection by typing a number.
+          gameListRef.current = incomingGames.length > 0 ? incomingGames : null;
+          setGameList(incomingGames.length > 0 ? incomingGames : null);
+          setGameMode(false);
+          setGamePgnFens([]);
+          setGameMoveIndex(0);
+        }
       }
 
       // Auto-detect if user mentioned a line in their question

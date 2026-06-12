@@ -28,6 +28,7 @@ export function parseLLMResponse(responseText: string): LLMResponse {
       setup_move: parsed.setup_move,
       setup_move_san: parsed.setup_move_san,
       game_list: Array.isArray(parsed.game_list) ? parsed.game_list : undefined,
+      auto_load: parsed.auto_load === true,
       error: undefined
     };
   } catch (_e) {
