@@ -4,6 +4,10 @@
   "private": true,
   "description": "Electron + React local Stockfish chess trainer",
   "license": "MIT",
+  "author": {
+    "name": "Chess To Me contributors",
+    "email": "ranajyotic@gmail.com"
+  },
   "main": "electron/dist/main.js",
   "scripts": {
     "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
@@ -127,6 +131,7 @@
     "mac": {
       "icon": "build/icon.icns",
       "category": "public.app-category.education",
+      "x64ArchFiles": "**/7zip-bin/**",
       "target": [
         {
           "target": "dmg",
