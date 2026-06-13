@@ -15,10 +15,15 @@
     "test": "jest --config jest.config.js",
     "test:watch": "jest --config jest.config.js --watch",
     "prepare:installer-assets": "powershell -ExecutionPolicy Bypass -File scripts/prepare-installer-assets.ps1",
-    "dist:win": "npm run build && electron-builder --win nsis",
+    "dist:win": "npm run build && electron-builder --win --x64",
+    "dist:win:arm64": "npm run build && electron-builder --win --arm64",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux --x64",
+    "dist:linux:arm64": "npm run build && electron-builder --linux --arm64",
     "nsis:version": ".\\tools\\nsis\\makensis.exe /VERSION",
     "fetch:mega-reference-db": "powershell -ExecutionPolicy Bypass -File scripts/fetch-mega-reference-db.ps1",
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
+    "rebuild:native:arm64": "electron-rebuild -f -w better-sqlite3 --arch arm64",
     "build:games-db": "node scripts/build-games-db.js"
   },
   "dependencies": {
@@ -58,6 +63,8 @@
     "electron": "^34.5.8",
     "electron-builder": "^26.8.1",
     "jest": "^29.7.0",
+    "png2icons": "^2.0.1",
+    "sharp": "^0.35.1",
     "sql.js": "^1.14.1",
     "typescript": "^6.0.3",
     "vite": "^7.1.7",
@@ -66,12 +73,18 @@
   "build": {
     "appId": "com.xalgo.chess-to-me",
     "productName": "Chess To Me",
-    "icon": "build/icon.ico",
+    "copyright": "Copyright © 2025 Chess To Me contributors",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [
       "dist/**/*",
       "electron/dist/**/*",
       "data/**/*",
       "package.json"
+    ],
+    "asarUnpack": [
+      "**/better-sqlite3/**/*.node",
+      "**/7zip-bin/**",
+      "**/node_modules/7zip-bin/**"
     ],
     "extraResources": [
       {
@@ -98,12 +111,46 @@
       "output": "release"
     },
     "win": {
+      "icon": "build/icon.ico",
       "signAndEditExecutable": false,
       "target": [
         {
           "target": "nsis",
           "arch": [
-            "x64"
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.education",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Education",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64",
+            "arm64"
           ]
         }
       ]
@@ -112,6 +159,25 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "include": "build/installer.nsh"
+    },
+    "dmg": {
+      "title": "${productName} ${version}",
+      "window": {
+        "width": 540,
+        "height": 380
+      }
+    },
+    "deb": {
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1"
+      ]
     }
   }
 }

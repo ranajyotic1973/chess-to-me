@@ -1,0 +1,215 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  # ─── Windows: x64 + arm64 NSIS installers ──────────────────────────────────
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rebuild native modules (x64)
+        run: npm run rebuild:native
+
+      - name: Build Windows x64
+        run: npm run build && npx electron-builder --win --x64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rebuild native modules (arm64)
+        run: npm run rebuild:native:arm64
+
+      - name: Build Windows arm64
+        run: npx electron-builder --win --arm64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: release/*.exe
+          if-no-files-found: error
+
+  # ─── macOS: universal DMG (x64 + arm64 fat binary) ─────────────────────────
+  build-mac:
+    name: Build macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rebuild native modules
+        run: npm run rebuild:native
+
+      - name: Build macOS universal DMG
+        run: npm run build && npx electron-builder --mac --universal
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-installers
+          path: release/*.dmg
+          if-no-files-found: error
+
+  # ─── Linux x64: AppImage + deb ──────────────────────────────────────────────
+  build-linux-x64:
+    name: Build Linux x64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libnotify-dev libnss3 libxss1 libxtst6
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rebuild native modules (x64)
+        run: npm run rebuild:native
+
+      - name: Build Linux x64
+        run: npm run build && npx electron-builder --linux --x64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Linux x64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64-installers
+          path: |
+            release/*.AppImage
+            release/*.deb
+          if-no-files-found: error
+
+  # ─── Linux arm64: AppImage + deb (via QEMU) ─────────────────────────────────
+  build-linux-arm64:
+    name: Build Linux arm64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libnotify-dev libnss3 libxss1 libxtst6
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rebuild native modules (arm64)
+        run: npm run rebuild:native:arm64
+
+      - name: Build Linux arm64
+        run: npm run build && npx electron-builder --linux --arm64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Linux arm64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64-installers
+          path: |
+            release/*arm64*.AppImage
+            release/*arm64*.deb
+          if-no-files-found: error
+
+  # ─── Create GitHub Release draft with all artifacts ─────────────────────────
+  create-release:
+    name: Create Release
+    needs: [build-windows, build-mac, build-linux-x64, build-linux-arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Windows installers
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installers
+          path: dist-release/
+
+      - name: Download macOS installers
+        uses: actions/download-artifact@v4
+        with:
+          name: mac-installers
+          path: dist-release/
+
+      - name: Download Linux x64 installers
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-x64-installers
+          path: dist-release/
+
+      - name: Download Linux arm64 installers
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-arm64-installers
+          path: dist-release/
+
+      - name: List release artifacts
+        run: ls -lh dist-release/
+
+      - name: Create GitHub Release draft
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: Chess To Me ${{ github.ref_name }}
+          body: |
+            ## Chess To Me ${{ github.ref_name }}
+
+            ### Downloads
+
+            | Platform | Architecture | File |
+            |----------|-------------|------|
+            | Windows  | x64         | `Chess-To-Me-*-win-x64.exe` |
+            | Windows  | arm64       | `Chess-To-Me-*-win-arm64.exe` |
+            | macOS    | Universal (Intel + Apple Silicon) | `Chess-To-Me-*-mac-universal.dmg` |
+            | Linux    | x64         | `Chess-To-Me-*-linux-x64.AppImage` / `.deb` |
+            | Linux    | arm64       | `Chess-To-Me-*-linux-arm64.AppImage` / `.deb` |
+
+            ### macOS install note
+            If Gatekeeper shows "unidentified developer": right-click the app → Open → Open.
+          files: dist-release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
