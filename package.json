@@ -75,7 +75,7 @@
     "appId": "com.xalgo.chess-to-me",
     "productName": "Chess To Me",
     "copyright": "Copyright © 2025 Chess To Me contributors",
-    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "artifactName": "${productName}-${os}-${arch}.${ext}",
     "files": [
       "dist/**/*",
       "electron/dist/**/*",

@@ -230,11 +230,11 @@ jobs:
 
             | Platform | Architecture | File |
             |----------|-------------|------|
-            | Windows  | x64         | `Chess-To-Me-*-win-x64.exe` |
-            | Windows  | arm64       | `Chess-To-Me-*-win-arm64.exe` |
-            | macOS    | Universal (Intel + Apple Silicon) | `Chess-To-Me-*-mac-universal.dmg` |
-            | Linux    | x64         | `Chess-To-Me-*-linux-x64.AppImage` / `.deb` |
-            | Linux    | arm64       | `Chess-To-Me-*-linux-arm64.AppImage` / `.deb` |
+            | Windows  | x64         | `Chess To Me-win-x64.exe` |
+            | Windows  | arm64       | `Chess To Me-win-arm64.exe` |
+            | macOS    | Universal (Intel + Apple Silicon) | `Chess To Me-mac-universal.dmg` |
+            | Linux    | x64         | `Chess To Me-linux-x64.AppImage` / `Chess To Me-linux-x64.deb` |
+            | Linux    | arm64       | `Chess To Me-linux-arm64.AppImage` / `Chess To Me-linux-arm64.deb` |
 
             ### macOS install note
             If Gatekeeper shows "unidentified developer": right-click the app → Open → Open.
