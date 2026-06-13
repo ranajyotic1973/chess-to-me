@@ -8,11 +8,11 @@ A chess training app for kids aged 4–18. Play through puzzles, explore master 
 
 | Platform | Installer |
 |----------|-----------|
-| **Windows** (64-bit) | [Chess-To-Me-win-x64.exe](https://github.com/ranajyotic1973/chess-to-me/releases/latest/download/Chess%20To%20Me-win-x64.exe) |
-| **Windows** (ARM64 — Surface Pro X, Copilot+ PCs) | [Chess-To-Me-win-arm64.exe](https://github.com/ranajyotic1973/chess-to-me/releases/latest/download/Chess%20To%20Me-win-arm64.exe) |
-| **macOS** (Intel + Apple Silicon universal) | [Chess-To-Me-mac-universal.dmg](https://github.com/ranajyotic1973/chess-to-me/releases/latest/download/Chess%20To%20Me-mac-universal.dmg) |
-| **Linux** (x64 AppImage) | [Chess-To-Me-linux-x64.AppImage](https://github.com/ranajyotic1973/chess-to-me/releases/latest/download/Chess%20To%20Me-linux-x64.AppImage) |
-| **Linux** (ARM64 AppImage) | [Chess-To-Me-linux-arm64.AppImage](https://github.com/ranajyotic1973/chess-to-me/releases/latest/download/Chess%20To%20Me-linux-arm64.AppImage) |
+| **Windows** (64-bit) | [chess-to-me-win-x64.exe](https://github.com/ranajyotic1973/chess-to-me/releases/latest/download/chess-to-me-win-x64.exe) |
+| **Windows** (ARM64 — Surface Pro X, Copilot+ PCs) | [chess-to-me-win-arm64.exe](https://github.com/ranajyotic1973/chess-to-me/releases/latest/download/chess-to-me-win-arm64.exe) |
+| **macOS** (Intel + Apple Silicon universal) | [chess-to-me-mac-universal.dmg](https://github.com/ranajyotic1973/chess-to-me/releases/latest/download/chess-to-me-mac-universal.dmg) |
+| **Linux** (x64 AppImage) | [chess-to-me-linux-x64.AppImage](https://github.com/ranajyotic1973/chess-to-me/releases/latest/download/chess-to-me-linux-x64.AppImage) |
+| **Linux** (ARM64 AppImage) | [chess-to-me-linux-arm64.AppImage](https://github.com/ranajyotic1973/chess-to-me/releases/latest/download/chess-to-me-linux-arm64.AppImage) |
 
 All releases are free. [View all releases →](https://github.com/ranajyotic1973/chess-to-me/releases)
 
