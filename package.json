@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Electron + React local Stockfish chess trainer",
+  "license": "MIT",
   "main": "electron/dist/main.js",
   "scripts": {
     "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",

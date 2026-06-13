@@ -232,3 +232,9 @@ Make sure you type moves in the chat box — piece dragging is disabled in puzzl
 
 **How do I update the app?**
 Download the latest installer from the [releases page](https://github.com/ranajyotic1973/chess-to-me/releases) and run it. Your settings are preserved.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE). Use, modify, and distribute freely.
