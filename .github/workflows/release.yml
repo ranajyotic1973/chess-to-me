@@ -190,10 +190,11 @@ jobs:
       - name: List release artifacts
         run: ls -lh dist-release/
 
-      - name: Create GitHub Release draft
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          draft: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
           name: Chess To Me ${{ github.ref_name }}
           body: |
             ## Chess To Me ${{ github.ref_name }}

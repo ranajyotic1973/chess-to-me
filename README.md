@@ -1,16 +1,30 @@
-﻿# Chess To Me (Electron + Dual Chess Engines)
+﻿# Chess To Me
 
-Desktop chess analysis platform running locally installed chess engines (Stockfish or LC0) with AI explanations:
+A chess training app for kids aged 4–18. Ask questions about any position, solve puzzles, explore master games, and get clear AI-powered explanations — all running locally on your computer.
 
-- **Dual engine support**: Choose between Stockfish (traditional eval-based) or LC0 (neural network-based)
-- Auto-detect engines from standard installation paths or browse manually
-- Paste a FEN and load board position instantly
-- Drag pieces on a standard black/white chessboard
-- Analyze current position with up to 4 engine PV lines (best line first)
-- Configurable analysis depth (6-30)
-- Generate per-line natural-language explanations in user-selected language using local Ollama
-- Select a line and step forward/backward through the line on the board
-- View line moves in figurine-style chess notation (piece symbols)
+## Download
+
+| Platform | Installer |
+|----------|-----------|
+| Windows (x64) | [Chess-To-Me-win-x64.exe](https://github.com/ranajyotic1973/chess-to-me/releases/latest/download/Chess%20To%20Me-win-x64.exe) |
+| Windows (ARM64) | [Chess-To-Me-win-arm64.exe](https://github.com/ranajyotic1973/chess-to-me/releases/latest/download/Chess%20To%20Me-win-arm64.exe) |
+| macOS (Universal — Intel + Apple Silicon) | [Chess-To-Me-mac-universal.dmg](https://github.com/ranajyotic1973/chess-to-me/releases/latest/download/Chess%20To%20Me-mac-universal.dmg) |
+| Linux x64 | [Chess-To-Me-linux-x64.AppImage](https://github.com/ranajyotic1973/chess-to-me/releases/latest/download/Chess%20To%20Me-linux-x64.AppImage) |
+| Linux ARM64 | [Chess-To-Me-linux-arm64.AppImage](https://github.com/ranajyotic1973/chess-to-me/releases/latest/download/Chess%20To%20Me-linux-arm64.AppImage) |
+
+> All releases are free and hosted on [GitHub Releases](https://github.com/ranajyotic1973/chess-to-me/releases).
+>
+> **macOS note:** If Gatekeeper shows "unidentified developer", right-click the app → Open → Open.
+>
+> **Linux note:** Make the AppImage executable after download: `chmod +x Chess-To-Me-*.AppImage`
+
+## Features
+
+- **Chess engine analysis** — Stockfish or LC0, up to 4 principal variation lines, configurable depth
+- **AI explanations** — Ask questions about any position in natural language; explanations adapt to the player's level
+- **Puzzle training** — Type moves in UCI format to solve puzzles; hints and explanations on wrong answers
+- **Master game database** — Search and replay games from a local database
+- **Multi-language** — Explanations in English, German, Dutch, Spanish, and more
 
 ## Quick Start
 
