@@ -142,7 +142,7 @@ describe("loadConversationHistory", () => {
     const history: ConversationMessage[] = [
       { role: "user", message: "Test", timestamp: 1 }
     ];
-    localStorageMock.setItem("chess-to-me:conversation-history", JSON.stringify(history));
+    localStorageMock.setItem("chess-to-me:conversation-analysis", JSON.stringify(history));
     const result = await loadConversationHistory();
     expect(result).toEqual(history);
   });
@@ -166,20 +166,20 @@ describe("saveConversationHistory", () => {
       { role: "assistant", message: "A", timestamp: 2 }
     ];
     await saveConversationHistory(history);
-    const stored = localStorageMock.getItem("chess-to-me:conversation-history");
+    const stored = localStorageMock.getItem("chess-to-me:conversation-analysis");
     expect(JSON.parse(stored!)).toEqual(history);
   });
 
-  test("caps saved history to last 10 entries", async () => {
-    const history: ConversationMessage[] = Array.from({ length: 15 }, (_, i) => ({
+  test("caps saved history to last 20 entries", async () => {
+    const history: ConversationMessage[] = Array.from({ length: 25 }, (_, i) => ({
       role: "user" as const,
       message: `msg${i}`,
       timestamp: i
     }));
     await saveConversationHistory(history);
-    const stored = JSON.parse(localStorageMock.getItem("chess-to-me:conversation-history")!);
-    expect(stored.length).toBe(10);
-    expect(stored[0].message).toBe("msg5"); // last 10
+    const stored = JSON.parse(localStorageMock.getItem("chess-to-me:conversation-analysis")!);
+    expect(stored.length).toBe(20);
+    expect(stored[0].message).toBe("msg5"); // last 20 of 25
   });
 });
 
@@ -188,8 +188,9 @@ describe("saveConversationHistory", () => {
 // ---------------------------------------------------------------------------
 describe("clearConversationHistory", () => {
   test("removes history from localStorage", async () => {
-    localStorageMock.setItem("chess-to-me:conversation-history", "[{\"role\":\"user\",\"message\":\"test\",\"timestamp\":1}]");
+    localStorageMock.setItem("chess-to-me:conversation-analysis", "[{\"role\":\"user\",\"message\":\"test\",\"timestamp\":1}]");
     await clearConversationHistory();
-    expect(localStorageMock.getItem("chess-to-me:conversation-history")).toBeNull();
+    expect(localStorageMock.getItem("chess-to-me:conversation-analysis")).not.toBeNull(); // clear writes [] not removes
+    expect(JSON.parse(localStorageMock.getItem("chess-to-me:conversation-analysis")!)).toEqual([]);
   });
 });

@@ -69,6 +69,14 @@ export default function AnalysisBoard({
       draggable: !puzzleMode,
       pieceTheme: pieceThemePath,
       position: currentFen,
+      onDragStart: (_source: string, piece: string) => {
+        // Piece names: 'wP', 'wR', … for white; 'bP', 'bR', … for black.
+        // Returning false prevents the piece lifting at all (better UX than snap-back on drop).
+        const turn = chess.current.turn(); // 'w' | 'b'
+        if (turn === 'w' && piece.startsWith('b')) return false;
+        if (turn === 'b' && piece.startsWith('w')) return false;
+        return true;
+      },
       onDrop: (source: string, target: string) => {
         const move = chess.current.move({ from: source, to: target, promotion: "q" });
         if (!move) {

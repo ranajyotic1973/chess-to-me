@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "7zip-bin": "^5.2.0",
+    "@chess-openings/eco.json": "^2.0.4",
     "@emotion/react": "^11.13.1",
     "@emotion/styled": "^11.13.0",
     "@fontsource-variable/manrope": "^5.2.8",

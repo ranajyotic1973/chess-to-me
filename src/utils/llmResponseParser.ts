@@ -29,6 +29,11 @@ export function parseLLMResponse(responseText: string): LLMResponse {
       setup_move_san: parsed.setup_move_san,
       game_list: Array.isArray(parsed.game_list) ? parsed.game_list : undefined,
       auto_load: parsed.auto_load === true,
+      // Training agent fields (Opening / Endgame)
+      moves: Array.isArray(parsed.moves) ? parsed.moves : undefined,
+      eco_code: parsed.eco_code,
+      opening_name: parsed.opening_name,
+      story: parsed.story,
       error: undefined
     };
   } catch (_e) {
@@ -66,6 +71,10 @@ function normalizeResponseType(type: any): ResponseType {
       return "Game";
     case "gamelist":
       return "GameList";
+    case "opening":
+      return "Opening";
+    case "endgame":
+      return "Endgame";
     case "analysis":
     default:
       return "Analysis";
@@ -96,7 +105,7 @@ export function validateLLMResponse(response: LLMResponse): { valid: boolean; er
     }
   }
 
-  if (responseType !== "GameList" && !response.answer && !response.explanation) {
+  if (responseType !== "GameList" && responseType !== "Opening" && responseType !== "Endgame" && !response.answer && !response.explanation) {
     errors.push("Response must include answer or explanation");
   }
 

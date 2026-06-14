@@ -4,6 +4,7 @@ import {
   CircularProgress,
   IconButton,
   Paper,
+  Skeleton,
   Stack,
   TextField,
   Typography,
@@ -16,8 +17,10 @@ import ReplayIcon from "@mui/icons-material/Replay";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import ReactMarkdown from "react-markdown";
-import { useState, useEffect, useRef } from "react";
-import type { ChatPanelProps } from "../types";
+import { useRef } from "react";
+import type { ChatPanelProps, DeepLineAnalysis } from "../types";
+import SelectableList from "./SelectableList";
+import type { SelectableListItem } from "./SelectableList";
 
 interface DetectedMove {
   from: string;
@@ -37,6 +40,16 @@ const detectMovesInResponse = (response: string): DetectedMove[] => {
   return moves;
 };
 
+const DEEP_ANALYSIS_FIELDS: Array<{ key: keyof DeepLineAnalysis; label: string }> = [
+  { key: "strategy",       label: "Strategy" },
+  { key: "proscons",       label: "Pros & Cons" },
+  { key: "counterattack",  label: "Counter-attack" },
+  { key: "sacrifice",      label: "Sacrifice" },
+  { key: "novelty",        label: "Novelty" },
+  { key: "endgameChances", label: "Endgame chances" },
+  { key: "alternatives",   label: "Alternatives" }
+];
+
 export default function ChatPanel({
   questionText,
   onQuestionChange,
@@ -46,10 +59,12 @@ export default function ChatPanel({
   onClearQuestion,
   onOpenSettings,
   analysisStatus,
+  analysisEntries = [],
   onMoveSuggested,
   llmProvider = "LLM",
   analysisLines = [],
   onSelectEngineLine,
+  onDeselectLine,
   selectedEngineLineIndex = null,
   currentMoveIndex = 0,
   responseType,
@@ -64,23 +79,12 @@ export default function ChatPanel({
   gameMode = false,
   gameMoveIndex = 0,
   gameTotalMoves = 0,
+  advancedAnalysisMode = false,
+  deepAnalysisResults = {},
+  deepAnalysisLoading = false,
   sx
 }: ChatPanelProps) {
-  const [showInlineLines, setShowInlineLines] = useState(false);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
-
-  useEffect(() => {
-    if (analysisLines.length > 0) {
-      setShowInlineLines(true);
-    }
-  }, [analysisLines]);
-
-  // Re-expand lines list if line is deselected
-  useEffect(() => {
-    if (selectedEngineLineIndex === null) {
-      setShowInlineLines(analysisLines.length > 0);
-    }
-  }, [selectedEngineLineIndex, analysisLines.length]);
 
   const paperSx = Array.isArray(sx) ? sx : sx ? [sx] : [];
   const providerName = llmProvider
@@ -88,11 +92,29 @@ export default function ChatPanel({
     : "LLM";
 
   const detectedMoves = detectMovesInResponse(questionResponse);
-  const showLineList = analysisLines.length > 0 &&
-    (responseType === "Analysis" || responseType === "Position") &&
-    showInlineLines;
+
+  const showAnalysisLines = analysisLines.length > 0 &&
+    (responseType === "Analysis" || responseType === "Position");
+
   const selectedLine = selectedEngineLineIndex !== null ? analysisLines[selectedEngineLineIndex] : null;
   const selectedLineNum = selectedLine ? (selectedLine.rank || (selectedEngineLineIndex ?? 0) + 1) : null;
+
+  const analysisListItems: SelectableListItem[] = showAnalysisLines
+    ? analysisLines.map((line, idx) => {
+        const lineNum = line.rank || idx + 1;
+        const entry = analysisEntries[idx];
+        return {
+          id: `line-${idx}`,
+          label: `Line ${lineNum}`,
+          sublabel: entry?.description || line.pv || line.line || "(no moves)",
+          badge: entry?.scoreLabel ? (
+            <Chip label={entry.scoreLabel} size="small" variant="outlined" />
+          ) : undefined
+        };
+      })
+    : [];
+
+  const analysisSelectedId = selectedEngineLineIndex !== null ? `line-${selectedEngineLineIndex}` : null;
 
   return (
     <Paper
@@ -143,71 +165,65 @@ export default function ChatPanel({
             mb: 2
           }}
         >
-          {/* Inline Engine Analysis Lines */}
-          {showLineList && (
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "primary.main" }}>
-                Engine Analysis (Top Lines)
-              </Typography>
-              <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                Click a line or type its number (1–{analysisLines.length}) to select
-              </Typography>
-              {analysisLines.map((line, idx) => {
-                const lineNum = line.rank || idx + 1;
-                const pv = line.pv || line.line || "";
-                const isSelected = selectedEngineLineIndex === idx;
-                return (
-                  <Box
-                    key={`line-${idx}`}
-                    onClick={() => {
-                      onSelectEngineLine?.(idx, line);
-                      setShowInlineLines(false);
-                    }}
-                    sx={{
-                      p: 1.5,
-                      borderRadius: 1,
-                      backgroundColor: isSelected ? "primary.light" : "action.hover",
-                      cursor: "pointer",
-                      border: isSelected ? 2 : 1,
-                      borderColor: isSelected ? "primary.main" : "transparent",
-                      "&:hover": {
-                        backgroundColor: isSelected ? "primary.light" : "action.selected"
-                      }
-                    }}
-                  >
-                    <Typography variant="body2" sx={{ fontFamily: "monospace", fontWeight: isSelected ? 700 : 400 }}>
-                      <strong>Line {lineNum}:</strong> {pv || "(no moves)"}
-                    </Typography>
-                  </Box>
-                );
-              })}
-            </Box>
-          )}
-
-          {/* Selected line summary (collapsed state) */}
-          {!showInlineLines && selectedLineNum !== null && (
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-              <Stack direction="row" spacing={1} alignItems="center">
+          {/* Analysis lines — list or detail view via SelectableList */}
+          {showAnalysisLines && (
+            <SelectableList
+              items={analysisListItems}
+              title="Engine Analysis (Top Lines)"
+              hint={`Click a line or type its number (1–${analysisLines.length}) to select`}
+              selectedId={analysisSelectedId}
+              onSelect={(_id, idx) => onSelectEngineLine?.(idx, analysisLines[idx])}
+              onBack={() => onDeselectLine?.()}
+            >
+              {/* Detail content: shown when a line is selected */}
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
                 <Chip
                   label={`Line ${selectedLineNum} selected`}
                   size="small"
                   color="primary"
                   variant="outlined"
                 />
-                <Button
-                  size="small"
-                  variant="text"
-                  onClick={() => setShowInlineLines(true)}
-                  sx={{ textTransform: "none", fontSize: "0.75rem" }}
-                >
-                  Change line
-                </Button>
               </Stack>
               <Typography variant="caption" sx={{ color: "info.main", fontStyle: "italic" }}>
                 Line {selectedLineNum} selected. Use → to advance moves, ← to go back.
-                {" "}Move {currentMoveIndex + 1} of {(selectedLine?.pv || selectedLine?.line || "").split(/\s+/).filter((m) => m.trim()).length || "?"}
+                {" "}Move {currentMoveIndex + 1} of{" "}
+                {selectedEngineLineIndex !== null
+                  ? (analysisEntries[selectedEngineLineIndex]?.moves?.length ??
+                      (selectedLine?.pv || "").split(/\s+/).filter(Boolean).length)
+                  : "?"}
               </Typography>
-            </Box>
+
+              {/* Deep analysis fields */}
+              {advancedAnalysisMode && selectedEngineLineIndex !== null && (
+                deepAnalysisLoading && deepAnalysisResults[selectedEngineLineIndex] === undefined
+                  ? (
+                    <Box sx={{ mt: 1.5, display: "flex", flexDirection: "column", gap: 0.75 }}>
+                      {DEEP_ANALYSIS_FIELDS.map((f) => (
+                        <Box key={f.key}>
+                          <Skeleton variant="text" width="30%" sx={{ mb: 0.25 }} />
+                          <Skeleton variant="rectangular" height={40} />
+                        </Box>
+                      ))}
+                    </Box>
+                  )
+                  : deepAnalysisResults[selectedEngineLineIndex]
+                    ? (
+                      <Box sx={{ mt: 1.5, display: "flex", flexDirection: "column", gap: 1.25 }}>
+                        {DEEP_ANALYSIS_FIELDS.map((f) => (
+                          <Box key={f.key}>
+                            <Typography variant="caption" sx={{ fontWeight: 700, color: "primary.main", display: "block" }}>
+                              {f.label}
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                              {deepAnalysisResults[selectedEngineLineIndex]![f.key]}
+                            </Typography>
+                          </Box>
+                        ))}
+                      </Box>
+                    )
+                    : null
+              )}
+            </SelectableList>
           )}
 
           {/* Puzzle navigation instruction */}
@@ -235,7 +251,7 @@ export default function ChatPanel({
             </Typography>
           ) : (
             <>
-              {questionText && (
+              {questionText && responseType !== "Puzzle" && (
                 <Box>
                   <Typography variant="subtitle2" color="primary" sx={{ mb: 0.5 }}>
                     Your question:

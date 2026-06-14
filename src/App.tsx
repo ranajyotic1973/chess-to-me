@@ -24,15 +24,20 @@ import { Chess } from "chess.js";
 import MoveWarningDialog from "./components/MoveWarningDialog";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 import ListAltIcon from "@mui/icons-material/ListAlt";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import SaveIcon from "@mui/icons-material/Save";
 import StopIcon from "@mui/icons-material/Stop";
 import EditIcon from "@mui/icons-material/Edit";
 import SettingsPanel from "./components/SettingsPanel";
 import AnalysisBoard from "./components/AnalysisBoard";
 import ChatPanel from "./components/ChatPanel";
+import PositionNotesPanel from "./components/PositionNotesPanel";
 import StatusBanner from "./components/StatusBanner";
 import BoardPositionEditor from "./components/BoardPositionEditor";
+import ProfileIcon from "./components/ProfileIcon";
+import EvalBar from "./components/EvalBar";
 import {
   deriveFenSequence,
   parseFenOrPgnInput,
@@ -58,6 +63,7 @@ import type {
   AnalysisLine,
   AppSettings,
   AgentProgressEvent,
+  DeepLineAnalysis,
   EngineInfo,
   EngineStatus,
   LogEntry,
@@ -165,6 +171,14 @@ async function fetchChesscomRating(playerName: string): Promise<number | null> {
 
 const normalizeModelName = (value: string | null | undefined): string => String(value || "").trim();
 
+function deriveConversationMode(responseType: string, isGameMode: boolean): string {
+  if (responseType === "Puzzle") return "puzzle";
+  if (responseType === "Opening") return "opening";
+  if (responseType === "Endgame") return "endgame";
+  if (isGameMode || responseType === "GameList" || responseType === "Game") return "game";
+  return "analysis";
+}
+
 const getModelForProvider = (provider: string, ollamaModel: string, llmModel?: string): string => {
   if (provider === "ollama") {
     return ollamaModel;
@@ -244,6 +258,11 @@ export default function App() {
   const [analysisStatus, setAnalysisStatus] = useState<string>("");
   const [isAnalysisRunning, setIsAnalysisRunning] = useState<boolean>(false);
   const [analysisLines, setAnalysisLines] = useState<AnalysisLine[]>([]);
+  const [advancedAnalysisMode, setAdvancedAnalysisMode] = useState<boolean>(false);
+  const [deepAnalysisResults, setDeepAnalysisResults] = useState<Record<number, DeepLineAnalysis | null>>({});
+  const [deepAnalysisLoading, setDeepAnalysisLoading] = useState<boolean>(false);
+  const [currentNotesMap, setCurrentNotesMap] = useState<Record<string, string>>({});
+  const [currentRawPgn, setCurrentRawPgn] = useState<string>("");
   const [selectedEngineLineIndex, setSelectedEngineLineIndex] = useState<number | null>(null);
   const [selectedEngineLineData, setSelectedEngineLineData] = useState<AnalysisLine | null>(null);
   const [currentMoveIndex, setCurrentMoveIndex] = useState<number>(0);
@@ -256,6 +275,9 @@ export default function App() {
   const [activeLogTab, setActiveLogTab] = useState<number>(0);
   const logContainerRefs = useRef<{ stockfish: HTMLDivElement | null; ollama: HTMLDivElement | null }>({ stockfish: null, ollama: null });
   const [appLoading, setAppLoading] = useState<boolean>(true);
+  const [engineWarming, setEngineWarming] = useState<boolean>(false);
+  const [engineAnalyzing, setEngineAnalyzing] = useState<boolean>(false);
+  const [profileRefreshTrigger, setProfileRefreshTrigger] = useState<number>(0);
   const [settingsLoaded, setSettingsLoaded] = useState<boolean>(false);
   const [lineDialogOpen, setLineDialogOpen] = useState<boolean>(false);
   const [activeLine, setActiveLine] = useState<AnalysisEntry | null>(null);
@@ -289,6 +311,16 @@ export default function App() {
   const [isPositionEditorOpen, setIsPositionEditorOpen] = useState<boolean>(false);
   const importFileInput = useRef<HTMLInputElement>(null);
   const userSelectedModelRef = useRef<boolean>(false);
+  const conversationModeRef = useRef<string>("analysis");
+  // Refs that let the auto-eval closure read the latest values without stale captures.
+  // Updated every render (no deps array) so they're always current.
+  const formStateRef = useRef(formState);
+  const engineStatusRef = useRef(engineStatus);
+  const currentResponseTypeRef = useRef(currentResponseType);
+  // Training agent state (Opening / Endgame)
+  const [trainingMoves, setTrainingMoves] = useState<Array<{ uci: string; san: string; commentary: string }>>([]);
+  const [trainingMoveIndex, setTrainingMoveIndex] = useState<number>(-1);
+  const [trainingStartFen, setTrainingStartFen] = useState<string>("");
   // Puzzle state
   const [puzzleSolution, setPuzzleSolution] = useState<string[]>([]);
   const [puzzleSolutionSan, setPuzzleSolutionSan] = useState<string[]>([]);
@@ -315,6 +347,8 @@ export default function App() {
   const [currentGameInfo, setCurrentGameInfo] = useState<GamePlayerInfo | null>(null);
   const [gamePgnFens, setGamePgnFens] = useState<string[]>([]);
   const [gameMoveIndex, setGameMoveIndex] = useState<number>(0);
+  const [gameEcoLabel, setGameEcoLabel] = useState<string>("");
+  const [analysisEcoLabel, setAnalysisEcoLabel] = useState<string>("");
 
   const fetchSystemStatus = useCallback(async (): Promise<void> => {
     if (!electronAPI?.getSystemStatus) {
@@ -474,6 +508,52 @@ export default function App() {
     warmupOllama();
   }, [settingsLoaded, formState.llmProvider, formState.ollamaModel, formState.ollamaBaseUrl, warmupOllama]);
 
+  // Listen for engine warmup start/finish events pushed from the main process
+  useEffect(() => {
+    if (!electronAPI?.onEngineWarmingUp || !electronAPI?.onEngineReady) return;
+    const offWarming = electronAPI.onEngineWarmingUp(() => {
+      setEngineWarming(true);
+    });
+    const offReady = electronAPI.onEngineReady(({ engine, ok }) => {
+      setEngineWarming(false);
+      if (!ok) {
+        setStatusMessage(`${engine.toUpperCase()} failed to start. Check the engine path in Settings.`);
+      }
+    });
+    return () => {
+      offWarming();
+      offReady();
+    };
+  }, []);
+
+  // Listen for engine analysis start/done events to block input while calculating
+  useEffect(() => {
+    if (!electronAPI?.onEngineAnalysisStart || !electronAPI?.onEngineAnalysisDone) return;
+    const offStart = electronAPI.onEngineAnalysisStart(() => setEngineAnalyzing(true));
+    const offDone = electronAPI.onEngineAnalysisDone(() => setEngineAnalyzing(false));
+    return () => {
+      offStart();
+      offDone();
+    };
+  }, []);
+
+  // Stop the engine and clear opening label when the app mode changes
+  const prevResponseTypeRef = useRef<import("./types").ResponseType | null>(null);
+  useEffect(() => {
+    if (prevResponseTypeRef.current !== null && prevResponseTypeRef.current !== currentResponseType) {
+      electronAPI?.stopEngine?.({ engine: formState.selectedEngine });
+      setAnalysisEcoLabel("");
+    }
+    prevResponseTypeRef.current = currentResponseType;
+  }, [currentResponseType, formState.selectedEngine]);
+
+  // Clear deep analysis results when the position changes during advanced mode
+  useEffect(() => {
+    if (advancedAnalysisMode) {
+      setDeepAnalysisResults({});
+    }
+  }, [currentFen, advancedAnalysisMode]);
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return undefined;
@@ -575,11 +655,84 @@ export default function App() {
 
   // Load conversation and game memory on app startup
   useEffect(() => {
-    Promise.all([loadConversationHistory(), loadGameMemory()]).then(([history, games]) => {
+    Promise.all([loadConversationHistory("analysis"), loadGameMemory()]).then(([history, games]) => {
       setConversationHistory(history);
       setGameMemory(games);
     });
   }, []);
+
+  // Keep auto-eval refs in sync every render (no deps — always latest).
+  formStateRef.current = formState;
+  engineStatusRef.current = engineStatus;
+  currentResponseTypeRef.current = currentResponseType;
+
+  // Reset puzzle conversation every time a new puzzle is presented
+  useEffect(() => {
+    if (!puzzleStartFen) return;
+    setConversationHistory([]);
+    saveConversationHistory([], "puzzle").catch(() => {});
+  }, [puzzleStartFen]);
+
+  // Reset opening/endgame conversation history when a new training session starts.
+  // Fires when trainingStartFen changes (set by the training response handler).
+  useEffect(() => {
+    if (!trainingStartFen) return;
+    const mode = currentResponseType === "Opening" ? "opening"
+      : currentResponseType === "Endgame" ? "endgame"
+      : null;
+    if (!mode) return;
+    setConversationHistory([]);
+    saveConversationHistory([], mode).catch(() => {});
+  }, [trainingStartFen, currentResponseType]);
+
+  // Auto-eval: run a background engine analysis whenever the board position changes
+  // (piece drag, arrow-key navigation, game browsing). Updates analysisLines so the
+  // eval bar reflects the current position without needing a manual "Start Analysis".
+  // Skipped in puzzle mode (would immediately reveal the answer).
+  // Also runs opening detection (ECO lookup) on each new position.
+  useEffect(() => {
+    let cancelled = false;
+
+    const timer = setTimeout(async () => {
+      if (currentResponseTypeRef.current === "Puzzle") return;
+
+      // ECO opening detection — fast IPC (synchronous map lookup on main side)
+      if (electronAPI?.ecoLookupFen && currentFen && currentFen !== "start") {
+        electronAPI.ecoLookupFen(currentFen).then((match) => {
+          if (cancelled) return;
+          setAnalysisEcoLabel(match ? `${match.name} (${match.eco})` : "");
+        }).catch(() => {});
+      } else if (currentFen === "start") {
+        setAnalysisEcoLabel("");
+      }
+
+      const es = engineStatusRef.current;
+      const fs = formStateRef.current;
+      if (!es?.configured || !electronAPI?.analyzePosition) return;
+
+      try {
+        const response = await electronAPI.analyzePosition({
+          engine: fs.selectedEngine,
+          fen: currentFen,
+          depth: 5, // shallow depth for fast bar updates after each move
+          multiPv: 4,
+        });
+        if (cancelled || !response?.ok) return;
+        const lines: AnalysisLine[] = (response as any).analysis?.lines ?? [];
+        if (!lines.length) return;
+        // Update lines and entries; do NOT call fetchExplanations (LLM cost on every move).
+        setAnalysisLines(lines);
+        setAnalysisEntries(lines.map((line, i) => parseStockfishLine(line, i + 1, currentFen)));
+      } catch {
+        // Background analysis — ignore errors silently.
+      }
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [currentFen]);
 
   const fetchExplanations = useCallback(
     async (fen: string, lines: AnalysisLine[]): Promise<void> => {
@@ -605,9 +758,11 @@ export default function App() {
 
   const handleAnalysisSuccess = useCallback(
     (lines: AnalysisLine[], fen: string): void => {
+      if (!lines?.length) return; // keep previous eval on the bar when result is empty
       setAnalysisLines(lines);
       setSelectedEngineLineIndex(null);
       setSelectedEngineLineData(null);
+      setDeepAnalysisResults({});
       const entries = (lines || []).map((line, index) =>
         parseStockfishLine(line, index + 1, currentFen)
       );
@@ -627,7 +782,7 @@ export default function App() {
   }, []);
 
   const runAnalysis = useCallback(
-    async (fen: string): Promise<void> => {
+    async (fen: string, deepMode = false): Promise<void> => {
       if (!electronAPI?.analyzePosition) {
         setAnalysisStatus("Analysis engine unavailable.");
         return;
@@ -644,22 +799,45 @@ export default function App() {
         });
         if (!response?.ok) {
           setAnalysisStatus((response as any)?.error || `${engineName} analysis failed.`);
-          setAnalysisLines([]);
-          setAnalysisEntries([]);
           return;
         }
         const lines = (response as any).analysis?.lines || [];
         handleAnalysisSuccess(lines, fen);
+
+        // Deep LLM pass when in advanced mode
+        if (deepMode && lines.length > 0 && electronAPI?.deepAnalyzeLines) {
+          setDeepAnalysisLoading(true);
+          electronAPI.deepAnalyzeLines({ fen, lines }).then((res) => {
+            if (res?.ok && res.results) {
+              const map: Record<number, DeepLineAnalysis | null> = {};
+              for (const r of res.results) map[r.lineIndex] = r.analysis;
+              setDeepAnalysisResults(map);
+            }
+          }).catch(() => {}).finally(() => setDeepAnalysisLoading(false));
+        }
       } catch (err) {
         setAnalysisStatus(`${engineName} analysis failed.`);
-        setAnalysisLines([]);
-        setAnalysisEntries([]);
       } finally {
         setAnalysisLoading(false);
       }
     },
     [formState.analysisDepth, formState.selectedEngine, handleAnalysisSuccess]
   );
+
+  const handleStartAdvancedAnalysis = useCallback(() => {
+    setAdvancedAnalysisMode(true);
+    setIsAnalysisRunning(true);
+    setDeepAnalysisResults({});
+    runAnalysis(currentFen, true);
+  }, [currentFen, runAnalysis]);
+
+  const handleStopAdvancedAnalysis = useCallback(() => {
+    setAdvancedAnalysisMode(false);
+    setIsAnalysisRunning(false);
+    setAnalysisLoading(false);
+    setDeepAnalysisLoading(false);
+    setAnalysisStatus("Analysis stopped.");
+  }, []);
 
   const handleStartAnalysis = useCallback(() => {
     setIsAnalysisRunning(true);
@@ -752,6 +930,49 @@ export default function App() {
       return;
     }
 
+    // Training agent navigation (Opening / Endgame)
+    // Right arrow = advance to next move (consistent with game mode)
+    // Left arrow  = retreat to previous position
+    if ((currentResponseType === "Opening" || currentResponseType === "Endgame") && trainingMoves.length > 0) {
+      event.preventDefault();
+      if (event.key === "ArrowRight") {
+        // Advance to next training move
+        const next = trainingMoveIndex + 1;
+        if (next >= trainingMoves.length) {
+          setQuestionResponse("You've reached the end of the training line! Great work! 🎉");
+          return;
+        }
+        setTrainingMoveIndex(next);
+        // Replay moves 0..next from trainingStartFen for correctness
+        const chess = new Chess();
+        try { chess.load(trainingStartFen); } catch { /* use default */ }
+        for (let i = 0; i <= next; i++) {
+          const m = trainingMoves[i];
+          chess.move({ from: m.uci.slice(0, 2), to: m.uci.slice(2, 4), promotion: m.uci[4] });
+        }
+        setCurrentFen(chess.fen());
+        setQuestionResponse(trainingMoves[next].commentary);
+      } else {
+        // Retreat to previous position
+        const prev = trainingMoveIndex - 1;
+        setTrainingMoveIndex(prev);
+        if (prev < 0) {
+          setCurrentFen(trainingStartFen);
+          setQuestionResponse("Back to the start! Press → to step through the moves.");
+        } else {
+          const chess = new Chess();
+          try { chess.load(trainingStartFen); } catch { /* use default */ }
+          for (let i = 0; i <= prev; i++) {
+            const m = trainingMoves[i];
+            chess.move({ from: m.uci.slice(0, 2), to: m.uci.slice(2, 4), promotion: m.uci[4] });
+          }
+          setCurrentFen(chess.fen());
+          setQuestionResponse(trainingMoves[prev].commentary);
+        }
+      }
+      return;
+    }
+
     // Game mode navigation (arrow keys step through game moves)
     if (gameMode && gamePgnFens.length > 0) {
       event.preventDefault();
@@ -836,18 +1057,20 @@ export default function App() {
   }, [
     gameMode, gamePgnFens, gameMoveIndex,
     puzzleNavigationMode, puzzleSolution, currentMoveIndex, applyPuzzleSolutionMove,
-    showSolution, selectedEngineLineIndex, selectedEngineLineData, selectedLineBaseFen, fetchPerMoveExplanation
+    showSolution, selectedEngineLineIndex, selectedEngineLineData, selectedLineBaseFen, fetchPerMoveExplanation,
+    currentResponseType, trainingMoves, trainingMoveIndex, trainingStartFen
   ]);
 
   useEffect(() => {
-    if (selectedEngineLineIndex === null && !puzzleNavigationMode && !gameMode) {
+    const trainingActive = (currentResponseType === "Opening" || currentResponseType === "Endgame") && trainingMoves.length > 0;
+    if (selectedEngineLineIndex === null && !puzzleNavigationMode && !gameMode && !trainingActive) {
       return;
     }
     document.addEventListener("keydown", handleKeyboardNavigation);
     return () => {
       document.removeEventListener("keydown", handleKeyboardNavigation);
     };
-  }, [selectedEngineLineIndex, puzzleNavigationMode, gameMode, handleKeyboardNavigation]);
+  }, [selectedEngineLineIndex, puzzleNavigationMode, gameMode, handleKeyboardNavigation, currentResponseType, trainingMoves]);
 
   // When a game loads, attempt to fetch the players' current ratings from
   // chess.com to supplement (or replace) the historical ELO stored in the DB.
@@ -964,6 +1187,10 @@ export default function App() {
       setSnackbarOpen(true);
       setQuestionResponse("Correct! Well done. You solved the puzzle!");
       setPuzzleAttemptMoves([]);
+      const rating = puzzleMeta?.rating ?? 1200;
+      electronAPI?.recordSolve?.({ rating, solved: true }).then(() => {
+        setProfileRefreshTrigger((n) => n + 1);
+      }).catch(() => {});
     }
   }, [currentResponseType, puzzleSolution, puzzleSolutionSan, puzzleAttemptMoves, puzzleStartFen, puzzleMeta]);
 
@@ -991,7 +1218,11 @@ export default function App() {
       setCurrentMoveIndex(0);
       setPuzzleNavigationMode(true);
     }
-  }, [puzzleStartFen, currentResponseData]);
+    const rating = puzzleMeta?.rating ?? 1200;
+    electronAPI?.recordSolve?.({ rating, solved: false }).then(() => {
+      setProfileRefreshTrigger((n) => n + 1);
+    }).catch(() => {});
+  }, [puzzleStartFen, currentResponseData, puzzleMeta]);
 
   const applyPositions = useCallback(
     (positions: string[], message?: string): void => {
@@ -1170,6 +1401,7 @@ export default function App() {
       setSnackbarSeverity("success");
       setSnackbarOpen(true);
       setStatusMessage("");
+      setProfileRefreshTrigger((n) => n + 1);
       fetchSystemStatus();
     } catch (err) {
       setSnackbarMessage("Unable to save settings.");
@@ -1369,6 +1601,7 @@ export default function App() {
     setAnalysisLines([]);
     setSelectedEngineLineIndex(null);
     setSelectedEngineLineData(null);
+    setCurrentRawPgn(game.pgn_moves || "");
     return true;
   }, [parsePgnToFens, setCurrentGameInfo]);
 
@@ -1417,6 +1650,7 @@ export default function App() {
       setGamePgnFens([]);
       setGameMoveIndex(0);
       setCurrentFen("start");
+      setGameEcoLabel("");
       // Fall through so the question is processed as a new search
     }
 
@@ -1454,6 +1688,10 @@ export default function App() {
           setSnackbarSeverity("success");
           setSnackbarOpen(true);
           setPuzzleIncorrect(false);
+          const solveRating = puzzleMeta?.rating ?? 1200;
+          electronAPI?.recordSolve?.({ rating: solveRating, solved: true }).then(() => {
+            setProfileRefreshTrigger((n) => n + 1);
+          }).catch(() => {});
           // After a short celebration window, reset board and all puzzle state so
           // the user is in a clean Analysis state ready for the next question.
           setTimeout(() => {
@@ -1474,6 +1712,8 @@ export default function App() {
             setAnalysisLines([]);
             setPuzzleExplainLoading(false);
             setQuestionResponse("");
+            conversationModeRef.current = "analysis";
+            loadConversationHistory("analysis").then(h => setConversationHistory(h)).catch(() => {});
           }, 2500);
         } else {
           setPuzzleIncorrect(true);
@@ -1563,7 +1803,7 @@ export default function App() {
         try {
           const analysisResponse = await electronAPI.analyzePosition({
             fen: currentFen,
-            depth: formState.analysisDepth,
+            depth: 5,
             multiPv: 4
           });
           if (analysisResponse?.ok && analysisResponse?.analysis?.lines) {
@@ -1616,14 +1856,26 @@ export default function App() {
         setAnalysisLines(engineAnalysisLines);
       }
 
-      // Display the explanation/answer
-      const displayText = parsedResponse.explanation || parsedResponse.answer || "No answer returned.";
+      // Display the explanation/answer.
+      // For training responses the story is shown first; navigation hint follows.
+      const isTraining = finalResponseType === "Opening" || finalResponseType === "Endgame";
+      const displayText = isTraining
+        ? ((parsedResponse as any).story || parsedResponse.explanation || "Ready! Press → to step through the moves.")
+        : (parsedResponse.explanation || parsedResponse.answer || "No answer returned.");
       setQuestionResponse(displayText);
 
-      // Add to conversation history and save
+      // Add to conversation history and save to the mode that was active when the question was asked
+      const questionMode = conversationModeRef.current;
+      const nextMode = deriveConversationMode(finalResponseType, gameMode);
       const updatedHistory = addToConversationHistory(conversationHistory, question, displayText);
-      setConversationHistory(updatedHistory);
-      await saveConversationHistory(updatedHistory);
+      await saveConversationHistory(updatedHistory, questionMode);
+      if (nextMode !== questionMode) {
+        conversationModeRef.current = nextMode;
+        const nextHistory = await loadConversationHistory(nextMode);
+        setConversationHistory(nextHistory);
+      } else {
+        setConversationHistory(updatedHistory);
+      }
 
       // Handle game memory if this is a Game response with annotations
       if (finalResponseType === "Game" && parsedResponse.annotations) {
@@ -1667,6 +1919,13 @@ export default function App() {
         } catch (fenError) {
           setStatusMessage(`Invalid FEN in response: ${(fenError as Error).message}`);
         }
+      } else if (finalResponseType === "Opening" || finalResponseType === "Endgame") {
+        const movesArr = Array.isArray(parsedResponse.moves) ? parsedResponse.moves : [];
+        const startFen = parsedResponse.fen || "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+        setTrainingMoves(movesArr);
+        setTrainingMoveIndex(-1);
+        setTrainingStartFen(startFen);
+        setCurrentFen(startFen);
       } else if (finalResponseType === "GameList") {
         const incomingGames = Array.isArray(parsedResponse.game_list) ? parsedResponse.game_list : [];
         if (parsedResponse.auto_load && incomingGames.length === 1) {
@@ -1675,6 +1934,10 @@ export default function App() {
           const loaded = loadGameFromRow(incomingGames[0]);
           if (!loaded) {
             setQuestionResponse("⚠️ Couldn't load that game onto the board — the PGN may be missing or unreadable.");
+          } else {
+            const ecoCode = parsedResponse.eco_code || incomingGames[0].eco || "";
+            const openingName = parsedResponse.opening_name || incomingGames[0].opening || "";
+            setGameEcoLabel(ecoCode && openingName ? `${openingName} (${ecoCode})` : openingName || ecoCode);
           }
         } else {
           // Normal list response — store for manual selection by typing a number.
@@ -1684,6 +1947,7 @@ export default function App() {
           setCurrentGameInfo(null);
           setGamePgnFens([]);
           setGameMoveIndex(0);
+          setGameEcoLabel("");
         }
       }
 
@@ -1735,7 +1999,8 @@ export default function App() {
     formState.llmModel,
     questionText,
     conversationHistory,
-    gameMemory
+    gameMemory,
+    gameEcoLabel
   ]);
 
   const onOpenSettings = useCallback((): void => {
@@ -1821,8 +2086,12 @@ export default function App() {
         overflow: "hidden"
       }}
     >
+      <Box sx={{ position: "absolute", top: 12, right: 16, zIndex: (theme) => theme.zIndex.drawer + 3 }}>
+        <ProfileIcon refreshTrigger={profileRefreshTrigger} />
+      </Box>
+
       <Backdrop
-        open={appLoading}
+        open={appLoading || engineWarming || engineAnalyzing}
         sx={{
           position: "absolute",
           zIndex: (theme) => theme.zIndex.drawer + 5,
@@ -1831,7 +2100,9 @@ export default function App() {
       >
         <Stack spacing={2} alignItems="center">
           <CircularProgress color="inherit" />
-          <Typography variant="h6">Loading application…</Typography>
+          {!engineWarming && !engineAnalyzing && (
+            <Typography variant="h6">Loading application…</Typography>
+          )}
         </Stack>
       </Backdrop>
       <Backdrop
@@ -2118,9 +2389,15 @@ export default function App() {
                     minHeight: 0,
                     display: "flex",
                     alignItems: "center",
-                    justifyContent: "flex-start"
+                    justifyContent: "flex-start",
+                    gap: 1,
                   }}
                 >
+                  <EvalBar
+                    score={analysisLines[0]?.score}
+                    height={boardSize.height}
+                    isLoading={isAnalysisRunning}
+                  />
                   <AnalysisBoard
                     currentFen={currentFen}
                     setCurrentFen={setCurrentFen}
@@ -2141,6 +2418,23 @@ export default function App() {
                     elo={currentGameInfo.whiteChesscomRating ?? currentGameInfo.whiteElo}
                     pieceColor="white"
                   />
+                )}
+                {/* ECO opening label — game mode shows DB-resolved name; analysis mode shows live ECO lookup */}
+                {gameMode && gameEcoLabel && (
+                  <Typography
+                    variant="caption"
+                    sx={{ color: "text.secondary", px: 1.5, pt: 0.25, display: "block", fontStyle: "italic" }}
+                  >
+                    {gameEcoLabel}
+                  </Typography>
+                )}
+                {!gameMode && analysisEcoLabel && (
+                  <Typography
+                    variant="caption"
+                    sx={{ color: "text.secondary", px: 1.5, pt: 0.25, display: "block", fontStyle: "italic" }}
+                  >
+                    {analysisEcoLabel}
+                  </Typography>
                 )}
                 <Box sx={{ display: "flex", justifyContent: "space-between", pt: 1 }}>
                   <Stack direction="row" spacing={1}>
@@ -2164,16 +2458,76 @@ export default function App() {
                         <EditIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title={isAnalysisRunning ? "Stop Analysis" : "Start Analysis"} disableInteractive={false}>
-                      <IconButton
-                        size="small"
-                        onClick={isAnalysisRunning ? handleStopAnalysis : handleStartAnalysis}
-                        color={isAnalysisRunning ? "error" : "success"}
-                        aria-label={isAnalysisRunning ? "stop analysis" : "start analysis"}
-                      >
-                        {isAnalysisRunning ? <StopIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
-                      </IconButton>
-                    </Tooltip>
+                    {!gameMode && (
+                      <Tooltip title={isAnalysisRunning ? "Stop Analysis" : "Advanced Analysis"} disableInteractive={false}>
+                        <IconButton
+                          size="small"
+                          onClick={isAnalysisRunning ? handleStopAdvancedAnalysis : handleStartAdvancedAnalysis}
+                          color={isAnalysisRunning ? "error" : "success"}
+                          aria-label={isAnalysisRunning ? "stop analysis" : "advanced analysis"}
+                        >
+                          {isAnalysisRunning ? <StopIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    {advancedAnalysisMode && (
+                      <Tooltip title="Save this analysis" disableInteractive={false}>
+                        <span>
+                          <IconButton
+                            size="small"
+                            disabled={deepAnalysisLoading}
+                            aria-label="save analysis"
+                            onClick={async () => {
+                              if (!electronAPI?.saveAnalysisPgn) return;
+                              const res = await electronAPI.saveAnalysisPgn({ pgn: currentRawPgn, notes: currentNotesMap });
+                              if (res?.ok) {
+                                setSnackbarMessage(`Analysis saved to: ${res.path}`);
+                                setSnackbarSeverity("success");
+                              } else {
+                                setSnackbarMessage(res?.error || "Failed to save analysis.");
+                                setSnackbarSeverity("error");
+                              }
+                              setSnackbarOpen(true);
+                            }}
+                          >
+                            <SaveIcon fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    )}
+                    {!gameMode && (
+                      <Tooltip title="Load saved analysis" disableInteractive={false}>
+                        <IconButton
+                          size="small"
+                          aria-label="load analysis"
+                          onClick={async () => {
+                            if (!electronAPI?.loadAnalysisPgn) return;
+                            const res = await electronAPI.loadAnalysisPgn();
+                            if (res?.cancelled) return;
+                            if (!res?.ok) {
+                              setSnackbarMessage(res?.error || "Failed to load analysis.");
+                              setSnackbarSeverity("error");
+                              setSnackbarOpen(true);
+                              return;
+                            }
+                            setCurrentRawPgn(res.pgn || "");
+                            if (res.notes) setCurrentNotesMap((prev) => ({ ...prev, ...res.notes }));
+                            // Load PGN onto the board
+                            if (res.pgn) {
+                              const fens = parsePgnToFens(res.pgn);
+                              if (fens.length > 1) {
+                                setGamePgnFens(fens);
+                                setGameMoveIndex(fens.length - 1);
+                                setCurrentFen(fens[fens.length - 1]);
+                                setGameMode(true);
+                              }
+                            }
+                          }}
+                        >
+                          <FolderOpenIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
                   </Stack>
                   <Tooltip title="View logs" disableInteractive={false}>
                     <IconButton
@@ -2215,6 +2569,11 @@ export default function App() {
                   llmProvider={formState.llmProvider}
                   analysisLines={analysisLines}
                   onSelectEngineLine={handleSelectEngineLine}
+                  onDeselectLine={() => {
+                    setSelectedEngineLineIndex(null);
+                    setSelectedEngineLineData(null);
+                    setCurrentMoveIndex(0);
+                  }}
                   selectedEngineLineIndex={selectedEngineLineIndex}
                   currentMoveIndex={currentMoveIndex}
                   responseType={currentResponseType}
@@ -2229,8 +2588,20 @@ export default function App() {
                   gameMode={gameMode}
                   gameMoveIndex={gameMoveIndex}
                   gameTotalMoves={gamePgnFens.length}
+                  advancedAnalysisMode={advancedAnalysisMode}
+                  deepAnalysisResults={deepAnalysisResults}
+                  deepAnalysisLoading={deepAnalysisLoading}
                   sx={{ flex: 1, minHeight: 0 }}
                 />
+                {advancedAnalysisMode && (
+                  <PositionNotesPanel
+                    currentFen={currentFen}
+                    electronAPI={electronAPI}
+                    onNoteChange={(fen, text) =>
+                      setCurrentNotesMap((prev) => ({ ...prev, [fen]: text }))
+                    }
+                  />
+                )}
               </Box>
             </Box>
           )}

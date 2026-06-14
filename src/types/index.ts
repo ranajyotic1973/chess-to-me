@@ -78,6 +78,16 @@ export interface AppSettings {
   llmModel?: string; // For non-Ollama providers (openai, anthropic, gemini, grok)
   puzzleRatingMin?: number;
   puzzleRatingMax?: number;
+  displayName?: string;
+}
+
+export interface UserProfile {
+  displayName: string;
+}
+
+export interface PuzzlePointsState {
+  points: number | null;
+  frozenAtZero: boolean;
 }
 
 export type FormState = AppSettings;
@@ -147,7 +157,7 @@ export interface ProcessLogs {
 // LLM Types
 // ============================================================================
 
-export type ResponseType = "Analysis" | "Puzzle" | "Position" | "Game" | "GameList";
+export type ResponseType = "Analysis" | "Puzzle" | "Position" | "Game" | "GameList" | "Opening" | "Endgame";
 
 export interface AgentProgressEvent {
   agentId: number;       // 1-based
@@ -168,6 +178,22 @@ export interface GameMemoryEntry {
   pgn: string;
   annotations: Record<number, "!!" | "!" | "*" | "!?" | "??">;
   timestamp: number;
+}
+
+export interface TrainingMove {
+  uci: string;
+  san: string;
+  commentary: string;
+}
+
+export interface DeepLineAnalysis {
+  strategy: string;
+  proscons: string;
+  counterattack: string;
+  sacrifice: string;
+  novelty: string;
+  endgameChances: string;
+  alternatives: string;
 }
 
 export interface LLMResponse {
@@ -196,6 +222,11 @@ export interface LLMResponse {
   game_list?: GameRow[];
   // Set to true by backend when this is a single-game selection (auto-loads without user picking "1")
   auto_load?: boolean;
+  // Opening / Endgame training agents
+  moves?: TrainingMove[];
+  eco_code?: string;
+  opening_name?: string;
+  story?: string;
 }
 
 export interface OllamaMessage {
@@ -323,6 +354,14 @@ export interface IpcPayloads {
     model?: string;
     baseUrl?: string;
   };
+  "profile:get-display-name": Record<string, never>;
+  "profile:set-display-name": { displayName: string };
+  "points:get": Record<string, never>;
+  "points:record-solve": { rating: number; solved: boolean };
+  "conversation:load": { mode: string };
+  "conversation:save": { mode: string; history: ConversationMessage[] };
+  "opening:ask": { question: string; fen?: string; conversationHistory?: ConversationMessage[]; llmProvider?: string; llmApiKey?: string; model?: string; baseUrl?: string };
+  "endgame:ask": { question: string; fen?: string; conversationHistory?: ConversationMessage[]; llmProvider?: string; llmApiKey?: string; model?: string; baseUrl?: string };
 }
 
 export interface IpcResponses {
@@ -355,6 +394,14 @@ export interface IpcResponses {
   "db:delete-puzzles": { ok: boolean };
   "db:delete-games": { ok: boolean };
   "puzzle:explain-incorrect": { ok: boolean; explanation?: string; error?: string };
+  "profile:get-display-name": string;
+  "profile:set-display-name": { ok: boolean };
+  "points:get": PuzzlePointsState;
+  "points:record-solve": PuzzlePointsState;
+  "conversation:load": { ok: boolean; history: ConversationMessage[] };
+  "conversation:save": { ok: boolean; error?: string };
+  "opening:ask": { ok: boolean; answer?: string; error?: string };
+  "endgame:ask": { ok: boolean; answer?: string; error?: string };
 }
 
 // ============================================================================
@@ -477,7 +524,11 @@ export interface ChatPanelProps {
   llmProvider?: string;
   analysisLines?: AnalysisLine[];
   onSelectEngineLine?: (lineIndex: number, line: AnalysisLine) => void;
+  onDeselectLine?: () => void;
   selectedEngineLineIndex?: number | null;
+  advancedAnalysisMode?: boolean;
+  deepAnalysisResults?: Record<number, DeepLineAnalysis | null>;
+  deepAnalysisLoading?: boolean;
   currentMoveIndex?: number;
   responseType?: ResponseType;
   responseData?: Record<string, any>;
@@ -535,6 +586,7 @@ export interface ElectronAPI {
     depth?: number;
     multiPv?: number;
   }): Promise<{ ok: true; analysis: AnalysisResult } | { ok: false; error: string }>;
+  ecoLookupFen(fen: string): Promise<{ eco: string; name: string } | null>;
 
   // Settings
   updateAppSettings(payload: Partial<AppSettings>): Promise<{ ok: true; settings: Partial<AppSettings> }>;
@@ -573,6 +625,11 @@ export interface ElectronAPI {
   getProcessLogs(): Promise<ProcessLogs>;
   onLogEntry(callback: (data: { bucket: "stockfish" | "ollama"; entry: LogEntry }) => void): () => void;
   onAgentProgress(callback: (data: AgentProgressEvent) => void): () => void;
+  stopEngine(args?: { engine?: string }): Promise<{ ok: boolean }>;
+  onEngineWarmingUp(callback: (data: { engine: string }) => void): () => void;
+  onEngineReady(callback: (data: { engine: string; ok: boolean }) => void): () => void;
+  onEngineAnalysisStart(callback: (data: { engine: string }) => void): () => void;
+  onEngineAnalysisDone(callback: (data: { engine: string }) => void): () => void;
   setOllamaModel(model: string): Promise<{ ok: true; activeModel: string } | { ok: false; error: string }>;
 
   // LLM Model Management
@@ -608,6 +665,33 @@ export interface ElectronAPI {
   onDbRefreshStatus(callback: () => void): () => void;
   onDbImportComplete(callback: (data: { ok: boolean; count?: number; error?: string }) => void): () => void;
   puzzleExplainIncorrect(payload: IpcPayloads["puzzle:explain-incorrect"]): Promise<{ ok: boolean; explanation?: string; error?: string }>;
+
+  // User profile
+  getDisplayName(): Promise<string>;
+  setDisplayName(displayName: string): Promise<{ ok: boolean }>;
+
+  // Puzzle points
+  getPoints(): Promise<PuzzlePointsState>;
+  recordSolve(payload: { rating: number; solved: boolean }): Promise<PuzzlePointsState>;
+
+  // Conversation memory
+  loadConversation(args: { mode: string }): Promise<{ ok: boolean; history: ConversationMessage[] }>;
+  saveConversation(args: { mode: string; history: ConversationMessage[] }): Promise<{ ok: boolean; error?: string }>;
+
+  // Training agents
+  openingAsk(args: IpcPayloads["opening:ask"]): Promise<IpcResponses["opening:ask"]>;
+  endgameAsk(args: IpcPayloads["endgame:ask"]): Promise<IpcResponses["endgame:ask"]>;
+
+  // Advanced analysis
+  deepAnalyzeLines(payload: { fen: string; lines: AnalysisLine[] }): Promise<{ ok: boolean; results?: Array<{ lineIndex: number; analysis: DeepLineAnalysis | null }>; error?: string }>;
+
+  // Position notes
+  notesGet(fen: string): Promise<string | null>;
+  notesSet(fen: string, text: string): Promise<void>;
+
+  // PGN save / load
+  saveAnalysisPgn(payload: { pgn: string; notes: Record<string, string> }): Promise<{ ok: boolean; path?: string; error?: string }>;
+  loadAnalysisPgn(): Promise<{ ok: boolean; pgn?: string; notes?: Record<string, string>; cancelled?: boolean; error?: string }>;
 }
 
 declare global {

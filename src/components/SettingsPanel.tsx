@@ -78,6 +78,8 @@ export default function SettingsPanel({
   const [modelsFetchError, setModelsFetchError] = useState<string>("");
   const [apiKeyToTest, setApiKeyToTest] = useState<string>("");
   const [hasAutoFetched, setHasAutoFetched] = useState(false);
+  const [displayName, setDisplayName] = useState<string>("");
+  const [displayNamePlaceholder, setDisplayNamePlaceholder] = useState<string>("");
 
   // Database state
   const [dbStatus, setDbStatus] = useState<DbStatus | null>(null);
@@ -159,6 +161,13 @@ export default function SettingsPanel({
         setDbActionLoading("games");
         subscribeToProgress();
       }
+    }).catch(() => {});
+    // Load display name — resolved value (OS username fallback) becomes placeholder
+    electronAPI?.getDisplayName?.().then((name: string) => {
+      setDisplayNamePlaceholder(name);
+      // Only pre-fill if the user previously set a custom name (not the OS default)
+      const savedName = (formState as any).displayName || "";
+      setDisplayName(savedName);
     }).catch(() => {});
   }, []);
 
@@ -307,6 +316,17 @@ export default function SettingsPanel({
         <Typography variant="body2" color="text.secondary">
           Select a chess engine (Stockfish or LC0) and configure your LLM provider before moving to the analysis view.
         </Typography>
+
+        <Typography variant="h6">Profile</Typography>
+        <TextField
+          label="Display Name"
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+          fullWidth
+          placeholder={displayNamePlaceholder}
+          helperText="Leave blank to use your system username"
+          inputProps={{ maxLength: 50 }}
+        />
 
         <Typography variant="h6">Chess Engine</Typography>
         <FormControl fullWidth>
@@ -717,7 +737,10 @@ export default function SettingsPanel({
 
         {statusMessage ? <Alert severity="info">{statusMessage}</Alert> : null}
         <Stack direction="row" spacing={2} justifyContent="flex-end">
-          <Button variant="contained" color="primary" onClick={onSaveSettings} disabled={settingsSaving}>
+          <Button variant="contained" color="primary" onClick={() => {
+            electronAPI?.setDisplayName?.(displayName);
+            onSaveSettings();
+          }} disabled={settingsSaving}>
             Save settings
           </Button>
           <Button variant="contained" color="secondary" onClick={onSettingsComplete} disabled={!engineStatus?.configured}>

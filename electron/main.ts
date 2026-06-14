@@ -1,9 +1,14 @@
 import path from "node:path";
 import fs from "node:fs";
+import os from "node:os";
 import { execSync } from "node:child_process";
 import { spawn, ChildProcess } from "node:child_process";
+import { loadPoints, getPoints, recordSolve as recordPuzzleSolve } from "./puzzlePoints";
 import { Chess } from "chess.js";
-import type { AnalysisLine, PuzzleRow } from "../src/types";
+import type { AnalysisLine, PuzzleRow, ConversationMessage } from "../src/types";
+import { initEcoLookup, lookupOpeningByFen, lookupOpeningByMoves } from "./ecoLookup";
+import { handleOpeningRequest } from "./openingAgent";
+import { handleEndgameRequest } from "./endgameAgent";
 import { settings } from "./settings";
 import { initPuzzleDb, importPuzzlesFromCsv, searchPuzzles, getPuzzleDbStats, hasPuzzles, normalizeThemeKeyword } from "./puzzleDb";
 import { initGamesDb, importPgnFile, searchGames, getGamesDbStats, rebuildFts, setGamesSource } from "./gamesDb";
@@ -253,6 +258,7 @@ class EngineRunner {
   path: string = "";
   lineBuffer: string = "";
   pending: Promise<any> = Promise.resolve();
+  analyzeActive = false;
   logCallback: ((entry: LogEntry) => void) | null = null;
 
   constructor(engineName: string, logCallback?: (entry: LogEntry) => void) {
@@ -280,10 +286,26 @@ class EngineRunner {
       return;
     }
     await this.stop();
-    await this.start(enginePath);
+    const isLC0 = this.engineName.toLowerCase() === "lc0";
+    const savedBackend = isLC0 ? (settings.get("lc0Backend") as string | undefined) : undefined;
+
+    mainWindow?.webContents.send("engine:warming-up", { engine: this.engineName });
+    try {
+      await this.start(enginePath, savedBackend);
+    } catch (err) {
+      if (isLC0 && (err as Error)?.message?.startsWith("LC0_DML_UNSUPPORTED")) {
+        console.log("[lc0] DirectML not supported on this GPU — retrying with onnx-cpu backend");
+        settings.set("lc0Backend", "onnx-cpu");
+        await this.start(enginePath, "onnx-cpu");
+      } else {
+        mainWindow?.webContents.send("engine:ready", { engine: this.engineName, ok: false });
+        throw err;
+      }
+    }
+    mainWindow?.webContents.send("engine:ready", { engine: this.engineName, ok: true });
   }
 
-  start(enginePath: string): Promise<void> {
+  start(enginePath: string, backendOverride?: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const proc = spawn(enginePath, [], { windowsHide: true });
       let settled = false;
@@ -319,34 +341,67 @@ class EngineRunner {
       };
 
       const onError = (err: Error) => fail(err);
+      let dmlErrorSeen = false;
       const onExit = () => {
         if (!settled) {
-          const msg = isLC0
-            ? `${this.engineName} process exited before initialization. Ensure LC0 weights file is installed.`
-            : `${this.engineName} process exited before initialization.`;
-          fail(new Error(msg));
+          if (dmlErrorSeen) {
+            // Sentinel picked up by ensureRunning to retry with onnx-cpu
+            fail(new Error("LC0_DML_UNSUPPORTED: DirectML backend not supported on this GPU."));
+          } else {
+            const msg = isLC0
+              ? `${this.engineName} process exited before initialization. Ensure LC0 weights file is installed.`
+              : `${this.engineName} process exited before initialization.`;
+            fail(new Error(msg));
+          }
         }
       };
       const onStderr = (chunk: Buffer) => {
         const text = chunk?.toString?.() || "";
         console.log(`[${this.engineName}] STDERR: ${text}`);
-        this.emitLog({
-          text,
-          stream: "stderr",
-          context: "uci-init"
-        });
+        this.emitLog({ text, stream: "stderr", context: "uci-init" });
+        // 887A0004 = DXGI_ERROR_UNSUPPORTED — DirectML feature level not supported on this GPU
+        if (isLC0 && (text.includes("887A0004") || text.includes("dml_provider_factory"))) {
+          dmlErrorSeen = true;
+        }
       };
+      // LC0 defers DirectML/GPU backend init to the first go command, so warmup can
+      // take 30-120s. Use the full analyze timeout to cover that window.
+      const effectiveTimeoutMs = isLC0 ? LC0_ANALYZE_TIMEOUT_MS : timeoutMs;
+
+      // State machine: uci → ready → (LC0 only: warmup) → done
+      let initStage: "uci" | "ready" | "warmup" | "done" = "uci";
       const onData = (chunk: Buffer) => {
         const text = chunk?.toString?.() || "";
         console.log(`[${this.engineName}] INIT OUTPUT: ${text}`);
         this.emitLog({ text, stream: "stdout", context: "uci-init" });
         buffer += text;
-        if (buffer.includes("uciok")) {
+
+        if (initStage === "uci" && buffer.includes("uciok")) {
+          initStage = "ready";
+          // Set backend before isready so LC0 applies it before the warmup search
+          if (isLC0 && backendOverride) {
+            console.log(`[${this.engineName}] Setting backend to ${backendOverride}...`);
+            proc.stdin.write(`setoption name Backend value ${backendOverride}\n`);
+          }
           console.log(`[${this.engineName}] ✓ Received uciok, sending isready...`);
           proc.stdin.write("isready\n");
         }
-        if (buffer.includes("readyok")) {
-          console.log(`[${this.engineName}] ✓ Received readyok, engine ready!`);
+        if (initStage === "ready" && buffer.includes("readyok")) {
+          if (isLC0) {
+            // Force GPU/neural-net init now so first analysis call returns quickly.
+            initStage = "warmup";
+            console.log(`[${this.engineName}] Warming up neural network (${backendOverride ?? "default"} backend)...`);
+            proc.stdin.write("position startpos\n");
+            proc.stdin.write("go nodes 1\n");
+          } else {
+            initStage = "done";
+            console.log(`[${this.engineName}] ✓ Received readyok, engine ready!`);
+            succeed();
+          }
+        }
+        if (initStage === "warmup" && buffer.includes("bestmove")) {
+          initStage = "done";
+          console.log(`[${this.engineName}] ✓ Warmup complete, engine ready!`);
           succeed();
         }
       };
@@ -360,10 +415,10 @@ class EngineRunner {
 
       setTimeout(() => {
         const msg = isLC0
-          ? `Timeout initializing ${this.engineName}. Check that LC0 is installed and neural network weights are available.`
+          ? `Timeout initializing ${this.engineName}. Check that LC0 is installed and neural network weights are available. GPU warmup may take up to 2 minutes.`
           : `Timeout initializing ${this.engineName} with UCI.`;
         fail(new Error(msg));
-      }, timeoutMs);
+      }, effectiveTimeoutMs);
     });
   }
 
@@ -386,12 +441,34 @@ class EngineRunner {
   }
 
   analyze(params: { fen: string; depth?: number; multiPv?: number }): Promise<any> {
-    this.pending = this.pending.then(() => this._analyzeInternal(params));
+    // Only send stop when analysis is actually running. Sending stop to an idle engine
+    // can cause a spurious bestmove response that resolves _analyzeInternal before it starts.
+    if (this.analyzeActive) {
+      try {
+        if (this.proc && !this.proc.killed) {
+          this.proc.stdin.write("stop\n");
+        }
+      } catch {}
+    }
+    // .catch guard: a rejected previous analysis must not block this one.
+    this.pending = this.pending
+      .catch(() => {})
+      .then(() => {
+        this.analyzeActive = true;
+        mainWindow?.webContents.send("engine:analysis-start", { engine: this.engineName });
+        return this._analyzeInternal(params);
+      })
+      .finally(() => {
+        this.analyzeActive = false;
+      });
     return this.pending;
   }
 
   private _analyzeInternal(params: { fen: string; depth?: number; multiPv?: number }): Promise<any> {
     const { fen, depth = 15, multiPv = 4 } = params;
+    // Engines report scores from the side-to-move's perspective.
+    // Negate when it is black's turn so scores are always white-positive.
+    const blackToMove = fen.split(/\s+/)[1] === "b";
     return new Promise((resolve, reject) => {
       if (!this.proc || this.proc.killed) {
         reject(new Error(`${this.engineName} process is not running.`));
@@ -420,6 +497,7 @@ class EngineRunner {
             score: value.score || null,
             pv: value.pv || ""
           }));
+        mainWindow?.webContents.send("engine:analysis-done", { engine: this.engineName });
         resolve({
           bestMove,
           lines
@@ -458,24 +536,28 @@ class EngineRunner {
         // Log parsing details to console
         console.log(`[${this.engineName}] Parsing info line | depth: ${depth}, rank: ${rank}`);
 
-        // Set score based on engine type
+        // Set score based on engine type.
+        // Scores are converted to white-positive: negate when black is to move.
         if (scoreCp) {
-          // Stockfish: centipawn evaluation
-          existing.score = { type: "cp", value: Number(scoreCp[1]), depth };
-          console.log(`[${this.engineName}] ✓ Parsed CP score: ${scoreCp[1]} cp (depth ${depth})`);
+          const raw = Number(scoreCp[1]);
+          const value = blackToMove ? -raw : raw;
+          existing.score = { type: "cp", value, depth };
+          console.log(`[${this.engineName}] ✓ Parsed CP score: ${raw} cp → ${value} (white-positive, depth ${depth})`);
         } else if (scoreMate) {
-          // Stockfish: mate in X moves
-          existing.score = { type: "mate", value: Number(scoreMate[1]), depth };
-          console.log(`[${this.engineName}] ✓ Parsed MATE score: mate in ${scoreMate[1]} (depth ${depth})`);
+          const raw = Number(scoreMate[1]);
+          const value = blackToMove ? -raw : raw;
+          existing.score = { type: "mate", value, depth };
+          console.log(`[${this.engineName}] ✓ Parsed MATE score: mate in ${raw} → ${value} (white-positive, depth ${depth})`);
         } else if (scoreWdl) {
-          // LC0: win-draw-loss probabilities
+          // WDL: wins/draws/losses from side-to-move's perspective.
+          // White win probability = wins when white moves, losses when black moves.
           const wins = Number(scoreWdl[1]);
           const draws = Number(scoreWdl[2]);
           const losses = Number(scoreWdl[3]);
           const total = wins + draws + losses;
-          const winProb = total > 0 ? wins / total : 0;
+          const winProb = total > 0 ? (blackToMove ? losses / total : wins / total) : 0;
           existing.score = { winProb, depth };
-          console.log(`[${this.engineName}] ✓ Parsed WDL score: ${wins}/${draws}/${losses} = ${(winProb * 100).toFixed(1)}% win prob (depth ${depth})`);
+          console.log(`[${this.engineName}] ✓ Parsed WDL score: ${wins}/${draws}/${losses} → ${(winProb * 100).toFixed(1)}% white win prob (depth ${depth})`);
         } else {
           console.log(`[${this.engineName}] ⚠ No score found in line`);
         }
@@ -534,18 +616,6 @@ class EngineRunner {
         } catch (err) {
           console.error(`[${this.engineName}] Failed to send stop command:`, err);
         }
-
-        // Kill process after grace period if it hasn't exited
-        const killTimer = setTimeout(() => {
-          try {
-            if (this.proc && !this.proc.killed) {
-              this.proc.kill();
-              console.log(`[${this.engineName}] Process killed after grace period`);
-            }
-          } catch (err) {
-            console.error(`[${this.engineName}] Failed to kill process:`, err);
-          }
-        }, 500);
 
         // Snapshot whatever lines we have collected so far
         const snapshotLines = [...linesByRank.entries()]
@@ -1575,6 +1645,16 @@ ipcMain.handle("getEngineStatus", async () => {
   };
 });
 
+ipcMain.handle("engine:stop", async (_event, { engine }: { engine?: string } = {}) => {
+  const name = (engine || settings.get("selectedEngine") || "lc0").toLowerCase();
+  const runner = processManager.engineRunners[name];
+  if (runner) {
+    await runner.stop();
+    console.log(`[engine:stop] ${name} engine stopped`);
+  }
+  return { ok: true };
+});
+
 ipcMain.handle("app:update-settings", async (_event, payload) => {
   const nextDepth = Math.max(6, Math.min(30, Number(payload?.analysisDepth) || 16));
   const nextProvider = payload?.llmProvider || settings.get("llmProvider") || "ollama";
@@ -1733,7 +1813,7 @@ async function performAnalysis(engine: string, fen: string, depth?: number, mult
     return { ok: false, error: `${selectedEngine} engine not configured.` };
   }
 
-  const finalDepth = Math.max(6, Math.min(30, Number(depth) || Number(settings.get("analysisDepth")) || 16));
+  const finalDepth = Math.max(1, Math.min(30, Number(depth) || Number(settings.get("analysisDepth")) || 16));
   const finalMultiPv = Math.max(1, Math.min(4, Number(multiPv) || 4));
 
   try {
@@ -1766,6 +1846,11 @@ ipcMain.handle("stockfish:analyze", async (_event, payload) => {
   }
 
   return performAnalysis("stockfish", fen, depth, multiPv);
+});
+
+ipcMain.handle("eco:lookup-fen", (_event, { fen }: { fen: string }) => {
+  if (!fen || typeof fen !== "string") return null;
+  return lookupOpeningByFen(fen);
 });
 
 function normalizeEvaluation(score: any, engineType = "stockfish"): any {
@@ -1915,7 +2000,7 @@ async function executeTool(toolName: string, args: Record<string, any>): Promise
           const analysisResult = await performAnalysis(
             "stockfish",
             args.fen || boardManager.getBoardFen(),
-            args.depth || (settings.get("analysisDepth") as number) || 16,
+            Math.min(args.depth || 5, 5),
             4
           );
           result = analysisResult;
@@ -2453,7 +2538,7 @@ async function handleAnalysisRequest(question: string, fen: string, lines: Analy
   if (fen && !analysisLines.length) {
     try {
       const engineType = payload?.engine || settings.get("selectedEngine") || "stockfish";
-      const depth = Math.max(6, Math.min(30, Number(payload?.depth || settings.get("analysisDepth") || 16)));
+      const depth = 5;
       console.log(`[LLM] Running fresh ${engineType.toUpperCase()} analysis (depth ${depth}) for FEN`);
 
       const analysisResult = await performAnalysis(engineType, fen, depth, 2);
@@ -3010,12 +3095,17 @@ async function handlePlayerGamesRequest(question: string, payload: unknown, llmP
           const selected = allGames[selectionNum - 1];
           const displayResult = normalizeGameResult(selected.result);
           console.log(`[LLM] PASS 2: PLAYER_GAMES - Game selection ${selectionNum} via conversation history ✓`);
+          const ecoViaHistory = selected.pgn_moves
+            ? lookupOpeningByMoves(selected.pgn_moves.trim().split(/\s+/).filter(Boolean))
+            : null;
           return {
             ok: true,
             answer: JSON.stringify({
               response_type: "GameList",
               game_list: [selected],
               auto_load: true,
+              eco_code: ecoViaHistory?.eco || selected.eco || "",
+              opening_name: ecoViaHistory?.name || selected.opening || "",
               explanation: `**${selected.white}** vs **${selected.black}** (${displayResult})\n\nGame loaded! Use ← → arrow keys to step through moves. Ask me about any position.`
             })
           };
@@ -3065,12 +3155,24 @@ async function handlePlayerGamesRequest(question: string, payload: unknown, llmP
   const explanation =
     `Found **${games.length}** game${games.length !== 1 ? "s" : ""} for **${searchParams.player ?? "?"}**${filterSuffix}. Type the number to load a game:\n\n${listLines.join("\n")}`;
 
+  // Annotate each game with ECO lookup result
+  const gamesWithEco = games.map(g => {
+    const ecoMatch = g.pgn_moves
+      ? lookupOpeningByMoves(g.pgn_moves.trim().split(/\s+/).filter(Boolean))
+      : null;
+    return {
+      ...g,
+      eco: ecoMatch?.eco || g.eco || "",
+      opening: ecoMatch?.name || g.opening || ""
+    };
+  });
+
   console.log(`[LLM] PASS 2: PLAYER_GAMES ✓ Found ${games.length} games`);
   return {
     ok: true,
     answer: JSON.stringify({
       response_type: "GameList",
-      game_list: games,
+      game_list: gamesWithEco,
       explanation
     })
   };
@@ -3172,6 +3274,67 @@ ipcMain.handle("llm:ask-question", async (_event, payload) => {
   const baseUrl = (payload?.baseUrl || (llmProvider === "ollama" ? settings.get("ollamaBaseUrl") : null) || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
 
   try {
+    // PASS 1a: Regex pre-screen for training intents — avoids an LLM round-trip for clear signals
+    const lq = question.toLowerCase();
+    const openingTrainingSignals = [
+      /teach me (an? |the )?opening/i,
+      /show me (the |an? )?opening/i,
+      /show me (the |a )?\w[\w\s]+ (defense|defence|opening|gambit|attack)/i,
+      /i want to (learn|practice) (the |an? )?\w[\w\s]+ (defense|defence|opening|gambit)/i,
+      /how does (the |a )?\w[\w\s]+ (defense|defence|opening|gambit) start/i,
+      /opening for (white|black)/i,
+      /play the \w[\w\s]+ (defense|defence|opening|gambit)/i,
+      /teach me (the |a )?\w[\w\s]+ (defense|defence|opening|gambit)/i,
+      /teach me (the |a )?(?!.*\bendgame\b)\w[\w\s'-]+/i,
+    ];
+    const endgameTrainingSignals = [
+      /endgame (practice|training|lesson)/i,
+      /end game (practice|training|lesson)/i,
+      /teach me (a |an )?\w[\w\s]* endgame/i,
+      /teach me endgame/i,
+      /practice (a |an )?\w[\w\s]* endgame/i,
+      /(rook|queen|bishop|knight|pawn) (and|vs?\.?) (rook|queen|bishop|knight|pawn|king) endgame/i,
+      /king and (rook|pawn|queen|bishop|knight) endgame/i,
+      /how (do i|to) checkmate with (a |an )?\w[\w\s]*/i,
+      /\w[\w\s]* (and|vs?\.?) \w[\w\s]* endgame/i,
+      /show me (a |an )?\w[\w\s]* endgame/i,
+    ];
+
+    const isOpeningTraining = openingTrainingSignals.some(re => re.test(question));
+    const isEndgameTraining = !isOpeningTraining && endgameTrainingSignals.some(re => re.test(question));
+
+    if (isOpeningTraining) {
+      console.log(`[LLM] Pre-screen: opening_training → direct route (no PASS 1 call)`);
+      const conversationHistory = Array.isArray(payload?.conversationHistory)
+        ? (payload.conversationHistory as ConversationMessage[])
+        : [];
+      const runLlm = ({ messages, timeoutMs, responseFormat }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number; responseFormat?: Record<string, any> }) =>
+        runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat, includeTools: false });
+      const result = await handleOpeningRequest(question, conversationHistory, runLlm);
+      if (result.ok) {
+        console.log(`[LLM] ✓ Complete (Type: OPENING_TRAINING) | Provider: ${llmProvider}`);
+      } else {
+        console.error(`[LLM] ✗ Failed (Type: OPENING_TRAINING) | Error: ${result.error}`);
+      }
+      return result;
+    }
+
+    if (isEndgameTraining) {
+      console.log(`[LLM] Pre-screen: endgame_training → direct route (no PASS 1 call)`);
+      const conversationHistory = Array.isArray(payload?.conversationHistory)
+        ? (payload.conversationHistory as ConversationMessage[])
+        : [];
+      const runLlm = ({ messages, timeoutMs, responseFormat }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number; responseFormat?: Record<string, any> }) =>
+        runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat, includeTools: false });
+      const result = await handleEndgameRequest(question, conversationHistory, runLlm);
+      if (result.ok) {
+        console.log(`[LLM] ✓ Complete (Type: ENDGAME_TRAINING) | Provider: ${llmProvider}`);
+      } else {
+        console.error(`[LLM] ✗ Failed (Type: ENDGAME_TRAINING) | Error: ${result.error}`);
+      }
+      return result;
+    }
+
     // PASS 1: Classify the request
     console.log(`[LLM] PASS 1: Classification - Starting | Provider: ${llmProvider} | Model: ${model} | Question: "${question.substring(0, 60)}..."`);
 
@@ -3202,7 +3365,7 @@ ipcMain.handle("llm:ask-question", async (_event, payload) => {
     });
 
     const classified = parseClassificationRaw(classification);
-    const validCategories = ["ANALYSIS", "PUZZLE", "POSITION", "PLAYER_GAMES", "HISTORIC_GAME", "LOCAL_GAMES", "OTHER"];
+    const validCategories = ["ANALYSIS", "PUZZLE", "POSITION", "PLAYER_GAMES", "HISTORIC_GAME", "LOCAL_GAMES", "OTHER", "OPENING_TRAINING", "ENDGAME_TRAINING"];
     const requestType = validCategories.includes(classified) ? classified : "ANALYSIS";
 
     console.log(`[LLM] PASS 1: Classification Result: "${classified}" (${requestType})`);
@@ -3226,6 +3389,20 @@ ipcMain.handle("llm:ask-question", async (_event, payload) => {
       case "LOCAL_GAMES":
         result = await handleLocalGamesRequest(question, payload, llmProvider, llmApiKey, model, baseUrl);
         break;
+      case "OPENING_TRAINING": {
+        const convHistory = Array.isArray(payload?.conversationHistory) ? (payload.conversationHistory as ConversationMessage[]) : [];
+        const runLlmOpening = ({ messages, timeoutMs, responseFormat }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number; responseFormat?: Record<string, any> }) =>
+          runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat, includeTools: false });
+        result = await handleOpeningRequest(question, convHistory, runLlmOpening);
+        break;
+      }
+      case "ENDGAME_TRAINING": {
+        const convHistory = Array.isArray(payload?.conversationHistory) ? (payload.conversationHistory as ConversationMessage[]) : [];
+        const runLlmEndgame = ({ messages, timeoutMs, responseFormat }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number; responseFormat?: Record<string, any> }) =>
+          runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat, includeTools: false });
+        result = await handleEndgameRequest(question, convHistory, runLlmEndgame);
+        break;
+      }
       case "OTHER":
         result = {
           ok: true,
@@ -3296,7 +3473,7 @@ ipcMain.handle("getLegalMoves", () => {
 
 ipcMain.handle("analyzeBoardPosition", async (_event, { fen, depth }: { fen?: string; depth?: number }) => {
   const targetFen = fen || boardManager.getBoardFen();
-  const analyzeDepth = depth || (settings.get("analysisDepth") as number) || 16;
+  const analyzeDepth = Math.min(depth || 5, 5);
   console.log(`[Tool] analyzeBoardPosition | FEN: ${targetFen.substring(0, 30)}... | depth: ${analyzeDepth}`);
 
   try {
@@ -3510,6 +3687,248 @@ ipcMain.handle("db:delete-games", () => {
     return { ok: false };
   }
 });
+
+// ── User profile and puzzle points ───────────────────────────────────────────
+
+ipcMain.handle("profile:get-display-name", () => {
+  const saved = (settings.get("displayName") as string | undefined) || "";
+  return saved.trim() || os.userInfo().username;
+});
+
+ipcMain.handle("profile:set-display-name", (_event, { displayName }: { displayName: string }) => {
+  settings.set("displayName", displayName ?? "");
+  return { ok: true };
+});
+
+ipcMain.handle("points:get", () => {
+  return getPoints();
+});
+
+ipcMain.handle("points:record-solve", (_event, { rating, solved }: { rating: number; solved: boolean }) => {
+  return recordPuzzleSolve(rating, solved, app.getPath("userData"));
+});
+
+// ── Conversation memory (per-mode file storage) ───────────────────────────────
+
+function conversationFilePath(userDataPath: string, mode: string): string {
+  const safeMode = mode.replace(/[^a-z0-9-]/g, "");
+  return path.join(userDataPath, "chess-to-me", `conversation-${safeMode}.json`);
+}
+
+ipcMain.handle("conversation:load", (_event, { mode }: { mode: string }) => {
+  const filePath = conversationFilePath(app.getPath("userData"), mode);
+  try {
+    if (fs.existsSync(filePath)) {
+      const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      return { ok: true, history: Array.isArray(data) ? data : [] };
+    }
+  } catch {}
+  return { ok: true, history: [] };
+});
+
+ipcMain.handle("conversation:save", (_event, { mode, history }: { mode: string; history: any[] }) => {
+  const filePath = conversationFilePath(app.getPath("userData"), mode);
+  try {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const capped = Array.isArray(history) ? history.slice(-20) : [];
+    fs.writeFileSync(filePath, JSON.stringify(capped, null, 2));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+});
+
+ipcMain.handle("opening:ask", async (_event, payload) => {
+  const question = String(payload?.question || "").trim();
+  if (!question) return { ok: false, error: "Question is empty." };
+
+  const savedProvider = ((settings.get("llmProvider") as string) || "ollama").trim();
+  const llmProvider = (payload?.llmProvider?.trim()) || savedProvider;
+  const llmApiKey = payload?.llmApiKey || settings.get("llmApiKey") || "";
+  const model = payload?.model || (llmProvider === "ollama" ? settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL : settings.get("llmModel") || getModelForProvider(llmProvider));
+  const baseUrl = (payload?.baseUrl || (llmProvider === "ollama" ? settings.get("ollamaBaseUrl") : null) || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
+
+  const conversationHistory: ConversationMessage[] = Array.isArray(payload?.conversationHistory) ? payload.conversationHistory : [];
+  const runLlm = ({ messages, timeoutMs, responseFormat }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number; responseFormat?: Record<string, any> }) =>
+    runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat, includeTools: false });
+
+  return handleOpeningRequest(question, conversationHistory, runLlm);
+});
+
+ipcMain.handle("endgame:ask", async (_event, payload) => {
+  const question = String(payload?.question || "").trim();
+  if (!question) return { ok: false, error: "Question is empty." };
+
+  const savedProvider = ((settings.get("llmProvider") as string) || "ollama").trim();
+  const llmProvider = (payload?.llmProvider?.trim()) || savedProvider;
+  const llmApiKey = payload?.llmApiKey || settings.get("llmApiKey") || "";
+  const model = payload?.model || (llmProvider === "ollama" ? settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL : settings.get("llmModel") || getModelForProvider(llmProvider));
+  const baseUrl = (payload?.baseUrl || (llmProvider === "ollama" ? settings.get("ollamaBaseUrl") : null) || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
+
+  const conversationHistory: ConversationMessage[] = Array.isArray(payload?.conversationHistory) ? payload.conversationHistory : [];
+  const runLlm = ({ messages, timeoutMs, responseFormat }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number; responseFormat?: Record<string, any> }) =>
+    runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat, includeTools: false });
+
+  return handleEndgameRequest(question, conversationHistory, runLlm);
+});
+
+// ============================================================================
+// Deep Analysis IPC Handlers (Tasks 1.1 – 1.6)
+// ============================================================================
+
+interface DeepLineAnalysis {
+  strategy: string;
+  proscons: string;
+  counterattack: string;
+  sacrifice: string;
+  novelty: string;
+  endgameChances: string;
+  alternatives: string;
+}
+
+function getNotesFilePath(): string {
+  return path.join(app.getPath("userData"), "chess-to-me", "position-notes.json");
+}
+
+function readNotesFile(): Record<string, string> {
+  const file = getNotesFilePath();
+  try {
+    if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, string>;
+  } catch (err) {
+    console.error("[Notes] Failed to read position-notes.json:", err);
+  }
+  return {};
+}
+
+function writeNotesFile(notes: Record<string, string>): void {
+  const file = getNotesFilePath();
+  try {
+    const dir = path.dirname(file);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(notes, null, 2));
+  } catch (err) {
+    console.error("[Notes] Failed to write position-notes.json:", err);
+  }
+}
+
+// Task 1.2 – analysis:deep
+ipcMain.handle("analysis:deep", async (_event, payload: { fen: string; lines: AnalysisLine[] }) => {
+  const { fen, lines } = payload || {};
+  if (!Array.isArray(lines) || lines.length === 0) return { ok: false, error: "No lines provided." };
+
+  const llmProvider = ((settings.get("llmProvider") as string) || "ollama").trim();
+  const llmApiKey = settings.get("llmApiKey") || "";
+  const model = llmProvider === "ollama"
+    ? settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL
+    : settings.get("llmModel") || getModelForProvider(llmProvider);
+  const baseUrl = (llmProvider === "ollama"
+    ? settings.get("ollamaBaseUrl") || PROVIDER_ENDPOINTS.ollama
+    : PROVIDER_ENDPOINTS[llmProvider] || PROVIDER_ENDPOINTS.ollama
+  ).replace(/\/$/, "");
+
+  const systemPrompt = `You are an expert chess analyst. For a given engine line analyse the position from multiple dimensions and return ONLY a JSON object with exactly these fields (2-5 sentences each, chess notation allowed):
+{
+  "strategy": "...",
+  "proscons": "...",
+  "counterattack": "...",
+  "sacrifice": "...",
+  "novelty": "...",
+  "endgameChances": "...",
+  "alternatives": "..."
+}
+Do not include any text outside the JSON object.`;
+
+  const results: Array<{ lineIndex: number; analysis: DeepLineAnalysis | null }> = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const pv = line.pv || line.line || line.text || "(no moves)";
+    const scoreStr = line.score
+      ? ("type" in line.score
+          ? (line.score.type === "cp" ? `${(line.score.value / 100).toFixed(2)} pawns` : `Mate in ${Math.abs(line.score.value)}`)
+          : `Win probability: ${("winProb" in line.score ? (line.score.winProb * 100).toFixed(1) : "?")}%`)
+      : "unknown";
+
+    const userMsg = `FEN: ${fen}\nEngine line ${i + 1}: ${pv}\nEvaluation: ${scoreStr}\n\nProvide the 7-dimension analysis as JSON.`;
+
+    try {
+      const raw = await runLlmChat({
+        provider: llmProvider,
+        baseUrl,
+        model,
+        apiKey: llmApiKey,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMsg }
+        ],
+        includeTools: false
+      });
+      const json = raw.trim().replace(/^```json\s*/i, "").replace(/\s*```$/, "");
+      results.push({ lineIndex: i, analysis: JSON.parse(json) as DeepLineAnalysis });
+    } catch (err) {
+      console.error(`[analysis:deep] Line ${i + 1} failed:`, (err as Error).message);
+      results.push({ lineIndex: i, analysis: null });
+    }
+  }
+
+  return { ok: true, results };
+});
+
+// Task 1.3 – notes:get
+ipcMain.handle("notes:get", (_event, { fen }: { fen: string }) => {
+  if (!fen || typeof fen !== "string") return null;
+  const notes = readNotesFile();
+  return notes[fen] ?? null;
+});
+
+// Task 1.4 – notes:set
+ipcMain.handle("notes:set", (_event, { fen, text }: { fen: string; text: string }) => {
+  if (!fen || typeof fen !== "string") return;
+  const notes = readNotesFile();
+  notes[fen] = text;
+  writeNotesFile(notes);
+});
+
+// Task 1.5 – analysis:save-pgn
+ipcMain.handle("analysis:save-pgn", (_event, payload: { pgn: string; notes: Record<string, string> }) => {
+  try {
+    const now = new Date();
+    const dd   = String(now.getDate()).padStart(2, "0");
+    const mm   = String(now.getMonth() + 1).padStart(2, "0");
+    const yyyy = now.getFullYear();
+    const hh   = String(now.getHours()).padStart(2, "0");
+    const filename = `analysis-${dd}-${mm}-${yyyy}_${hh}.pgn`;
+    const dir = path.join(app.getPath("userData"), "chess-to-me");
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, filename);
+    const notesJson = JSON.stringify(payload.notes || {});
+    const content = `${payload.pgn || ""}\n\n[Notes] ${notesJson}\n`;
+    fs.writeFileSync(filePath, content, "utf8");
+    return { ok: true, path: filePath };
+  } catch (err) {
+    return { ok: false, error: String((err as Error).message) };
+  }
+});
+
+// Task 1.6 – analysis:load-pgn
+ipcMain.handle("analysis:load-pgn", async () => {
+  const result = await dialog.showOpenDialog({
+    title: "Load Analysis",
+    filters: [{ name: "PGN Files", extensions: ["pgn"] }],
+    properties: ["openFile"]
+  });
+  if (result.canceled || result.filePaths.length === 0) return { ok: false, cancelled: true };
+  try {
+    const raw = fs.readFileSync(result.filePaths[0], "utf8");
+    const notesMatch = raw.match(/\[Notes\]\s*(\{[\s\S]*\})\s*$/);
+    const notes: Record<string, string> = notesMatch ? JSON.parse(notesMatch[1]) : {};
+    const pgn = notesMatch ? raw.slice(0, notesMatch.index).trim() : raw.trim();
+    return { ok: true, pgn, notes };
+  } catch (err) {
+    return { ok: false, error: String((err as Error).message) };
+  }
+});
 }
 
 // ── Startup update prompt ─────────────────────────────────────────────────────
@@ -3581,12 +4000,16 @@ async function checkGamesUpdatePrompt(win: BrowserWindow): Promise<void> {
 app.whenReady().then(async () => {
   // Initialize processManager's settings after app is ready
   processManager.initializeFromSettings();
+  loadPoints(app.getPath("userData"));
   registerIpcHandlers();
   Menu.setApplicationMenu(null);
   await createWindow();
 
   // Copy bundled games DB to userData on first run (runs in background after window opens)
   setupBundledGamesDb().catch(err => console.error("[DB] First-run setup error:", err));
+
+  // Load ECO opening book in the background — non-fatal if unavailable
+  initEcoLookup().catch(err => console.warn("[ECO] Startup init failed:", err));
 
   // Show monthly update prompt after the window has fully loaded (30-day throttle)
   if (mainWindow) {

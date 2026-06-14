@@ -100,6 +100,109 @@ Once the engine and AI provider are configured, click **Go to analysis** to open
 
 ---
 
+## Choosing an AI Model
+
+The AI model handles chess **explanations**, position questions, puzzle generation, and opening/endgame training sessions. The chess engine (Stockfish or LC0) does the actual move calculation — the model only needs to explain what the engine finds and guide the learning conversation.
+
+After saving your API key in Settings, click **Save API Key** to load the available model list. The tables below guide your choice for each provider.
+
+> **Cheapest useful** = a model that handles everyday chess questions and puzzles well at minimal cost.  
+> **Strongest chess analysis** = the model with the best positional understanding, step-by-step reasoning, and teaching quality.
+
+---
+
+### OpenAI
+
+| Model | Cost | Best for |
+|-------|------|----------|
+| `gpt-4o-mini` | Low | Budget pick — handles questions, puzzles, and simple analysis well |
+| `gpt-4.1-mini` | Low | Newer budget option; comparable to gpt-4o-mini with improved instruction-following |
+| `gpt-4o` | Medium | Noticeably better positional explanations and endgame understanding |
+| `gpt-4.1` | Medium | Solid all-rounder with strong chess reasoning |
+| `o3-mini` | Medium | Reasoning model — thinks before responding; excellent for endgames and tactics |
+| `o4-mini` | Medium | Latest compact reasoning model; very strong chess analysis |
+
+**Cheapest useful:** `gpt-4o-mini` or `gpt-4.1-mini`  
+**Strongest chess analysis:** `o4-mini` or `o3-mini`
+
+> Reasoning models (`o3-mini`, `o4-mini`) take longer to respond because they reason step-by-step before answering. This app automatically extends their timeout to 5 minutes. The wait is usually worth it for complex positions and training.
+
+---
+
+### Anthropic (Claude)
+
+| Model | Cost | Best for |
+|-------|------|----------|
+| `claude-haiku-4-5` | Lowest | Fast, very affordable; good for quick questions and puzzle hints |
+| `claude-sonnet-4-6` | Medium | Strong balance of speed and quality — recommended for daily use |
+| `claude-opus-4-8` | High | Highest quality; best for detailed opening and endgame training |
+
+**Cheapest useful:** `claude-haiku-4-5`  
+**Strongest chess analysis:** `claude-opus-4-8`
+
+---
+
+### Google Gemini
+
+| Model | Cost | Best for |
+|-------|------|----------|
+| `gemini-2.0-flash` | Very low | Fast, free-tier eligible; good for everyday questions and puzzles |
+| `gemini-2.5-flash` | Low | Better reasoning than 2.0-flash at still very low cost |
+| `gemini-2.5-pro` | Medium | Strongest Gemini model; excellent chess understanding and teaching quality |
+
+**Cheapest useful:** `gemini-2.0-flash` (Google AI Studio includes a generous free tier)  
+**Strongest chess analysis:** `gemini-2.5-pro`
+
+---
+
+### Grok (xAI)
+
+| Model | Cost | Best for |
+|-------|------|----------|
+| `grok-3-mini` | Low | Budget option; handles straightforward questions well |
+| `grok-3-mini-fast` | Low | Same budget tier with faster responses |
+| `grok-3` | Medium | Best Grok model; strong positional reasoning and game commentary |
+| `grok-3-fast` | Medium | Faster variant of grok-3 with similar quality |
+
+**Cheapest useful:** `grok-3-mini`  
+**Strongest chess analysis:** `grok-3`
+
+---
+
+### Ollama (Local — Free, No API Key)
+
+Running locally means no API costs and complete privacy — no chess position data ever leaves your computer. You need enough RAM for the model to fit comfortably.
+
+| Model | RAM needed | Best for |
+|-------|-----------|----------|
+| `qwen3:8b` | ~8 GB | Recommended starter — good quality, fast on most computers |
+| `qwen3:14b` | ~16 GB | Noticeably better explanations; worth it if you have the RAM |
+| `qwen3:32b` | ~32 GB | Near cloud quality on high-end machines |
+| `gemma3:12b` | ~12 GB | Google's local model; clear, child-friendly explanations |
+| `llama3.3:70b` | ~40 GB | Strongest local option; requires a powerful workstation |
+
+**Cheapest useful (minimum RAM):** `qwen3:8b`  
+**Strongest local chess analysis:** `llama3.3:70b` or `qwen3:32b`
+
+To download a model, open a terminal and run (replace the model name as needed):
+```bash
+ollama pull qwen3:14b
+```
+
+---
+
+### Quick Recommendation Summary
+
+| Goal | Provider | Model |
+|------|----------|-------|
+| No cost, private | Ollama | `qwen3:8b` |
+| Low cost, cloud | Google Gemini | `gemini-2.0-flash` |
+| Best balance of cost and quality | Anthropic | `claude-sonnet-4-6` |
+| Strongest chess reasoning (cloud) | OpenAI | `o4-mini` |
+| Strongest overall | Google Gemini | `gemini-2.5-pro` |
+
+---
+
 ## Features
 
 ### Position Analysis
@@ -232,6 +335,44 @@ Make sure you type moves in the chat box — piece dragging is disabled in puzzl
 
 **How do I update the app?**
 Download the latest installer from the [releases page](https://github.com/ranajyotic1973/chess-to-me/releases) and run it. Your settings are preserved.
+
+---
+
+## For Advanced Players — Advanced Analysis
+
+Advanced Analysis is a deep-dive mode designed for club players and above who want more than just best-move suggestions.
+
+### Activating Advanced Analysis
+
+Click the **Advanced Analysis** button (▶ icon) in the toolbar below the board. The button is only visible when no game or puzzle is active (free analysis mode). The engine runs at the full depth configured in your Settings (`Analysis Depth`, default 16). Click the same button again (now showing a ■ stop icon) to exit the mode.
+
+### Seven-Dimension Analysis
+
+Once the engine finishes, the app sends each top engine line to your configured AI (LLM) provider for a structured seven-point analysis. Select any line to see:
+
+| Dimension | What it tells you |
+|---|---|
+| **Strategy** | The strategic or tactical idea behind this line for both sides |
+| **Pros & Cons** | Advantages and drawbacks of following this line |
+| **Counter-attack** | How the opposing side can fight back |
+| **Sacrifice** | Any piece sacrifice hidden in this variation |
+| **Novelty** | A possible novelty move that diverges from known theory |
+| **Endgame chances** | Which side holds the advantage in the resulting endgame, or whether it draws |
+| **Alternatives** | Other strategic approaches the player could choose instead |
+
+> Advanced players sometimes prefer to play a suboptimal engine line to sidestep their opponent's preparation. The seven-dimension breakdown helps you evaluate those tradeoffs analytically.
+
+### Position Notes
+
+When Advanced Analysis is active a **Position Notes** panel appears to the right of the chat area. Type anything — your own analysis, opening ideas, plans to remember. Notes are saved automatically (500 ms after you stop typing) and are **keyed to the exact board position**: navigate to the same FEN in any future session and your notes reappear.
+
+Notes are stored in `<userData>/chess-to-me/position-notes.json`.
+
+### Saving and Loading Analysis
+
+**Save** — Click the 💾 save icon (visible only in Advanced Analysis mode) to write the current game and all position notes to a PGN file. The file is saved as `analysis-<dd-mm-yyyy_hh>.pgn` in `<userData>/chess-to-me/`. A toast notification confirms the save and shows the full file path.
+
+**Load** — Click the 📂 folder icon (always visible in analysis mode) to open a file picker. Select any `.pgn` file saved by the app; the game is replayed on the board and all embedded notes are restored.
 
 ---
 

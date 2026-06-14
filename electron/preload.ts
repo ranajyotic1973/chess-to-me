@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Analysis
   analyzePosition: (payload: IpcPayloads["analyzePosition"]) =>
     ipcRenderer.invoke("analyzePosition", payload) as Promise<IpcResponses["analyzePosition"]>,
+  ecoLookupFen: (fen: string) =>
+    ipcRenderer.invoke("eco:lookup-fen", { fen }) as Promise<{ eco: string; name: string } | null>,
 
   // Settings
   updateAppSettings: (payload: IpcPayloads["updateAppSettings"]) =>
@@ -65,6 +67,33 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return () => ipcRenderer.removeListener("analysis:agent-progress", handler);
   },
 
+  stopEngine: (args?: { engine?: string }) =>
+    ipcRenderer.invoke("engine:stop", args ?? {}) as Promise<{ ok: boolean }>,
+
+  onEngineWarmingUp: (callback: (data: { engine: string }) => void) => {
+    const handler = (_event: any, data: { engine: string }) => callback(data);
+    ipcRenderer.on("engine:warming-up", handler);
+    return () => ipcRenderer.removeListener("engine:warming-up", handler);
+  },
+
+  onEngineReady: (callback: (data: { engine: string; ok: boolean }) => void) => {
+    const handler = (_event: any, data: { engine: string; ok: boolean }) => callback(data);
+    ipcRenderer.on("engine:ready", handler);
+    return () => ipcRenderer.removeListener("engine:ready", handler);
+  },
+
+  onEngineAnalysisStart: (callback: (data: { engine: string }) => void) => {
+    const handler = (_event: any, data: { engine: string }) => callback(data);
+    ipcRenderer.on("engine:analysis-start", handler);
+    return () => ipcRenderer.removeListener("engine:analysis-start", handler);
+  },
+
+  onEngineAnalysisDone: (callback: (data: { engine: string }) => void) => {
+    const handler = (_event: any, data: { engine: string }) => callback(data);
+    ipcRenderer.on("engine:analysis-done", handler);
+    return () => ipcRenderer.removeListener("engine:analysis-done", handler);
+  },
+
   setOllamaModel: (model: string) =>
     ipcRenderer.invoke("process:set-model", model) as Promise<IpcResponses["setOllamaModel"]>,
 
@@ -97,6 +126,46 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("db:delete-games") as Promise<IpcResponses["db:delete-games"]>,
   puzzleExplainIncorrect: (payload: IpcPayloads["puzzle:explain-incorrect"]) =>
     ipcRenderer.invoke("puzzle:explain-incorrect", payload) as Promise<IpcResponses["puzzle:explain-incorrect"]>,
+
+  // User profile
+  getDisplayName: () =>
+    ipcRenderer.invoke("profile:get-display-name") as Promise<IpcResponses["profile:get-display-name"]>,
+  setDisplayName: (displayName: string) =>
+    ipcRenderer.invoke("profile:set-display-name", { displayName }) as Promise<IpcResponses["profile:set-display-name"]>,
+
+  // Puzzle points
+  getPoints: () =>
+    ipcRenderer.invoke("points:get") as Promise<IpcResponses["points:get"]>,
+  recordSolve: (payload: IpcPayloads["points:record-solve"]) =>
+    ipcRenderer.invoke("points:record-solve", payload) as Promise<IpcResponses["points:record-solve"]>,
+
+  // Conversation memory
+  loadConversation: (args: { mode: string }) =>
+    ipcRenderer.invoke("conversation:load", args) as Promise<{ ok: boolean; history: any[] }>,
+  saveConversation: (args: { mode: string; history: any[] }) =>
+    ipcRenderer.invoke("conversation:save", args) as Promise<{ ok: boolean; error?: string }>,
+
+  // Training agents
+  openingAsk: (args: IpcPayloads["opening:ask"]) =>
+    ipcRenderer.invoke("opening:ask", args) as Promise<IpcResponses["opening:ask"]>,
+  endgameAsk: (args: IpcPayloads["endgame:ask"]) =>
+    ipcRenderer.invoke("endgame:ask", args) as Promise<IpcResponses["endgame:ask"]>,
+
+  // Advanced analysis – deep LLM pass
+  deepAnalyzeLines: (payload: { fen: string; lines: any[] }) =>
+    ipcRenderer.invoke("analysis:deep", payload),
+
+  // Position notes
+  notesGet: (fen: string) =>
+    ipcRenderer.invoke("notes:get", { fen }) as Promise<string | null>,
+  notesSet: (fen: string, text: string) =>
+    ipcRenderer.invoke("notes:set", { fen, text }) as Promise<void>,
+
+  // PGN save / load
+  saveAnalysisPgn: (payload: { pgn: string; notes: Record<string, string> }) =>
+    ipcRenderer.invoke("analysis:save-pgn", payload) as Promise<{ ok: boolean; path?: string; error?: string }>,
+  loadAnalysisPgn: () =>
+    ipcRenderer.invoke("analysis:load-pgn") as Promise<{ ok: boolean; pgn?: string; notes?: Record<string, string>; cancelled?: boolean; error?: string }>,
   onDbProgress: (callback: (data: any) => void) => {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on("db:progress", handler);

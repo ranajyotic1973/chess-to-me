@@ -14,7 +14,7 @@ export const CLASSIFIER_RESPONSE_FORMAT = {
       properties: {
         category: {
           type: "string",
-          enum: ["ANALYSIS", "PUZZLE", "POSITION", "PLAYER_GAMES", "HISTORIC_GAME", "LOCAL_GAMES", "OTHER"]
+          enum: ["ANALYSIS", "PUZZLE", "POSITION", "PLAYER_GAMES", "HISTORIC_GAME", "LOCAL_GAMES", "OTHER", "OPENING_TRAINING", "ENDGAME_TRAINING"]
         }
       },
       required: ["category"],
@@ -99,6 +99,8 @@ export const CLASSIFIER_SYSTEM_PROMPT =
 - PLAYER_GAMES: games by a specific named player (e.g. "Carlsen's games") OR selecting a game by number from a previously shown list (user types just "1", "2", etc.)
 - HISTORIC_GAME: famous or historical games from tournaments
 - LOCAL_GAMES: user's own local chess game files
+- OPENING_TRAINING: teach or explain a specific chess opening, e.g. "teach me the Sicilian", "show me the Ruy Lopez", "opening for white", "how does the King's Indian start"
+- ENDGAME_TRAINING: teach or practice a chess endgame technique, e.g. "endgame practice", "King and Pawn endgame", "how to checkmate with a rook", "Rook and Pawn vs King", "teach me endgame"
 - OTHER: not chess-related`;
 
 // ============================================================================

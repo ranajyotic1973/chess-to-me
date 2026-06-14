@@ -1,7 +1,8 @@
 import { Chess } from "chess.js";
 import type { AnalysisLine, AnalysisEntry, Move } from "../types";
 
-const coordinateRegex = /[a-h][1-8]/gi;
+const uciMoveRegex = /[a-h][1-8][a-h][1-8][qrbn]?/g;
+
 const pieceNames: Record<string, string> = {
   p: "Pawn",
   r: "Rook",
@@ -13,6 +14,45 @@ const pieceNames: Record<string, string> = {
 const colorNames: Record<string, string> = {
   w: "White",
   b: "Black"
+};
+
+const WHITE_GLYPHS: Record<string, string> = { N: "♘", B: "♗", R: "♖", Q: "♕", K: "♔" };
+const BLACK_GLYPHS: Record<string, string> = { N: "♞", B: "♝", R: "♜", Q: "♛", K: "♚" };
+
+const sanWithGlyph = (san: string, isBlack: boolean): string => {
+  const map = isBlack ? BLACK_GLYPHS : WHITE_GLYPHS;
+  return san.replace(/^([NBRQK])/, (_, l) => map[l] ?? l);
+};
+
+const loadBoard = (fen: string): Chess => {
+  const board = new Chess();
+  if (fen && fen !== "start") {
+    try { board.load(fen); } catch { board.reset(); }
+  } else {
+    board.reset();
+  }
+  return board;
+};
+
+const formatSanLine = (glyphedMoves: string[], startTurn: "w" | "b", startMoveNum: number): string => {
+  if (!glyphedMoves.length) return "No moves";
+  const parts: string[] = [];
+  let moveNum = startMoveNum;
+  let blackToMove = startTurn === "b";
+
+  for (let i = 0; i < glyphedMoves.length; i++) {
+    if (blackToMove) {
+      if (i === 0) parts.push(`${moveNum}…`);
+      parts.push(glyphedMoves[i]);
+      blackToMove = false;
+      moveNum++;
+    } else {
+      parts.push(`${moveNum}.`);
+      parts.push(glyphedMoves[i]);
+      blackToMove = true;
+    }
+  }
+  return parts.join(" ");
 };
 
 const cleanNoise = (text: string | null | undefined): string => {
@@ -27,12 +67,6 @@ const cleanNoise = (text: string | null | undefined): string => {
     .trim();
 };
 
-const formatMoves = (moves: Move[]): string => {
-  if (!moves?.length) {
-    return "No moves detected";
-  }
-  return moves.map((move) => `${move.from} ${move.to}`).join(", ");
-};
 
 const describeMovesForLlm = ({
   moves,
@@ -108,14 +142,30 @@ export const parseStockfishLine = (
   const rawPv = Array.isArray(line.pv) ? line.pv.join(" ") : line.pv || "";
   const rawLine = (line.line || line.text || rawPv || "").trim();
   const cleaned = cleanNoise(rawLine);
-  const coordinates = (rawLine || "").match(coordinateRegex) || [];
-  const moves: Move[] = [];
 
-  for (let index = 0; index + 1 < coordinates.length; index += 2) {
-    const from = coordinates[index]?.toLowerCase();
-    const to = coordinates[index + 1]?.toLowerCase();
-    if (from && to) {
+  // Prefer pv field for UCI moves; fall back to line/text when pv is absent
+  const pvSource = rawPv || rawLine;
+  const uciMoves = pvSource.match(uciMoveRegex) ?? [];
+
+  const board = loadBoard(startingFen);
+  const startTurn = board.turn() as "w" | "b";
+  const startMoveNum = board.moveNumber();
+
+  const moves: Move[] = [];
+  const glyphedMoves: string[] = [];
+
+  for (const uci of uciMoves) {
+    const from = uci.slice(0, 2);
+    const to = uci.slice(2, 4);
+    const promotion = uci.length === 5 ? (uci[4] as "q" | "r" | "b" | "n") : "q";
+    const isBlack = board.turn() === "b";
+    try {
+      const result = board.move({ from, to, promotion });
+      if (!result) break;
       moves.push({ from, to });
+      glyphedMoves.push(sanWithGlyph(result.san, isBlack));
+    } catch {
+      break;
     }
   }
 
@@ -141,7 +191,7 @@ export const parseStockfishLine = (
     cleanText: cleaned || "No data",
     moves,
     scoreLabel,
-    description: formatMoves(moves),
+    description: formatSanLine(glyphedMoves, startTurn, startMoveNum),
     llmUserMessage
   };
 };

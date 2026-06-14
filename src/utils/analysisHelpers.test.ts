@@ -85,9 +85,30 @@ describe("parseStockfishLine", () => {
   });
 
   test("uses 'start' as default startingFen", () => {
-    const line = { rank: 1, score: null, pv: "e2e4", rank: 1 } as any;
+    const line = { rank: 1, score: null, pv: "e2e4" };
     const entry = parseStockfishLine(line, 1);
     expect(entry.llmUserMessage).toContain("start");
+  });
+
+  test("description formats pawn moves with move numbers", () => {
+    const line = { rank: 1, score: null, pv: "e2e4 d7d5" };
+    const entry = parseStockfishLine(line, 1, START_FEN);
+    // Pawns have no piece letter in SAN; expect "1. e4 d5"
+    expect(entry.description).toBe("1. e4 d5");
+  });
+
+  test("description formats knight moves with piece glyphs", () => {
+    const line = { rank: 1, score: null, pv: "g1f3 b8c6" };
+    const entry = parseStockfishLine(line, 1, START_FEN);
+    // White knight ♘, black knight ♞
+    expect(entry.description).toBe("1. ♘f3 ♞c6");
+  });
+
+  test("description handles black-to-move opening with ellipsis", () => {
+    // After 1. e4 (black to move)
+    const line = { rank: 1, score: null, pv: "b8c6" };
+    const entry = parseStockfishLine(line, 1, AFTER_E4_FEN);
+    expect(entry.description).toBe("1… ♞c6");
   });
 });
 

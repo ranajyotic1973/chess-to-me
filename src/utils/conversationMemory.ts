@@ -1,108 +1,66 @@
 import type { ConversationMessage } from "../types";
 
-const STORAGE_KEY = "chess-to-me:conversation-history";
-const MAX_CONVERSATIONS = 10;
+const MAX_MESSAGES = 20; // 10 pairs of user+assistant
 
-/**
- * Load conversation history from Electron Store
- */
-export async function loadConversationHistory(): Promise<ConversationMessage[]> {
-  try {
-    if (typeof window === "undefined" || !window.electronAPI) {
-      return [];
-    }
-
-    // Try to get from localStorage first (for testing)
-    if (typeof localStorage !== "undefined") {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-    }
-
-    return [];
-  } catch (error) {
-    console.error("Failed to load conversation history:", error);
-    return [];
-  }
+function getElectronAPI() {
+  return typeof window !== "undefined" ? (window as any).electronAPI : null;
 }
 
-/**
- * Save conversation history to Electron Store
- */
-export async function saveConversationHistory(history: ConversationMessage[]): Promise<void> {
+export async function loadConversationHistory(mode = "analysis"): Promise<ConversationMessage[]> {
   try {
-    // Cap at MAX_CONVERSATIONS
-    const capped = history.slice(-MAX_CONVERSATIONS);
-
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(capped));
+    const api = getElectronAPI();
+    if (api?.loadConversation) {
+      const result = await api.loadConversation({ mode });
+      return Array.isArray(result?.history) ? result.history : [];
     }
-  } catch (error) {
-    console.error("Failed to save conversation history:", error);
-  }
+    // Fallback for test environments
+    if (typeof localStorage !== "undefined") {
+      const stored = localStorage.getItem(`chess-to-me:conversation-${mode}`);
+      if (stored) return JSON.parse(stored);
+    }
+  } catch {}
+  return [];
 }
 
-/**
- * Add user message and response to conversation history
- */
+export async function saveConversationHistory(history: ConversationMessage[], mode = "analysis"): Promise<void> {
+  try {
+    const api = getElectronAPI();
+    if (api?.saveConversation) {
+      await api.saveConversation({ mode, history });
+      return;
+    }
+    // Fallback for test environments
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(`chess-to-me:conversation-${mode}`, JSON.stringify(history.slice(-MAX_MESSAGES)));
+    }
+  } catch {}
+}
+
 export function addToConversationHistory(
   history: ConversationMessage[],
   userMessage: string,
   assistantMessage: string
 ): ConversationMessage[] {
   const now = Date.now();
-
   const updated = [
     ...history,
-    {
-      role: "user" as const,
-      message: userMessage,
-      timestamp: now
-    },
-    {
-      role: "assistant" as const,
-      message: assistantMessage,
-      timestamp: now + 1
-    }
+    { role: "user" as const, message: userMessage, timestamp: now },
+    { role: "assistant" as const, message: assistantMessage, timestamp: now + 1 }
   ];
-
-  // Keep only last 10 conversations
-  return updated.slice(-MAX_CONVERSATIONS * 2); // *2 because each conversation is 2 messages
+  return updated.slice(-MAX_MESSAGES);
 }
 
-/**
- * Format conversation history for LLM context
- */
 export function formatConversationForContext(history: ConversationMessage[]): string {
-  if (history.length === 0) {
-    return "";
-  }
-
+  if (history.length === 0) return "";
   return history
-    .map((msg) => {
-      const roleLabel = msg.role === "user" ? "User" : "Assistant";
-      return `${roleLabel}: ${msg.message}`;
-    })
+    .map((msg) => `${msg.role === "user" ? "User" : "Assistant"}: ${msg.message}`)
     .join("\n\n");
 }
 
-/**
- * Clear conversation history
- */
-export async function clearConversationHistory(): Promise<void> {
-  try {
-    if (typeof localStorage !== "undefined") {
-      localStorage.removeItem(STORAGE_KEY);
-    }
-  } catch (error) {
-    console.error("Failed to clear conversation history:", error);
-  }
+export async function clearConversationHistory(mode = "analysis"): Promise<void> {
+  await saveConversationHistory([], mode);
 }
 
-/**
- * Get count of stored conversations (pairs of user + assistant messages)
- */
 export function getConversationCount(history: ConversationMessage[]): number {
   return Math.floor(history.length / 2);
 }
