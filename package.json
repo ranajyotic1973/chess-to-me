@@ -1,6 +1,6 @@
 {
   "name": "chess-to-me",
-  "version": "0.1.0",
+  "version": "1.0.2",
   "private": true,
   "description": "Electron + React local Stockfish chess trainer",
   "license": "MIT",
@@ -29,7 +29,8 @@
     "fetch:mega-reference-db": "powershell -ExecutionPolicy Bypass -File scripts/fetch-mega-reference-db.ps1",
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
     "rebuild:native:arm64": "electron-rebuild -f -w better-sqlite3 --arch arm64",
-    "build:games-db": "node scripts/build-games-db.js"
+    "build:games-db": "node scripts/build-games-db.js",
+    "build:icons": "node scripts/build-icons.js"
   },
   "dependencies": {
     "7zip-bin": "^5.2.0",
@@ -118,7 +119,6 @@
     },
     "win": {
       "icon": "build/icon.ico",
-      "signAndEditExecutable": false,
       "target": [
         {
           "target": "nsis",
