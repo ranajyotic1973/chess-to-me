@@ -9,6 +9,7 @@ import type { AnalysisLine, PuzzleRow, ConversationMessage } from "../src/types"
 import { initEcoLookup, lookupOpeningByFen, lookupOpeningByMoves } from "./ecoLookup";
 import { handleOpeningRequest } from "./openingAgent";
 import { handleEndgameRequest } from "./endgameAgent";
+import { readOtbTracking, writeOtbTracking, scanOtbFiles } from "./otbImport";
 import { settings } from "./settings";
 import { initPuzzleDb, importPuzzlesFromCsv, searchPuzzles, getPuzzleDbStats, hasPuzzles, normalizeThemeKeyword } from "./puzzleDb";
 import { initGamesDb, importPgnFile, searchGames, getGamesDbStats, rebuildFts, setGamesSource } from "./gamesDb";
@@ -1640,7 +1641,8 @@ ipcMain.handle("getEngineStatus", async () => {
       llmApiKeyLength: llmApiKey.length,
       llmModel: llmModel, // Include the provider-specific model
       puzzleRatingMin: Number(settings.get("puzzleRatingMin")) || 1000,
-      puzzleRatingMax: Number(settings.get("puzzleRatingMax")) || 1500
+      puzzleRatingMax: Number(settings.get("puzzleRatingMax")) || 1500,
+      otbImportDir: (settings.get("otbImportDir") as string) || ""
     }
   };
 });
@@ -1693,6 +1695,9 @@ ipcMain.handle("app:update-settings", async (_event, payload) => {
   }
   if (payload?.lc0Path) {
     settings.set("lc0Path", payload.lc0Path);
+  }
+  if (payload?.otbImportDir !== undefined) {
+    settings.set("otbImportDir", payload.otbImportDir);
   }
 
   // Handle API key with mask detection
@@ -3594,6 +3599,99 @@ ipcMain.handle("db:import-games-7z", (event, { filePath }: { filePath: string })
 });
 
 ipcMain.handle("db:import-status", () => gamesImportState);
+
+// ── OTB directory bulk import ─────────────────────────────────────────────────
+
+ipcMain.handle("db:browse-otb-dir", async () => {
+  const result = await dialog.showOpenDialog({
+    title: "Select folder containing OTB archive files",
+    properties: ["openDirectory"],
+  });
+  return { dirPath: result.canceled ? null : (result.filePaths[0] ?? null) };
+});
+
+ipcMain.handle("db:import-otb-dir", async (event, { dirPath }: { dirPath: string }) => {
+  if (gamesImportState.status === "importing") {
+    return { ok: false, error: "An import is already in progress." };
+  }
+
+  const userData = app.getPath("userData");
+
+  // Scan directory for *OTB*.7z files (case-insensitive)
+  let allFiles: string[];
+  try {
+    allFiles = scanOtbFiles(dirPath);
+  } catch (err) {
+    return { ok: false, error: `Cannot read directory: ${(err as Error).message}` };
+  }
+
+  const tracked = readOtbTracking(userData);
+  const trackedSet = new Set(tracked);
+
+  const toImport = allFiles.filter(f => !trackedSet.has(path.basename(f)));
+  const skipped = allFiles.length - toImport.length;
+
+  if (toImport.length === 0) {
+    event.sender.send("db:otb-dir-complete", { ok: true, imported: 0, skipped, errors: 0 });
+    return { ok: true, imported: 0, skipped, errors: 0 };
+  }
+
+  const totalFiles = toImport.length;
+  let imported = 0;
+  let errors = 0;
+
+  gamesImportState = { status: "importing", count: 0, message: "Starting OTB directory import…" };
+
+  // Run import in background to match existing single-file pattern
+  (async () => {
+    for (let i = 0; i < toImport.length; i++) {
+      const filePath = toImport[i];
+      const fileName = path.basename(filePath);
+
+      const sendProgress = (phase: string, pct: number, msg: string) => {
+        const countMatch = msg.match(/[\d,]+/);
+        const parsedCount = countMatch ? parseInt(countMatch[0].replace(/,/g, ""), 10) : 0;
+        gamesImportState = {
+          status: "importing",
+          count: parsedCount > 0 ? parsedCount : gamesImportState.count,
+          message: msg,
+        };
+        event.sender.send("db:otb-dir-progress", {
+          fileIndex: i + 1,
+          totalFiles,
+          fileName,
+          phase,
+          percent: pct,
+          message: msg,
+        });
+      };
+
+      const result = await doImportGamesFile(filePath, sendProgress);
+
+      if (result.ok) {
+        imported++;
+        // Persist after each successful file so partial progress survives a crash
+        const current = readOtbTracking(userData);
+        if (!current.includes(fileName)) {
+          writeOtbTracking(userData, [...current, fileName]);
+        }
+      } else {
+        errors++;
+        console.error(`[DB] OTB dir import failed for ${fileName}: ${result.error}`);
+      }
+    }
+
+    gamesImportState = {
+      status: imported > 0 ? "complete" : "error",
+      count: typeof gamesImportState.count === "number" ? gamesImportState.count : 0,
+      message: `OTB import done — ${imported} imported, ${skipped} skipped, ${errors} errors`,
+    };
+    event.sender.send("db:otb-dir-complete", { ok: true, imported, skipped, errors });
+    mainWindow?.webContents.send("db:refresh-status");
+  })();
+
+  return { ok: true, started: true };
+});
 
 ipcMain.handle("db:search-puzzles", (_event, params) => {
   const db = getPuzzleDb();

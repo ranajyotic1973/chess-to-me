@@ -10,6 +10,8 @@ import {
   Divider,
   FormControl,
   Grid,
+  IconButton,
+  InputAdornment,
   InputLabel,
   LinearProgress,
   MenuItem,
@@ -18,9 +20,20 @@ import {
   Slider,
   Stack,
   TextField,
+  Tooltip,
   Typography,
   Link
 } from "@mui/material";
+import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
+import DeleteIcon from "@mui/icons-material/Delete";
+import FolderOpenIcon from "@mui/icons-material/FolderOpen";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import SaveIcon from "@mui/icons-material/Save";
+import SearchIcon from "@mui/icons-material/Search";
+import SyncIcon from "@mui/icons-material/Sync";
+import UnarchiveIcon from "@mui/icons-material/Unarchive";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
 import { useEffect, useState, useRef } from "react";
 import type { SettingsPanelProps, DbStatus, DbProgressEvent } from "../types";
 
@@ -89,6 +102,13 @@ export default function SettingsPanel({
   const [deleteConfirm, setDeleteConfirm] = useState<"puzzles" | "games" | null>(null);
   const [gamesImporting, setGamesImporting] = useState<boolean>(false);
   const dbProgressUnsubRef = useRef<(() => void) | null>(null);
+
+  // OTB directory import state
+  const [otbDir, setOtbDir] = useState<string>(formState.otbImportDir || "");
+  const [otbImporting, setOtbImporting] = useState<boolean>(false);
+  const [otbDirProgress, setOtbDirProgress] = useState<{ fileIndex: number; totalFiles: number; fileName: string; message: string } | null>(null);
+  const otbProgressUnsubRef = useRef<(() => void) | null>(null);
+  const otbCompleteUnsubRef = useRef<(() => void) | null>(null);
 
   const fetchModelsForProvider = async (apiKey: string, provider: string) => {
     const electronAPI = typeof window !== "undefined" ? (window as any).electronAPI : null;
@@ -286,6 +306,63 @@ export default function SettingsPanel({
     fetchDbStatus();
   };
 
+  const handleBrowseOtbDir = async () => {
+    if (!electronAPI?.browseOtbDir) return;
+    const { dirPath } = await electronAPI.browseOtbDir();
+    if (!dirPath) return;
+    setOtbDir(dirPath);
+    onFieldChange("otbImportDir", dirPath);
+  };
+
+  const handleImportOtbDir = async () => {
+    if (!otbDir || !electronAPI?.importOtbDir) return;
+    setOtbImporting(true);
+    setDbActionLoading("games");
+    setOtbDirProgress(null);
+    setDbActionMessage("");
+
+    if (otbProgressUnsubRef.current) otbProgressUnsubRef.current();
+    otbProgressUnsubRef.current = electronAPI.onOtbDirProgress((data) => {
+      setOtbDirProgress({ fileIndex: data.fileIndex, totalFiles: data.totalFiles, fileName: data.fileName, message: data.message });
+    });
+
+    if (otbCompleteUnsubRef.current) otbCompleteUnsubRef.current();
+    otbCompleteUnsubRef.current = electronAPI.onOtbDirComplete((data) => {
+      setOtbImporting(false);
+      setDbActionLoading(null);
+      setOtbDirProgress(null);
+      if (otbProgressUnsubRef.current) { otbProgressUnsubRef.current(); otbProgressUnsubRef.current = null; }
+      if (otbCompleteUnsubRef.current) { otbCompleteUnsubRef.current(); otbCompleteUnsubRef.current = null; }
+      if (data.imported === 0 && data.errors === 0) {
+        setDbActionMessage(data.skipped > 0
+          ? `All ${data.skipped} file(s) already imported — nothing new to add.`
+          : "No OTB archive files found in the selected directory.");
+      } else {
+        setDbActionMessage(`OTB import complete: ${data.imported} imported, ${data.skipped} already done, ${data.errors} error(s).`);
+      }
+      fetchDbStatus();
+    });
+
+    try {
+      const result = await electronAPI.importOtbDir(otbDir);
+      if (!result.ok) {
+        setOtbImporting(false);
+        setDbActionLoading(null);
+        setOtbDirProgress(null);
+        if (otbProgressUnsubRef.current) { otbProgressUnsubRef.current(); otbProgressUnsubRef.current = null; }
+        if (otbCompleteUnsubRef.current) { otbCompleteUnsubRef.current(); otbCompleteUnsubRef.current = null; }
+        setDbActionMessage(`Error: ${result.error}`);
+      }
+    } catch (err: any) {
+      setOtbImporting(false);
+      setDbActionLoading(null);
+      setOtbDirProgress(null);
+      if (otbProgressUnsubRef.current) { otbProgressUnsubRef.current(); otbProgressUnsubRef.current = null; }
+      if (otbCompleteUnsubRef.current) { otbCompleteUnsubRef.current(); otbCompleteUnsubRef.current = null; }
+      setDbActionMessage(`Error: ${err.message}`);
+    }
+  };
+
   const fmtBytes = (b: number) => b > 1e9 ? `${(b/1e9).toFixed(1)} GB` : `${(b/1e6).toFixed(0)} MB`;
 
   const availableModelList = Array.isArray(systemStatus?.availableModels)
@@ -364,13 +441,17 @@ export default function SettingsPanel({
               fullWidth
               helperText="Path to engine binary (e.g., /usr/local/bin/lc0 or C:\\Program Files\\Stockfish\\stockfish.exe)"
             />
-            <Stack direction="row" spacing={1}>
-              <Button variant="contained" onClick={onDetect} size="small">
-                Auto-detect
-              </Button>
-              <Button variant="outlined" onClick={onBrowse} size="small">
-                Browse
-              </Button>
+            <Stack direction="row" spacing={0.5}>
+              <Tooltip title="Auto-detect engine">
+                <IconButton onClick={onDetect} color="primary" size="small">
+                  <SearchIcon />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Browse for engine executable">
+                <IconButton onClick={onBrowse} size="small">
+                  <FolderOpenIcon />
+                </IconButton>
+              </Tooltip>
             </Stack>
           </>
         )}
@@ -422,42 +503,43 @@ export default function SettingsPanel({
                 setModelsFetchError("");
               }}
               onFocus={(event) => {
-                // Select all text on focus for easy replacement
                 (event.target as HTMLInputElement).select();
               }}
               placeholder={llmApiKeyLength > 0 && !apiKeyToTest ? "••••••• (saved)" : "Enter your API key"}
               fullWidth
-              helperText={
-                <span>
-                  Get your API key from{" "}
-                  <Link
-                    href={PROVIDER_DOCS[formState.llmProvider] || ""}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    sx={{ cursor: "pointer" }}
-                  >
-                    {formState.llmProvider} console
-                  </Link>
-                </span>
-              }
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Tooltip title={`Get API key from ${formState.llmProvider}`}>
+                      <IconButton
+                        size="small"
+                        edge="end"
+                        onClick={() => electronAPI?.openExternalUrl?.(PROVIDER_DOCS[formState.llmProvider])}
+                      >
+                        <OpenInNewIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </InputAdornment>
+                )
+              }}
             />
             {apiKeyToTest && (
-              <Button
-                variant="contained"
-                onClick={async () => {
-                  const trimmedKey = apiKeyToTest.trim();
-                  // Save the API key
-                  onFieldChange("llmApiKey", trimmedKey);
-                  // Fetch models for the current provider
-                  await fetchModelsForProvider(trimmedKey, formState.llmProvider);
-                  setApiKeyToTest("");
-                }}
-                disabled={modelsFetchLoading}
-                sx={{ flexShrink: 0 }}
-              >
-                {modelsFetchLoading ? <CircularProgress size={20} sx={{ mr: 1 }} /> : null}
-                {modelsFetchLoading ? "Saving & Fetching Models..." : "Save API Key"}
-              </Button>
+              <Tooltip title={modelsFetchLoading ? "Saving & fetching models…" : "Save API key & fetch available models"}>
+                <span>
+                  <IconButton
+                    color="primary"
+                    onClick={async () => {
+                      const trimmedKey = apiKeyToTest.trim();
+                      onFieldChange("llmApiKey", trimmedKey);
+                      await fetchModelsForProvider(trimmedKey, formState.llmProvider);
+                      setApiKeyToTest("");
+                    }}
+                    disabled={modelsFetchLoading}
+                  >
+                    {modelsFetchLoading ? <CircularProgress size={22} /> : <SaveIcon />}
+                  </IconButton>
+                </span>
+              </Tooltip>
             )}
             {modelsFetchError && (
               <Typography variant="body2" color="error">
@@ -631,90 +713,120 @@ export default function SettingsPanel({
               ) : (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Not downloaded</Typography>
               )}
-              <Stack direction="row" spacing={1} sx={{ mt: 1.5 }} flexWrap="wrap">
-                <Button
-                  size="small"
-                  variant="contained"
-                  onClick={handleDownloadPuzzles}
-                  disabled={!!dbActionLoading}
-                >
-                  {dbStatus?.puzzles ? "Re-download" : "Download"}
-                </Button>
+              <Stack direction="row" spacing={0.5} sx={{ mt: 1.5 }}>
+                <Tooltip title={dbStatus?.puzzles ? "Re-download puzzle database" : "Download puzzle database"}>
+                  <span>
+                    <IconButton onClick={handleDownloadPuzzles} disabled={!!dbActionLoading} color="primary" size="small">
+                      <CloudDownloadIcon />
+                    </IconButton>
+                  </span>
+                </Tooltip>
                 {dbStatus?.puzzles && (
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={handleCheckPuzzleUpdate}
-                    disabled={!!dbActionLoading}
-                  >
-                    Check for updates
-                  </Button>
+                  <Tooltip title="Check for puzzle updates">
+                    <span>
+                      <IconButton onClick={handleCheckPuzzleUpdate} disabled={!!dbActionLoading} size="small">
+                        <SyncIcon />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
                 )}
                 {dbStatus?.puzzles && (
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="error"
-                    onClick={() => setDeleteConfirm("puzzles")}
-                    disabled={!!dbActionLoading}
-                  >
-                    Delete
-                  </Button>
+                  <Tooltip title="Delete puzzle database">
+                    <span>
+                      <IconButton onClick={() => setDeleteConfirm("puzzles")} disabled={!!dbActionLoading} color="error" size="small">
+                        <DeleteIcon />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
                 )}
               </Stack>
             </Box>
           </Grid>
 
           {/* Games Database */}
-          <Grid item xs={12} sm={6}>
+          <Grid item xs={12}>
             <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, p: 2 }}>
               <Typography variant="subtitle1" fontWeight="bold">Games Database</Typography>
-              {gamesImporting && (
+
+              {/* Status line */}
+              {(gamesImporting || otbImporting) ? (
                 <Typography variant="body2" color="info.main" sx={{ mt: 0.5 }}>
-                  Importing in background… {dbProgress ? dbProgress.message : ""}
+                  {otbDirProgress
+                    ? `File ${otbDirProgress.fileIndex} of ${otbDirProgress.totalFiles}: ${otbDirProgress.fileName} — ${otbDirProgress.message}`
+                    : dbProgress ? dbProgress.message : "Importing in background…"}
                 </Typography>
-              )}
-              {!gamesImporting && dbStatus?.games ? (
+              ) : dbStatus?.games ? (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                   {dbStatus.games.count.toLocaleString()} games &bull; {fmtBytes(dbStatus.games.sizeBytes)}
                   {dbStatus.games.source ? ` · ${dbStatus.games.source}` : ""}
                 </Typography>
-              ) : !gamesImporting ? (
+              ) : (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                  No database — import a PGN or .7z file below.
+                  No database yet — import files below to build your game library.
                 </Typography>
-              ) : null}
-              <Typography variant="caption" color="text.disabled" sx={{ display: "block", mt: 0.5 }}>
-                Monthly OTB updates:{" "}
-                <Link
-                  component="button"
-                  variant="caption"
-                  onClick={() => electronAPI?.openExternalUrl?.("https://lumbrasgigabase.com/en/download-in-pgn-format-en/")}
-                  sx={{ cursor: "pointer" }}
-                >
-                  lumbrasgigabase.com
-                </Link>
-                {" "}— download the latest OTB file (.7z or .pgn), then click Import.
-              </Typography>
-              <Stack direction="row" spacing={1} sx={{ mt: 1.5 }} flexWrap="wrap">
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={handleImportGames7z}
-                  disabled={!!dbActionLoading}
-                >
-                  {gamesImporting ? <><CircularProgress size={14} sx={{ mr: 0.75 }} />Importing…</> : "Import PGN / .7z…"}
-                </Button>
-                {dbStatus?.games && (
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="error"
-                    onClick={() => setDeleteConfirm("games")}
-                    disabled={!!dbActionLoading}
+              )}
+
+              {/* OTB bulk import instructions */}
+              <Box sx={{ mt: 1.5, p: 1.5, bgcolor: "action.hover", borderRadius: 1 }}>
+                <Typography variant="body2" fontWeight="medium" gutterBottom>
+                  Build a complete OTB games library
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                  Visit{" "}
+                  <Link
+                    component="button"
+                    variant="caption"
+                    onClick={() => electronAPI?.openExternalUrl?.("https://lumbrasgigabase.com/en/download-in-pgn-format-en/")}
+                    sx={{ cursor: "pointer" }}
                   >
-                    Delete
-                  </Button>
+                    lumbrasgigabase.com
+                  </Link>
+                  {" "}and download all <strong>OTB *.7z</strong> files into a single folder on your computer.
+                  For monthly updates, add the new file to the same folder and click Import All again — already-imported files are skipped automatically.
+                </Typography>
+                <Stack direction="row" spacing={0.5} alignItems="center">
+                  <TextField
+                    size="small"
+                    placeholder="Select folder containing OTB archive files…"
+                    value={otbDir}
+                    onChange={(e) => setOtbDir(e.target.value)}
+                    sx={{ flex: 1 }}
+                    inputProps={{ readOnly: false }}
+                  />
+                  <Tooltip title="Browse for folder">
+                    <span>
+                      <IconButton onClick={handleBrowseOtbDir} disabled={!!dbActionLoading} size="small">
+                        <FolderOpenIcon />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                  <Tooltip title="Import all OTB archive files from folder">
+                    <span>
+                      <IconButton onClick={handleImportOtbDir} disabled={!otbDir || !!dbActionLoading} color="primary" size="small">
+                        {otbImporting ? <CircularProgress size={20} /> : <UnarchiveIcon />}
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                </Stack>
+              </Box>
+
+              {/* Single-file import and delete */}
+              <Stack direction="row" spacing={0.5} sx={{ mt: 1 }}>
+                <Tooltip title={gamesImporting ? "Importing…" : "Import a single PGN or .7z file"}>
+                  <span>
+                    <IconButton onClick={handleImportGames7z} disabled={!!dbActionLoading} size="small">
+                      {gamesImporting ? <CircularProgress size={20} /> : <UploadFileIcon />}
+                    </IconButton>
+                  </span>
+                </Tooltip>
+                {dbStatus?.games && (
+                  <Tooltip title="Delete games database">
+                    <span>
+                      <IconButton onClick={() => setDeleteConfirm("games")} disabled={!!dbActionLoading} color="error" size="small">
+                        <DeleteIcon />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
                 )}
               </Stack>
             </Box>
@@ -736,14 +848,44 @@ export default function SettingsPanel({
         </Dialog>
 
         {statusMessage ? <Alert severity="info">{statusMessage}</Alert> : null}
+
+        {/* Credits */}
+        <Divider />
+        <Box sx={{ pt: 0.5 }}>
+          <Typography variant="caption" color="text.disabled" component="div" sx={{ lineHeight: 1.8 }}>
+            <strong>Data credits</strong>
+            {"  ·  "}
+            Puzzles:{" "}
+            <Link
+              component="button"
+              variant="caption"
+              onClick={() => electronAPI?.openExternalUrl?.("https://lichess.org/training")}
+              sx={{ cursor: "pointer" }}
+            >
+              Lichess.org
+            </Link>
+            {" "}(CC0 open database)
+            {"  ·  "}
+            Games:{" "}
+            <Link
+              component="button"
+              variant="caption"
+              onClick={() => electronAPI?.openExternalUrl?.("https://lumbrasgigabase.com/")}
+              sx={{ cursor: "pointer" }}
+            >
+              Lumbrasgigabase.com
+            </Link>
+          </Typography>
+        </Box>
+
         <Stack direction="row" spacing={2} justifyContent="flex-end">
-          <Button variant="contained" color="primary" onClick={() => {
+          <Button variant="contained" color="primary" startIcon={<SaveIcon />} onClick={() => {
             electronAPI?.setDisplayName?.(displayName);
             onSaveSettings();
           }} disabled={settingsSaving}>
             Save settings
           </Button>
-          <Button variant="contained" color="secondary" onClick={onSettingsComplete} disabled={!engineStatus?.configured}>
+          <Button variant="contained" color="secondary" startIcon={<PlayArrowIcon />} onClick={onSettingsComplete} disabled={!engineStatus?.configured}>
             Go to analysis
           </Button>
         </Stack>

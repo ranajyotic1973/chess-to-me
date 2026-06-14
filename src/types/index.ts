@@ -79,6 +79,7 @@ export interface AppSettings {
   puzzleRatingMin?: number;
   puzzleRatingMax?: number;
   displayName?: string;
+  otbImportDir?: string;
 }
 
 export interface UserProfile {
@@ -665,6 +666,10 @@ export interface ElectronAPI {
   onDbRefreshStatus(callback: () => void): () => void;
   onDbImportComplete(callback: (data: { ok: boolean; count?: number; error?: string }) => void): () => void;
   puzzleExplainIncorrect(payload: IpcPayloads["puzzle:explain-incorrect"]): Promise<{ ok: boolean; explanation?: string; error?: string }>;
+  browseOtbDir(): Promise<{ dirPath: string | null }>;
+  importOtbDir(dirPath: string): Promise<{ ok: boolean; started?: boolean; imported?: number; skipped?: number; errors?: number; error?: string }>;
+  onOtbDirProgress(callback: (data: { fileIndex: number; totalFiles: number; fileName: string; phase: string; percent: number; message: string }) => void): () => void;
+  onOtbDirComplete(callback: (data: { ok: boolean; imported: number; skipped: number; errors: number }) => void): () => void;
 
   // User profile
   getDisplayName(): Promise<string>;

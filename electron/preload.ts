@@ -180,5 +180,21 @@ contextBridge.exposeInMainWorld("electronAPI", {
     const handler = (_event: any, data: { ok: boolean; count?: number; error?: string }) => callback(data);
     ipcRenderer.on("db:import-complete", handler);
     return () => ipcRenderer.removeListener("db:import-complete", handler);
+  },
+
+  // OTB directory bulk import
+  browseOtbDir: () =>
+    ipcRenderer.invoke("db:browse-otb-dir") as Promise<{ dirPath: string | null }>,
+  importOtbDir: (dirPath: string) =>
+    ipcRenderer.invoke("db:import-otb-dir", { dirPath }) as Promise<{ ok: boolean; started?: boolean; imported?: number; skipped?: number; errors?: number; error?: string }>,
+  onOtbDirProgress: (callback: (data: any) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on("db:otb-dir-progress", handler);
+    return () => ipcRenderer.removeListener("db:otb-dir-progress", handler);
+  },
+  onOtbDirComplete: (callback: (data: { ok: boolean; imported: number; skipped: number; errors: number }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on("db:otb-dir-complete", handler);
+    return () => ipcRenderer.removeListener("db:otb-dir-complete", handler);
   }
 } as ElectronAPI);

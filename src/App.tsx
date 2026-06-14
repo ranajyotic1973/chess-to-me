@@ -35,6 +35,7 @@ import AnalysisBoard from "./components/AnalysisBoard";
 import ChatPanel from "./components/ChatPanel";
 import PositionNotesPanel from "./components/PositionNotesPanel";
 import StatusBanner from "./components/StatusBanner";
+import AppStatusBar from "./components/AppStatusBar";
 import BoardPositionEditor from "./components/BoardPositionEditor";
 import ProfileIcon from "./components/ProfileIcon";
 import EvalBar from "./components/EvalBar";
@@ -86,7 +87,8 @@ const DEFAULT_FORM: AppSettings = {
   llmApiKey: "",
   llmModel: "grok-3", // Default model for non-Ollama providers
   puzzleRatingMin: 1000,
-  puzzleRatingMax: 1500
+  puzzleRatingMax: 1500,
+  otbImportDir: ""
 };
 
 const VALID_PROVIDERS = ["ollama", "openai", "anthropic", "gemini", "grok"] as const;
@@ -422,7 +424,8 @@ export default function App() {
           llmApiKey: status.settings?.llmApiKey || prev.llmApiKey || "",
           llmModel: status.settings?.llmModel || prev.llmModel,
           puzzleRatingMin: status.settings?.puzzleRatingMin ?? prev.puzzleRatingMin ?? 1000,
-          puzzleRatingMax: status.settings?.puzzleRatingMax ?? prev.puzzleRatingMax ?? 1500
+          puzzleRatingMax: status.settings?.puzzleRatingMax ?? prev.puzzleRatingMax ?? 1500,
+          otbImportDir: (status.settings?.otbImportDir as string) || prev.otbImportDir || ""
         };
       });
       userSelectedModelRef.current = Boolean(status.settings?.ollamaModel);
@@ -1384,7 +1387,8 @@ export default function App() {
         llmModel: formState.llmModel,
         llmApiKey: formState.llmApiKey,
         puzzleRatingMin: formState.puzzleRatingMin ?? 1000,
-        puzzleRatingMax: formState.puzzleRatingMax ?? 1500
+        puzzleRatingMax: formState.puzzleRatingMax ?? 1500,
+        otbImportDir: formState.otbImportDir || ""
       });
       if (!configResult?.ok) {
         setStatusMessage("Failed to persist application settings.");
@@ -2082,7 +2086,8 @@ export default function App() {
         width: "100%",
         background: "linear-gradient(160deg, #e4e8f4 0%, #f3f3f1 45%, #f2ede4 100%)",
         px: { xs: 2, md: 4 },
-        py: { xs: 2, md: 3 },
+        pt: { xs: 2, md: 3 },
+        pb: "30px",
         overflow: "hidden"
       }}
     >
@@ -2719,6 +2724,12 @@ export default function App() {
         onClose={() => setIsPositionEditorOpen(false)}
         onPositionConfirm={handlePositionConfirm}
         initialFen={currentFen}
+      />
+      <AppStatusBar
+        currentResponseType={currentResponseType}
+        selectedEngine={formState.selectedEngine}
+        isEngineRunning={isAnalysisRunning}
+        llmProvider={formState.llmProvider}
       />
     </Box>
   );

@@ -277,7 +277,7 @@ Open settings at any time by clicking the **⚙ gear icon** in the top-right cor
 
 | Action | Description |
 |--------|-------------|
-| **Puzzle Database — Download** | Downloads ~3 million puzzles from Lichess (required for puzzle mode) |
+| **Puzzle Database — Download** | Downloads ~4 million puzzles from Lichess (CC0 open database, required for puzzle mode) |
 | **Puzzle Database — Check for updates** | Checks whether a newer puzzle set is available |
 | **Games Database — Import PGN / .7z…** | Import a PGN or compressed archive of master games |
 | **Delete** | Removes the local database file to free disk space |
@@ -373,6 +373,20 @@ Notes are stored in `<userData>/chess-to-me/position-notes.json`.
 **Save** — Click the 💾 save icon (visible only in Advanced Analysis mode) to write the current game and all position notes to a PGN file. The file is saved as `analysis-<dd-mm-yyyy_hh>.pgn` in `<userData>/chess-to-me/`. A toast notification confirms the save and shows the full file path.
 
 **Load** — Click the 📂 folder icon (always visible in analysis mode) to open a file picker. Select any `.pgn` file saved by the app; the game is replayed on the board and all embedded notes are restored.
+
+---
+
+## Credits & Data Sources
+
+Chess To Me would not be possible without these excellent open resources:
+
+### Puzzle Database — [Lichess](https://lichess.org)
+
+Puzzles are sourced from the [Lichess Open Puzzle Database](https://database.lichess.org/#puzzles), published by Lichess under a [Creative Commons CC0 licence](https://creativecommons.org/publicdomain/zero/1.0/) (public domain). Over four million puzzles, each with a crowd-sourced difficulty rating and tactical theme tags. Download is handled automatically in Settings → Databases.
+
+### Games Database — [Lumbrasgigabase](https://lumbrasgigabase.com)
+
+Historical over-the-board (OTB) master games are provided by Lumbrasgigabase, a freely available collection of millions of classical games. To build your local games library, visit [lumbrasgigabase.com/en/download-in-pgn-format-en/](https://lumbrasgigabase.com/en/download-in-pgn-format-en/), download the `*OTB*.7z` archives into a single folder, and import them via Settings → Databases → Games Database.
 
 ---
 
