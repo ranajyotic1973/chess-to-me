@@ -1418,7 +1418,7 @@ async function createWindow(): Promise<void> {
   if (devUrl) {
     await win.loadURL(devUrl);
   } else {
-    await win.loadFile(path.join(__dirname, "..", "dist", "index.html"));
+    await win.loadFile(path.join(__dirname, "..", "..", "dist", "index.html"));
   }
 
   win.webContents.on("before-input-event", (event, input) => {
