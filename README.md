@@ -1,5 +1,8 @@
 # Chess To Me
 
+[![Latest Release](https://img.shields.io/github/v/release/ranajyotic1973/chess-to-me?label=latest&color=blue)](https://github.com/ranajyotic1973/chess-to-me/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 A chess training app for kids aged 4–18. Play through puzzles, explore master games, ask questions about any position in plain language, and get clear explanations — all running privately on your computer with no account or internet required.
 
 ---

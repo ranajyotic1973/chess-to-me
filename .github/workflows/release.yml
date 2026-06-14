@@ -177,13 +177,15 @@ jobs:
             release/*arm64*.deb
           if-no-files-found: error
 
-  # ─── Create GitHub Release draft with all artifacts ─────────────────────────
+  # ─── Create GitHub Release with all artifacts ───────────────────────────────
   create-release:
     name: Create Release
     needs: [check-branch, build-windows, build-mac, build-linux-x64, build-linux-arm64]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Download Windows installers
         uses: actions/download-artifact@v4
@@ -212,27 +214,49 @@ jobs:
       - name: List release artifacts
         run: ls -lh dist-release/
 
+      - name: Generate release notes
+        run: |
+          TAG="${{ github.ref_name }}"
+          REPO="${{ github.repository }}"
+          BASE="https://github.com/${REPO}/releases/download/${TAG}"
+
+          cat > release-notes.md << NOTES
+          ## Chess To Me ${TAG}
+
+          ### Downloads
+
+          | Platform | Architecture | File |
+          |----------|--------------|------|
+          | Windows  | x64          | [chess-to-me-win-x64.exe](${BASE}/chess-to-me-win-x64.exe) |
+          | Windows  | arm64        | [chess-to-me-win-arm64.exe](${BASE}/chess-to-me-win-arm64.exe) |
+          | macOS    | Universal (Intel + Apple Silicon) | [chess-to-me-mac-universal.dmg](${BASE}/chess-to-me-mac-universal.dmg) |
+          | Linux    | x64 AppImage | [chess-to-me-linux-x64.AppImage](${BASE}/chess-to-me-linux-x64.AppImage) |
+          | Linux    | x64 .deb     | [chess-to-me-linux-x64.deb](${BASE}/chess-to-me-linux-x64.deb) |
+          | Linux    | arm64 AppImage | [chess-to-me-linux-arm64.AppImage](${BASE}/chess-to-me-linux-arm64.AppImage) |
+          | Linux    | arm64 .deb   | [chess-to-me-linux-arm64.deb](${BASE}/chess-to-me-linux-arm64.deb) |
+
+          > **Windows:** SmartScreen warning? Click **More info → Run anyway**. See [README](https://github.com/${REPO}#security-warnings-on-windows-and-macos).
+          > **macOS:** Gatekeeper warning? Right-click the .dmg → **Open** → **Open**.
+
+          NOTES
+
+          # Append commits since the previous release tag
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${TAG}$" | head -1)
+          if [ -n "$PREV_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s" "${PREV_TAG}..HEAD" 2>/dev/null)
+            if [ -n "$CHANGELOG" ]; then
+              printf '\n### What'\''s Changed\n\n%s\n\n**Full diff:** https://github.com/%s/compare/%s...%s\n' \
+                "$CHANGELOG" "$REPO" "$PREV_TAG" "$TAG" >> release-notes.md
+            fi
+          fi
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
           name: Chess To Me ${{ github.ref_name }}
-          body: |
-            ## Chess To Me ${{ github.ref_name }}
-
-            ### Downloads
-
-            | Platform | Architecture | File |
-            |----------|-------------|------|
-            | Windows  | x64         | `chess-to-me-win-x64.exe` |
-            | Windows  | arm64       | `chess-to-me-win-arm64.exe` |
-            | macOS    | Universal (Intel + Apple Silicon) | `chess-to-me-mac-universal.dmg` |
-            | Linux    | x64         | `chess-to-me-linux-x64.AppImage` / `chess-to-me-linux-x64.deb` |
-            | Linux    | arm64       | `chess-to-me-linux-arm64.AppImage` / `chess-to-me-linux-arm64.deb` |
-
-            ### macOS install note
-            If Gatekeeper shows "unidentified developer": right-click the app → Open → Open.
+          body_path: release-notes.md
           files: |
             dist-release/*.exe
             dist-release/*.dmg
