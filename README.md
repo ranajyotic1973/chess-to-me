@@ -4,6 +4,32 @@ A chess training app for kids aged 4–18. Play through puzzles, explore master 
 
 ---
 
+## Security warnings on Windows and macOS
+
+> **This is completely free, open-source software. The developer cannot afford the code-signing certificates ($300–500/year for Windows, $99/year for macOS) that would suppress these warnings. The app is safe to run — you can review every line of source code in this repository.**
+
+### Windows — "Windows protected your PC"
+
+When you run the installer you may see a Microsoft Defender SmartScreen dialog saying *"Windows protected your PC"*. This appears for any installer that is not digitally signed by a paid certificate authority, regardless of whether the software is safe.
+
+**To proceed:**
+1. Click **More info** (below the warning message).
+2. Click **Run anyway**.
+
+You only need to do this once, during installation.
+
+### macOS — "unidentified developer"
+
+macOS Gatekeeper may say the app is from an unidentified developer. This appears for any app distributed outside the Mac App Store that is not signed with a paid Apple Developer ID.
+
+**To proceed:**
+1. Right-click (or Control-click) the `.dmg` file → **Open**.
+2. Click **Open** again in the dialog that appears.
+
+You only need to do this once.
+
+---
+
 ## Download
 
 | Platform | Installer |
@@ -27,7 +53,7 @@ All releases are free. [View all releases →](https://github.com/ranajyotic1973
 3. Choose your installation folder (or keep the default) and click **Install**.
 4. Launch **Chess To Me** from the Start menu or desktop shortcut.
 
-> Windows may show a SmartScreen warning on first run ("Windows protected your PC"). Click **More info → Run anyway**. This appears because the app is not yet code-signed.
+> If Windows shows a SmartScreen warning, see [Security warnings](#security-warnings-on-windows-and-macos) at the top of this page.
 
 ---
 
@@ -38,9 +64,7 @@ All releases are free. [View all releases →](https://github.com/ranajyotic1973
 3. Drag **Chess To Me** into your **Applications** folder.
 4. Open it from Launchpad or Applications.
 
-> On first launch macOS Gatekeeper may say the app is from an unidentified developer. To open it:
-> - Right-click (or Control-click) the app icon → **Open** → **Open**.
-> - You only need to do this once.
+> If macOS shows an "unidentified developer" warning, see [Security warnings](#security-warnings-on-windows-and-macos) at the top of this page.
 
 ---
 
