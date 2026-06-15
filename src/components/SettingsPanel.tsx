@@ -333,7 +333,9 @@ export default function SettingsPanel({
           ? `All ${data.skipped} file(s) already imported — nothing new to add.`
           : "No OTB archive files found in the selected directory.");
       } else {
-        setDbActionMessage(`OTB import complete: ${data.imported} imported, ${data.skipped} already done, ${data.errors} error(s).`);
+        const summary = `OTB import complete: ${data.imported} imported, ${data.skipped} already done, ${data.errors} error(s).`;
+        const detail = data.firstError ? ` First error: ${data.firstError}` : "";
+        setDbActionMessage(summary + detail);
       }
       fetchDbStatus();
     });

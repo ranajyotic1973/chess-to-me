@@ -1460,15 +1460,20 @@ async function createWindow(): Promise<void> {
 // ── Shared import logic ───────────────────────────────────────────────────────
 async function doImportGamesFile(
   filePath: string,
-  sendProgress: (phase: string, pct: number, msg: string) => void
+  sendProgress: (phase: string, pct: number, msg: string) => void,
+  opts: { skipFts?: boolean } = {}
 ): Promise<{ ok: boolean; count?: number; error?: string }> {
   const { gamesDbPath, gamesExtractDir } = getDbPaths();
   downloadInProgress = true;
+  const lower = filePath.toLowerCase();
   try {
     let pgnFiles: string[];
-    const lower = filePath.toLowerCase();
 
     if (lower.endsWith(".7z")) {
+      // Always start with a clean extract dir to avoid leftover files from a previous failed run
+      if (fs.existsSync(gamesExtractDir)) {
+        fs.rmSync(gamesExtractDir, { recursive: true, force: true });
+      }
       sendProgress("decompressing", 0, "Extracting 7z archive…");
       await extract7z(filePath, gamesExtractDir, (pct, msg) => sendProgress("decompressing", pct, msg));
       pgnFiles = findPgnFiles(gamesExtractDir);
@@ -1494,11 +1499,13 @@ async function doImportGamesFile(
       sendProgress("importing", Math.round(((i + 1) / pgnFiles.length) * 90), `${total.toLocaleString()} games…`);
     }
 
-    sendProgress("importing", 95, "Rebuilding search index…");
-    setGamesSource(gamesDb, "Lumbra's Gigabase");
-    rebuildFts(gamesDb);
-    gamesDb.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('fts_built', 'true')").run();
-    gamesDb.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('last_update_import', ?)").run(new Date().toISOString().slice(0, 10));
+    if (!opts.skipFts) {
+      sendProgress("importing", 95, "Rebuilding search index…");
+      setGamesSource(gamesDb, "Lumbra's Gigabase");
+      rebuildFts(gamesDb);
+      gamesDb.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('fts_built', 'true')").run();
+      gamesDb.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('last_update_import', ?)").run(new Date().toISOString().slice(0, 10));
+    }
 
     if (lower.endsWith(".7z") && fs.existsSync(gamesExtractDir)) {
       fs.rmSync(gamesExtractDir, { recursive: true, force: true });
@@ -1507,8 +1514,12 @@ async function doImportGamesFile(
     sendProgress("importing", 100, `Done — ${total.toLocaleString()} games added`);
     console.log(`[DB] Games import complete: ${total} games`);
     return { ok: true, count: total };
-  } catch (err) {
+  } catch (err: any) {
     console.error("[DB] Games import failed:", err);
+    // Clean up a partial extraction so the next attempt starts fresh
+    if (lower.endsWith(".7z") && fs.existsSync(gamesExtractDir)) {
+      try { fs.rmSync(gamesExtractDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
     return { ok: false, error: (err as Error).message };
   } finally {
     downloadInProgress = false;
@@ -3639,6 +3650,7 @@ ipcMain.handle("db:import-otb-dir", async (event, { dirPath }: { dirPath: string
   const totalFiles = toImport.length;
   let imported = 0;
   let errors = 0;
+  const errorMessages: string[] = [];
 
   gamesImportState = { status: "importing", count: 0, message: "Starting OTB directory import…" };
 
@@ -3666,7 +3678,8 @@ ipcMain.handle("db:import-otb-dir", async (event, { dirPath }: { dirPath: string
         });
       };
 
-      const result = await doImportGamesFile(filePath, sendProgress);
+      // Skip FTS rebuild on every file — do one rebuild at the end
+      const result = await doImportGamesFile(filePath, sendProgress, { skipFts: true });
 
       if (result.ok) {
         imported++;
@@ -3677,7 +3690,29 @@ ipcMain.handle("db:import-otb-dir", async (event, { dirPath }: { dirPath: string
         }
       } else {
         errors++;
-        console.error(`[DB] OTB dir import failed for ${fileName}: ${result.error}`);
+        const errMsg = `${fileName}: ${result.error}`;
+        console.error(`[DB] OTB dir import failed — ${errMsg}`);
+        errorMessages.push(errMsg);
+      }
+    }
+
+    // Rebuild FTS once after all files are processed
+    if (imported > 0 && gamesDb) {
+      event.sender.send("db:otb-dir-progress", {
+        fileIndex: totalFiles,
+        totalFiles,
+        fileName: "",
+        phase: "importing",
+        percent: 99,
+        message: "Rebuilding search index…",
+      });
+      try {
+        setGamesSource(gamesDb, "Lumbra's Gigabase");
+        rebuildFts(gamesDb);
+        gamesDb.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('fts_built', 'true')").run();
+        gamesDb.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('last_update_import', ?)").run(new Date().toISOString().slice(0, 10));
+      } catch (ftsErr) {
+        console.error("[DB] FTS rebuild failed:", ftsErr);
       }
     }
 
@@ -3686,7 +3721,13 @@ ipcMain.handle("db:import-otb-dir", async (event, { dirPath }: { dirPath: string
       count: typeof gamesImportState.count === "number" ? gamesImportState.count : 0,
       message: `OTB import done — ${imported} imported, ${skipped} skipped, ${errors} errors`,
     };
-    event.sender.send("db:otb-dir-complete", { ok: true, imported, skipped, errors });
+    event.sender.send("db:otb-dir-complete", {
+      ok: true,
+      imported,
+      skipped,
+      errors,
+      firstError: errorMessages[0] ?? null,
+    });
     mainWindow?.webContents.send("db:refresh-status");
   })();
 
