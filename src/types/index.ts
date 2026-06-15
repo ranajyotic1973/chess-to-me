@@ -158,7 +158,7 @@ export interface ProcessLogs {
 // LLM Types
 // ============================================================================
 
-export type ResponseType = "Analysis" | "Puzzle" | "Position" | "Game" | "GameList" | "Opening" | "Endgame";
+export type ResponseType = "Analysis" | "Puzzle" | "Position" | "Game" | "GameList" | "Opening" | "Middlegame" | "Endgame";
 
 export interface AgentProgressEvent {
   agentId: number;       // 1-based
@@ -543,6 +543,9 @@ export interface ChatPanelProps {
   gameMode?: boolean;
   gameMoveIndex?: number;
   gameTotalMoves?: number;
+  gameList?: import("./index").GameRow[] | null;
+  onGameSelect?: (index: number) => void;
+  onBackToGameList?: () => void;
   sx?: any;
 }
 

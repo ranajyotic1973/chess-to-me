@@ -17,7 +17,7 @@ import ReplayIcon from "@mui/icons-material/Replay";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import ReactMarkdown from "react-markdown";
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 import type { ChatPanelProps, DeepLineAnalysis } from "../types";
 import SelectableList from "./SelectableList";
 import type { SelectableListItem } from "./SelectableList";
@@ -76,15 +76,21 @@ export default function ChatPanel({
   agentStatuses = [],
   isExplanationLoading = false,
   puzzleNavigationMode = false,
-  gameMode = false,
-  gameMoveIndex = 0,
-  gameTotalMoves = 0,
+  gameList,
+  onGameSelect,
+  onBackToGameList,
   advancedAnalysisMode = false,
   deepAnalysisResults = {},
   deepAnalysisLoading = false,
   sx
 }: ChatPanelProps) {
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const [selectedGameItemId, setSelectedGameItemId] = useState<string | null>(null);
+
+  // Clear selection when the game list disappears entirely
+  useEffect(() => {
+    if (!gameList || gameList.length === 0) setSelectedGameItemId(null);
+  }, [gameList]);
 
   const paperSx = Array.isArray(sx) ? sx : sx ? [sx] : [];
   const providerName = llmProvider
@@ -94,7 +100,7 @@ export default function ChatPanel({
   const detectedMoves = detectMovesInResponse(questionResponse);
 
   const showAnalysisLines = analysisLines.length > 0 &&
-    (responseType === "Analysis" || responseType === "Position");
+    (responseType === "Analysis" || responseType === "Position" || responseType === "Game");
 
   const selectedLine = selectedEngineLineIndex !== null ? analysisLines[selectedEngineLineIndex] : null;
   const selectedLineNum = selectedLine ? (selectedLine.rank || (selectedEngineLineIndex ?? 0) + 1) : null;
@@ -107,9 +113,6 @@ export default function ChatPanel({
           id: `line-${idx}`,
           label: `Line ${lineNum}`,
           sublabel: entry?.description || line.pv || line.line || "(no moves)",
-          badge: entry?.scoreLabel ? (
-            <Chip label={entry.scoreLabel} size="small" variant="outlined" />
-          ) : undefined
         };
       })
     : [];
@@ -235,35 +238,64 @@ export default function ChatPanel({
             </Box>
           )}
 
-          {/* Game navigation hint */}
-          {gameMode && gameTotalMoves > 0 && (
-            <Box sx={{ p: 1.5, backgroundColor: "success.lighter", borderRadius: 1, border: 1, borderColor: "success.light" }}>
-              <Typography variant="caption" sx={{ color: "success.dark", fontWeight: 600 }}>
-                Move {gameMoveIndex} / {gameTotalMoves - 1} — use ← → to navigate. Ask any question about the position!
+          {/* Game list — always rendered when active, independent of questionResponse */}
+          {(responseType === "GameList" || responseType === "Game") && gameList && gameList.length > 0 && (
+            <SelectableList
+              items={gameList.map((game, idx) => ({
+                id: String(idx),
+                label: `${game.white} vs ${game.black}`,
+                sublabel: [game.event, game.date, game.opening || game.eco]
+                  .filter(Boolean).join(" · "),
+                badge: (
+                  <Chip
+                    label={game.result}
+                    size="small"
+                    variant="filled"
+                    sx={{
+                      height: 20,
+                      fontSize: "0.7rem",
+                      fontWeight: 700,
+                      bgcolor:
+                        game.result === "1-0" ? "#16a34a" :
+                        game.result === "0-1" ? "#dc2626" : "#6b7280",
+                      color: "#fff",
+                    }}
+                  />
+                ),
+              }))}
+              hint={`${gameList.length} game${gameList.length === 1 ? "" : "s"} — click any to load on the board`}
+              selectedId={selectedGameItemId}
+              onSelect={(id, idx) => { setSelectedGameItemId(id); onGameSelect?.(idx); }}
+              onBack={() => { setSelectedGameItemId(null); onBackToGameList?.(); }}
+            >
+              <Typography variant="caption" sx={{ color: "text.secondary", fontStyle: "italic" }}>
+                Game loaded on the board — use ← → to navigate moves.
+              </Typography>
+            </SelectableList>
+          )}
+
+          {/* Loading state — clears all stale content while a new response arrives */}
+          {questionLoading && (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: 2 }}>
+              <CircularProgress size={24} />
+              <Typography variant="body2" color="text.secondary" sx={{ fontStyle: "italic" }}>
+                Waiting for response...
               </Typography>
             </Box>
           )}
 
-          {/* Main conversation content */}
-          {!questionResponse && !questionLoading ? (
+          {/* Empty state — only when not loading, no response, and no active game list */}
+          {!questionLoading && !questionResponse && !(gameList && (responseType === "GameList" || responseType === "Game")) && (
             <Typography variant="body2" color="text.secondary" sx={{ color: "#999" }}>
               Ask a question to see the response here...
             </Typography>
-          ) : (
-            <>
-              {questionText && responseType !== "Puzzle" && (
-                <Box>
-                  <Typography variant="subtitle2" color="primary" sx={{ mb: 0.5 }}>
-                    Your question:
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontStyle: "italic", color: "#555" }}>
-                    {questionText}
-                  </Typography>
-                </Box>
-              )}
+          )}
 
+          {/* Response content — only shown when not loading and there is a response */}
+          {!questionLoading && questionResponse && (
+            <>
               {/* Response type badge */}
-              {responseType && responseType !== "Analysis" && (
+              {responseType && responseType !== "Analysis" && responseType !== "GameList" && (
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
                   <Typography variant="caption" sx={{ fontWeight: 600, color: "primary.main" }}>
                     Response Type:
@@ -310,130 +342,122 @@ export default function ChatPanel({
               )}
 
               <Typography variant="subtitle2">{providerName} response:</Typography>
-              {questionLoading ? (
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: 2 }}>
-                  <CircularProgress size={24} />
-                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: "italic" }}>
-                    Waiting for response...
-                  </Typography>
-                </Box>
-              ) : (
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                  {detectedMoves.length > 0 && (
-                    <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-                      {detectedMoves.map((move, idx) => (
-                        <Chip
-                          key={`move-${idx}`}
-                          label={`${move.from}→${move.to}`}
-                          color="primary"
-                          variant="outlined"
-                          size="small"
-                          onClick={() => onMoveSuggested?.(move.from, move.to)}
-                          sx={{ cursor: "pointer" }}
-                        />
-                      ))}
-                    </Box>
-                  )}
 
-                  {/* Side-to-move badge for puzzles */}
-                  {responseType === "Puzzle" && responseData?.side_to_move && (
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                {detectedMoves.length > 0 && (
+                  <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                    {detectedMoves.map((move, idx) => (
                       <Chip
-                        label={`${responseData.side_to_move} to move`}
+                        key={`move-${idx}`}
+                        label={`${move.from}→${move.to}`}
+                        color="primary"
+                        variant="outlined"
                         size="small"
-                        color={responseData.side_to_move === "White" ? "default" : "primary"}
-                        variant="filled"
-                        sx={{
-                          fontWeight: 700,
-                          backgroundColor: responseData.side_to_move === "White" ? "#f5f5f5" : "#1a1a2e",
-                          color: responseData.side_to_move === "White" ? "#333" : "#fff",
-                          border: "1px solid",
-                          borderColor: responseData.side_to_move === "White" ? "#ccc" : "#1a1a2e"
-                        }}
+                        onClick={() => onMoveSuggested?.(move.from, move.to)}
+                        sx={{ cursor: "pointer" }}
                       />
-                    </Box>
-                  )}
+                    ))}
+                  </Box>
+                )}
 
-                  {/* Incorrect attempt: retry + reveal buttons */}
-                  {responseType === "Puzzle" && puzzleIncorrect && (
-                    <Box sx={{ display: "flex", gap: 1, alignItems: "center", py: 1 }}>
-                      <Tooltip title="Retry puzzle from the start">
-                        <IconButton
-                          size="small"
-                          color="warning"
-                          onClick={onRetryPuzzle}
-                          aria-label="retry puzzle"
-                        >
-                          <ReplayIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      {responseData?.hidden_solution && !showSolution && (
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          color="primary"
-                          onClick={onShowSolution}
-                          sx={{ textTransform: "none" }}
-                        >
-                          Reveal Solution
-                        </Button>
-                      )}
-                    </Box>
-                  )}
+                {/* Side-to-move badge for puzzles */}
+                {responseType === "Puzzle" && responseData?.side_to_move && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+                    <Chip
+                      label={`${responseData.side_to_move} to move`}
+                      size="small"
+                      color={responseData.side_to_move === "White" ? "default" : "primary"}
+                      variant="filled"
+                      sx={{
+                        fontWeight: 700,
+                        backgroundColor: responseData.side_to_move === "White" ? "#f5f5f5" : "#1a1a2e",
+                        color: responseData.side_to_move === "White" ? "#333" : "#fff",
+                        border: "1px solid",
+                        borderColor: responseData.side_to_move === "White" ? "#ccc" : "#1a1a2e"
+                      }}
+                    />
+                  </Box>
+                )}
 
-                  {/* Hidden solution reveal button (no incorrect attempt yet) */}
-                  {responseType === "Puzzle" && responseData?.hidden_solution && !showSolution && !puzzleIncorrect && (
-                    <Box sx={{ py: 2, textAlign: "center" }}>
+                {/* Incorrect attempt: retry + reveal buttons */}
+                {responseType === "Puzzle" && puzzleIncorrect && (
+                  <Box sx={{ display: "flex", gap: 1, alignItems: "center", py: 1 }}>
+                    <Tooltip title="Retry puzzle from the start">
+                      <IconButton
+                        size="small"
+                        color="warning"
+                        onClick={onRetryPuzzle}
+                        aria-label="retry puzzle"
+                      >
+                        <ReplayIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    {responseData?.hidden_solution && !showSolution && (
                       <Button
-                        variant="contained"
+                        variant="outlined"
+                        size="small"
                         color="primary"
                         onClick={onShowSolution}
                         sx={{ textTransform: "none" }}
                       >
                         Reveal Solution
                       </Button>
-                    </Box>
-                  )}
+                    )}
+                  </Box>
+                )}
 
-                  {/* SAN solution move list (shown after reveal) */}
-                  {responseType === "Puzzle" && showSolution && Array.isArray(responseData?.solution_san) && responseData.solution_san.length > 0 && (
-                    <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", alignItems: "center", mb: 1 }}>
-                      <Typography variant="caption" sx={{ fontWeight: 600, color: "text.secondary" }}>
-                        Solution:
-                      </Typography>
-                      {(responseData.solution_san as string[]).map((san: string, idx: number) => (
-                        <Chip
-                          key={idx}
-                          label={`${idx + 1}. ${san}`}
-                          size="small"
-                          variant="outlined"
-                          color="primary"
-                          sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}
-                        />
-                      ))}
-                    </Box>
-                  )}
-
-                  {/* Show explanation only if not hidden or if revealed */}
-                  {(!responseData?.hidden_solution || showSolution) && (
-                    <Box
-                      sx={{
-                        color: "#333",
-                        fontSize: "0.875rem",
-                        lineHeight: 1.6,
-                        "& p": { margin: "0.5rem 0" },
-                        "& ul, & ol": { marginLeft: "1.5rem", margin: "0.5rem 0" },
-                        "& li": { marginBottom: "0.25rem" },
-                        "& code": { backgroundColor: "#f5f5f5", padding: "2px 6px", borderRadius: "3px", fontFamily: "monospace" },
-                        "& pre": { backgroundColor: "#f5f5f5", padding: "12px", borderRadius: "4px", overflowX: "auto", fontSize: "0.8rem" },
-                        "& blockquote": { borderLeft: "3px solid #ddd", marginLeft: "0", paddingLeft: "12px", color: "#666" }
-                      }}
+                {/* Hidden solution reveal button (no incorrect attempt yet) */}
+                {responseType === "Puzzle" && responseData?.hidden_solution && !showSolution && !puzzleIncorrect && (
+                  <Box sx={{ py: 2, textAlign: "center" }}>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      onClick={onShowSolution}
+                      sx={{ textTransform: "none" }}
                     >
-                      <ReactMarkdown>{questionResponse}</ReactMarkdown>
-                    </Box>
-                  )}
-                </Box>
-              )}
+                      Reveal Solution
+                    </Button>
+                  </Box>
+                )}
+
+                {/* SAN solution move list (shown after reveal) */}
+                {responseType === "Puzzle" && showSolution && Array.isArray(responseData?.solution_san) && responseData.solution_san.length > 0 && (
+                  <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", alignItems: "center", mb: 1 }}>
+                    <Typography variant="caption" sx={{ fontWeight: 600, color: "text.secondary" }}>
+                      Solution:
+                    </Typography>
+                    {(responseData.solution_san as string[]).map((san: string, idx: number) => (
+                      <Chip
+                        key={idx}
+                        label={`${idx + 1}. ${san}`}
+                        size="small"
+                        variant="outlined"
+                        color="primary"
+                        sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}
+                      />
+                    ))}
+                  </Box>
+                )}
+
+                {/* Markdown response — hidden for puzzle with unrevealed solution or when game list handles display */}
+                {responseType !== "GameList" && (!responseData?.hidden_solution || showSolution) && (
+                  <Box
+                    sx={{
+                      color: "#333",
+                      fontSize: "0.875rem",
+                      lineHeight: 1.6,
+                      "& p": { margin: "0.5rem 0" },
+                      "& ul, & ol": { marginLeft: "1.5rem", margin: "0.5rem 0" },
+                      "& li": { marginBottom: "0.25rem" },
+                      "& code": { backgroundColor: "#f5f5f5", padding: "2px 6px", borderRadius: "3px", fontFamily: "monospace" },
+                      "& pre": { backgroundColor: "#f5f5f5", padding: "12px", borderRadius: "4px", overflowX: "auto", fontSize: "0.8rem" },
+                      "& blockquote": { borderLeft: "3px solid #ddd", marginLeft: "0", paddingLeft: "12px", color: "#666" }
+                    }}
+                  >
+                    <ReactMarkdown>{questionResponse}</ReactMarkdown>
+                  </Box>
+                )}
+              </Box>
             </>
           )}
         </Box>

@@ -8,6 +8,7 @@ import { Chess } from "chess.js";
 import type { AnalysisLine, PuzzleRow, ConversationMessage } from "../src/types";
 import { initEcoLookup, lookupOpeningByFen, lookupOpeningByMoves } from "./ecoLookup";
 import { handleOpeningRequest } from "./openingAgent";
+import { handleMiddlegameRequest } from "./middlegameAgent";
 import { handleEndgameRequest } from "./endgameAgent";
 import { readOtbTracking, writeOtbTracking, scanOtbFiles } from "./otbImport";
 import { settings } from "./settings";
@@ -1394,6 +1395,7 @@ async function createWindow(): Promise<void> {
   const win = new BrowserWindow({
     width: 1300,
     height: 840,
+    resizable: false,
     icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -2758,6 +2760,12 @@ async function handlePuzzleRequest(question: string, payload: any, llmProvider: 
   const puzzleRatingMin = Number(payload?.puzzleRatingMin ?? settings.get("puzzleRatingMin") ?? 1000);
   const puzzleRatingMax = Number(payload?.puzzleRatingMax ?? settings.get("puzzleRatingMax") ?? 1500);
 
+  // Extract mate-in-N depth from the question so the validator can enforce it
+  const mateInMatch = question.match(/\bmate\s*[-–]?\s*in\s*[-–]?\s*(\d+)\b/i);
+  const expectedMateDepth = mateInMatch ? parseInt(mateInMatch[1], 10) : null;
+  // Mate-in-N requires exactly 2N−1 moves (attacker N moves, defender N−1 responses)
+  const expectedMoveCount = expectedMateDepth !== null ? 2 * expectedMateDepth - 1 : null;
+
   // Parse, validate FEN, normalize solution moves (UCI or SAN → UCI), stamp required fields
   const tryParseAndValidate = (response: string): string | null => {
     let data: any;
@@ -2800,6 +2808,24 @@ async function handlePuzzleRequest(question: string, payload: any, llmProvider: 
         if (result) { validUci.push(result.from + result.to + (result.promotion || "")); validSan.push(result.san); continue; }
       } catch { break; }
     }
+
+    // For mate-in-N puzzles: the final position must be checkmate and move count must match
+    if (expectedMateDepth !== null) {
+      if (!board.isCheckmate()) {
+        console.warn(`[LLM] Puzzle rejected: mate-in-${expectedMateDepth} required but final position is not checkmate`);
+        return null;
+      }
+      if (expectedMoveCount !== null && validUci.length !== expectedMoveCount) {
+        console.warn(`[LLM] Puzzle rejected: mate-in-${expectedMateDepth} needs ${expectedMoveCount} moves, got ${validUci.length}`);
+        return null;
+      }
+    }
+
+    if (validUci.length === 0) {
+      console.warn(`[LLM] Puzzle rejected: no valid solution moves`);
+      return null;
+    }
+
     data.solution = validUci;
     data.solution_san = validSan;
     console.log(`[LLM] PASS 2: PUZZLE ✓ Valid puzzle | FEN: ${data.fen} | Moves: ${validUci.join(" ")}`);
@@ -2921,11 +2947,16 @@ async function handlePuzzleRequest(question: string, payload: any, llmProvider: 
     const firstParsed = tryParseAndValidate(firstResponse);
     if (firstParsed) return { ok: true, answer: firstParsed };
 
-    console.warn(`[LLM] PASS 2: PUZZLE - Response was not valid JSON, retrying with stricter instruction`);
+    const mateRetryHint = expectedMateDepth !== null
+      ? ` This is a mate-in-${expectedMateDepth} puzzle — the solution MUST have exactly ${expectedMoveCount} moves and the final position MUST be checkmate. Replay every move in your head before responding.`
+      : ``;
+    console.warn(`[LLM] PASS 2: PUZZLE - First attempt invalid, retrying with stricter instruction`);
     messages.push({ role: "assistant", content: firstResponse });
     messages.push({
       role: "user",
-      content: `Respond with ONLY the JSON object — no prose, no markdown fences. ` +
+      content: `Your previous puzzle was rejected because the solution was incorrect or the final position was not checkmate.${mateRetryHint} ` +
+        `Choose a SIMPLER, well-known pattern (back-rank mate, smothered mate, etc.) that you can verify with certainty. ` +
+        `Respond with ONLY the JSON object — no prose, no markdown fences. ` +
         `Keys: "response_type"="Puzzle", "fen" (valid FEN), ` +
         `"solution" (UCI array like ["d5e4","d7e7"]), ` +
         `"difficulty", "explanation" (story + move walkthrough), "hidden_solution"=true.`
@@ -3022,6 +3053,7 @@ interface GameSearchExtracted {
   player?: string;
   opponent?: string;
   result?: string;
+  player_won?: boolean;
   year_from?: number;
   year_to?: number;
 }
@@ -3051,11 +3083,12 @@ async function extractGameSearchParams(
     const p = JSON.parse(raw.trim());
     const validResults = new Set(["1-0", "0-1", "1/2-1/2"]);
     return {
-      player:    typeof p.player   === "string" && p.player.trim()   ? p.player.trim()   : undefined,
-      opponent:  typeof p.opponent === "string" && p.opponent.trim() ? p.opponent.trim() : undefined,
-      result:    validResults.has(p.result)                          ? p.result          : undefined,
-      year_from: Number.isInteger(p.year_from)                       ? p.year_from       : undefined,
-      year_to:   Number.isInteger(p.year_to)                         ? p.year_to         : undefined,
+      player:     typeof p.player   === "string" && p.player.trim()   ? p.player.trim()   : undefined,
+      opponent:   typeof p.opponent === "string" && p.opponent.trim() ? p.opponent.trim() : undefined,
+      result:     validResults.has(p.result)                          ? p.result          : undefined,
+      player_won: p.player_won === true && !validResults.has(p.result) ? true              : undefined,
+      year_from:  Number.isInteger(p.year_from)                       ? p.year_from       : undefined,
+      year_to:    Number.isInteger(p.year_to)                         ? p.year_to         : undefined,
     };
   } catch (err) {
     console.warn(`[LLM] Game search param extraction failed, using regex fallback: ${(err as Error).message}`);
@@ -3146,7 +3179,22 @@ async function handlePlayerGamesRequest(question: string, payload: unknown, llmP
   const searchParams = await extractGameSearchParams(question, llmProvider, llmApiKey, model, baseUrl);
   console.log(`[LLM] PASS 2: PLAYER_GAMES - Search params:`, searchParams);
 
-  const games = searchGames(db, { ...searchParams, limit: 20 });
+  // When player_won=true, fetch a larger candidate set without a result filter then post-filter
+  // to include only games where the named player won (as White: result=1-0, as Black: result=0-1).
+  const { player_won, ...dbParams } = searchParams;
+  const fetchParams = player_won
+    ? { ...dbParams, result: undefined, limit: 200 }
+    : { ...dbParams, limit: 20 };
+
+  let games = searchGames(db, fetchParams);
+
+  if (player_won && searchParams.player) {
+    const pLower = searchParams.player.toLowerCase();
+    games = games.filter(g =>
+      (g.white.toLowerCase().includes(pLower) && g.result === "1-0") ||
+      (g.black.toLowerCase().includes(pLower) && g.result === "0-1")
+    ).slice(0, 20);
+  }
 
   if (games.length === 0) {
     const who = searchParams.opponent
@@ -3169,8 +3217,9 @@ async function handlePlayerGamesRequest(question: string, payload: unknown, llmP
 
   // Build a human-readable summary of the filters applied
   const filterParts: string[] = [];
-  if (searchParams.opponent)   filterParts.push(`vs ${searchParams.opponent}`);
-  if (searchParams.result)     filterParts.push({ "1-0": "White wins", "0-1": "Black wins", "1/2-1/2": "draws" }[searchParams.result] ?? searchParams.result);
+  if (searchParams.opponent)  filterParts.push(`vs ${searchParams.opponent}`);
+  if (player_won)             filterParts.push("wins");
+  else if (searchParams.result) filterParts.push({ "1-0": "White wins", "0-1": "Black wins", "1/2-1/2": "draws" }[searchParams.result] ?? searchParams.result);
   if (searchParams.year_from && searchParams.year_to && searchParams.year_from === searchParams.year_to) {
     filterParts.push(`in ${searchParams.year_from}`);
   } else {
@@ -3392,7 +3441,7 @@ ipcMain.handle("llm:ask-question", async (_event, payload) => {
     });
 
     const classified = parseClassificationRaw(classification);
-    const validCategories = ["ANALYSIS", "PUZZLE", "POSITION", "PLAYER_GAMES", "HISTORIC_GAME", "LOCAL_GAMES", "OTHER", "OPENING_TRAINING", "ENDGAME_TRAINING"];
+    const validCategories = ["ANALYSIS", "PUZZLE", "POSITION", "PLAYER_GAMES", "HISTORIC_GAME", "LOCAL_GAMES", "OTHER", "OPENING_TRAINING", "MIDDLEGAME_ANALYSIS", "ENDGAME_TRAINING"];
     const requestType = validCategories.includes(classified) ? classified : "ANALYSIS";
 
     console.log(`[LLM] PASS 1: Classification Result: "${classified}" (${requestType})`);
@@ -3421,6 +3470,14 @@ ipcMain.handle("llm:ask-question", async (_event, payload) => {
         const runLlmOpening = ({ messages, timeoutMs, responseFormat }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number; responseFormat?: Record<string, any> }) =>
           runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat, includeTools: false });
         result = await handleOpeningRequest(question, convHistory, runLlmOpening);
+        break;
+      }
+      case "MIDDLEGAME_ANALYSIS": {
+        const convHistory = Array.isArray(payload?.conversationHistory) ? (payload.conversationHistory as ConversationMessage[]) : [];
+        const currentFen = typeof payload?.fen === "string" ? payload.fen : undefined;
+        const runLlmMiddlegame = ({ messages, timeoutMs, responseFormat }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number; responseFormat?: Record<string, any> }) =>
+          runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat, includeTools: false });
+        result = await handleMiddlegameRequest(question, convHistory, currentFen, runLlmMiddlegame);
         break;
       }
       case "ENDGAME_TRAINING": {

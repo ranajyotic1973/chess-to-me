@@ -14,7 +14,7 @@ export const CLASSIFIER_RESPONSE_FORMAT = {
       properties: {
         category: {
           type: "string",
-          enum: ["ANALYSIS", "PUZZLE", "POSITION", "PLAYER_GAMES", "HISTORIC_GAME", "LOCAL_GAMES", "OTHER", "OPENING_TRAINING", "ENDGAME_TRAINING"]
+          enum: ["ANALYSIS", "PUZZLE", "POSITION", "PLAYER_GAMES", "HISTORIC_GAME", "LOCAL_GAMES", "OTHER", "OPENING_TRAINING", "MIDDLEGAME_ANALYSIS", "ENDGAME_TRAINING"]
         }
       },
       required: ["category"],
@@ -53,11 +53,12 @@ export const GAME_SEARCH_PARAMS_FORMAT = {
     schema: {
       type: "object",
       properties: {
-        player:    { type: "string",  description: "Primary player name as likely stored in a chess DB (e.g. 'Kasparov', 'Carlsen')" },
-        opponent:  { type: "string",  description: "Second player when query is about games between two specific players" },
-        result:    { type: "string",  enum: ["1-0", "0-1", "1/2-1/2"], description: "Game result filter" },
-        year_from: { type: "integer", description: "Earliest year (inclusive)" },
-        year_to:   { type: "integer", description: "Latest year (inclusive)" }
+        player:     { type: "string",  description: "Primary player name as likely stored in a chess DB (e.g. 'Kasparov', 'Carlsen')" },
+        opponent:   { type: "string",  description: "Second player when query is about games between two specific players" },
+        result:     { type: "string",  enum: ["1-0", "0-1", "1/2-1/2"], description: "Game result filter — use only when color is explicit (e.g. 'as white'). 1-0 = White won, 0-1 = Black won, 1/2-1/2 = draw" },
+        player_won: { type: "boolean", description: "True when user asks for wins by the primary player regardless of which color they played" },
+        year_from:  { type: "integer", description: "Earliest year (inclusive)" },
+        year_to:    { type: "integer", description: "Latest year (inclusive)" }
       },
       required: ["player"]
     }
@@ -74,17 +75,23 @@ export const JSON_OBJECT_FORMAT = { type: "json_object" };
 export const GAME_SEARCH_SYSTEM_PROMPT =
   `Extract chess game search parameters from the user's query and respond with JSON only.
 
+Chess scoring: "1-0" means White won; "0-1" means Black won; "1/2-1/2" means draw.
+In the database each game is stored as White vs Black, where White is the player who had the white pieces.
+
 Fields:
 - player (required): primary player name as it likely appears in a chess database — use last name or "Lastname, Firstname" form (e.g. "Kasparov", "Carlsen", "Tal")
 - opponent (optional): second player when the query asks for games between two specific players
-- result (optional): "1-0" if the user asks for wins for the primary player as White, "0-1" for wins as Black, "1/2-1/2" for draws — omit if not specified
+- result (optional): filter by exact result — "1-0" (White won), "0-1" (Black won), "1/2-1/2" (draw). Use ONLY when the user explicitly mentions a color (e.g. "as white", "playing black"). Do NOT use for general "player won" queries without color context.
+- player_won (optional): set to true when the user asks for wins by the named player regardless of which color they played. Do not combine with result.
 - year_from (optional): earliest year as an integer
 - year_to (optional): latest year as an integer
 
 Examples:
 "show me Kasparov games" → {"player":"Kasparov"}
 "games between Magnus and Karpov" → {"player":"Carlsen","opponent":"Karpov"}
-"Kasparov wins against Karpov from 1984 to 1986" → {"player":"Kasparov","opponent":"Karpov","result":"1-0","year_from":1984,"year_to":1986}
+"games of Magnus where he won" → {"player":"Carlsen","player_won":true}
+"Kasparov wins as white against Karpov 1984-1986" → {"player":"Kasparov","opponent":"Karpov","result":"1-0","year_from":1984,"year_to":1986}
+"Tal wins as black in 1960" → {"player":"Tal","result":"0-1","year_from":1960,"year_to":1960}
 "Tal draws in 1960" → {"player":"Tal","result":"1/2-1/2","year_from":1960,"year_to":1960}`;
 
 // ============================================================================
@@ -93,14 +100,15 @@ Examples:
 
 export const CLASSIFIER_SYSTEM_PROMPT =
   `Classify the chess request into exactly one category:
-- ANALYSIS: position evaluation, best moves, engine lines, tactical analysis
-- PUZZLE: create or generate a chess puzzle or tactical problem
-- POSITION: create or describe a chess position
+- ANALYSIS: pure engine evaluation or move calculation — "what's the best move?", "evaluate this position", "what does the engine think?", tactical calculation requests
+- PUZZLE: generate or solve a chess puzzle or tactical problem
+- POSITION: create or set up a chess position on the board
 - PLAYER_GAMES: games by a specific named player (e.g. "Carlsen's games") OR selecting a game by number from a previously shown list (user types just "1", "2", etc.)
 - HISTORIC_GAME: famous or historical games from tournaments
 - LOCAL_GAMES: user's own local chess game files
-- OPENING_TRAINING: teach or explain a specific chess opening, e.g. "teach me the Sicilian", "show me the Ruy Lopez", "opening for white", "how does the King's Indian start"
-- ENDGAME_TRAINING: teach or practice a chess endgame technique, e.g. "endgame practice", "King and Pawn endgame", "how to checkmate with a rook", "Rook and Pawn vs King", "teach me endgame"
+- OPENING_TRAINING: anything about the opening phase — teach me an opening, opening theory, first moves, opening principles, "how does the Sicilian start", "what's a good opening for White", "explain the Ruy Lopez", "opening for kids"
+- MIDDLEGAME_ANALYSIS: anything about the middlegame phase — plans and strategy in the middle of the game, pawn structures, piece activity, attack and defence ideas, "what's the plan here?", "how do I attack?", "teach me middlegame strategy", "explain this middlegame position", "how do I improve my pieces?"
+- ENDGAME_TRAINING: anything about the endgame phase — endgame technique, king and pawn endings, rook endgames, theoretical positions, "how to checkmate with a rook", "teach me endgame", "how do I win this endgame?", "explain the Lucena position"
 - OTHER: not chess-related`;
 
 // ============================================================================
@@ -143,15 +151,52 @@ Return a JSON object with these optional fields:
 Single rating → minRating=rating-200, maxRating=rating+200. No constraints → {}.`;
 
 export const PUZZLE_GENERATION_SYSTEM_PROMPT =
-  `Generate a legal chess puzzle with these fields:
-- fen: a valid FEN position loadable by chess.js
-- solution: array of legal UCI moves from the FEN (e.g. ["d5e4","e5e6","e7e8q"])
-- solution_san: same moves in Standard Algebraic Notation (e.g. ["Nxe4","e6","e8=Q"])
-- difficulty: "easy", "medium", or "hard"
-- explanation: position story, tactical theme, and step-by-step walkthrough using SAN notation
-- hidden_solution: always true
+  `You are a chess puzzle generator for children aged 4–18. Generate exactly ONE legal chess puzzle.
 
-Every solution move must be legal given the FEN and all prior moves.`;
+━━━ SOLUTION ACCURACY IS MANDATORY ━━━
+
+MOVE COUNT RULES — follow exactly:
+• Mate in 1 → solution has 1 move  (attacker mates immediately)
+• Mate in 2 → solution has 3 moves (attacker, defender best reply, attacker mates)
+• Mate in 3 → solution has 5 moves (attacker, defender, attacker, defender, attacker mates)
+• Mate in N → solution has 2N−1 moves total
+The FINAL move MUST leave the king in check with zero legal escape squares (checkmate).
+The defender moves in between are the STRONGEST resistance — include them.
+
+SELF-VERIFICATION (mandatory before writing the JSON):
+1. Draw or visualise the board from the FEN
+2. Play each solution move in sequence
+3. After each move ask: "Is this move legal? Who is to move next?"
+4. After the last move ask: "Is the king in check? Can it move? Can a piece block? Can the checking piece be taken?" — all three escapes must be impossible
+5. If any step fails, choose a different, simpler combination
+
+PREFER KNOWN TACTICAL PATTERNS (easier to verify):
+• Back-rank mate — rook or queen slides to the back rank, king blocked by its own pawns
+• Smothered mate — knight delivers check, the king is smothered by its own pieces
+• Arabian mate — rook and knight cooperating in the corner
+• Anastasia's mate — knight cuts off escape, rook delivers check on the h-file
+• Legal's mate — queen sacrifice followed by a knight-and-bishop net
+• Simple queen sacrifice + rook mate
+
+A CORRECT simple puzzle beats an INCORRECT complex one. When in doubt, choose simpler.
+
+FEN RULES:
+• Use a realistic, reachable position — not random piece placement
+• The side to move in the FEN is the side that delivers the first move of the solution
+• Do not place pieces on illegal squares or create impossible castling rights
+
+JSON response (no extra text, no markdown fences):
+{
+  "response_type": "Puzzle",
+  "fen": "<valid FEN>",
+  "solution": ["<UCI move 1>", "<UCI move 2>", ...],
+  "solution_san": ["<SAN move 1>", "<SAN move 2>", ...],
+  "difficulty": "easy" | "medium" | "hard",
+  "explanation": "<tactical theme + encouraging step-by-step walkthrough in SAN for children>",
+  "hidden_solution": true
+}
+
+UCI format: source-square + destination-square + optional promotion (e.g. "e2e4", "d1h5", "e7e8q").`;
 
 /** Map raw Lichess theme tags to child-friendly descriptions */
 const THEME_LABELS: Record<string, string> = {

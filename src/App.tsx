@@ -113,29 +113,11 @@ function PlayerBar({ name, elo, pieceColor }: { name: string; elo?: number; piec
   const pawn = pieceColor === "white" ? "♙" : "♟";
   const eloLabel = elo && elo > 0 ? ` (${elo})` : "";
   return (
-    <Box
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        gap: 0.75,
-        px: 1.5,
-        py: 0.5,
-        borderRadius: 1,
-        bgcolor: pieceColor === "white" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.25)",
-        border: "1px solid",
-        borderColor: pieceColor === "white" ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.4)",
-        maxWidth: "100%",
-        overflow: "hidden",
-      }}
-    >
+    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, px: 1, py: 0.375 }}>
       <Typography component="span" sx={{ fontSize: "1rem", lineHeight: 1, userSelect: "none" }}>
         {pawn}
       </Typography>
-      <Typography
-        variant="body2"
-        noWrap
-        sx={{ fontWeight: 600, fontSize: "0.82rem", letterSpacing: 0.2 }}
-      >
+      <Typography variant="body2" noWrap sx={{ fontWeight: 600, fontSize: "0.82rem" }}>
         {name}{eloLabel}
       </Typography>
     </Box>
@@ -176,6 +158,7 @@ const normalizeModelName = (value: string | null | undefined): string => String(
 function deriveConversationMode(responseType: string, isGameMode: boolean): string {
   if (responseType === "Puzzle") return "puzzle";
   if (responseType === "Opening") return "opening";
+  if (responseType === "Middlegame") return "middlegame";
   if (responseType === "Endgame") return "endgame";
   if (isGameMode || responseType === "GameList" || responseType === "Game") return "game";
   return "analysis";
@@ -681,6 +664,7 @@ export default function App() {
   useEffect(() => {
     if (!trainingStartFen) return;
     const mode = currentResponseType === "Opening" ? "opening"
+      : currentResponseType === "Middlegame" ? "middlegame"
       : currentResponseType === "Endgame" ? "endgame"
       : null;
     if (!mode) return;
@@ -936,7 +920,7 @@ export default function App() {
     // Training agent navigation (Opening / Endgame)
     // Right arrow = advance to next move (consistent with game mode)
     // Left arrow  = retreat to previous position
-    if ((currentResponseType === "Opening" || currentResponseType === "Endgame") && trainingMoves.length > 0) {
+    if ((currentResponseType === "Opening" || currentResponseType === "Middlegame" || currentResponseType === "Endgame") && trainingMoves.length > 0) {
       event.preventDefault();
       if (event.key === "ArrowRight") {
         // Advance to next training move
@@ -1065,7 +1049,7 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    const trainingActive = (currentResponseType === "Opening" || currentResponseType === "Endgame") && trainingMoves.length > 0;
+    const trainingActive = (currentResponseType === "Opening" || currentResponseType === "Middlegame" || currentResponseType === "Endgame") && trainingMoves.length > 0;
     if (selectedEngineLineIndex === null && !puzzleNavigationMode && !gameMode && !trainingActive) {
       return;
     }
@@ -1599,8 +1583,6 @@ export default function App() {
       whiteElo: game.white_elo > 0 ? game.white_elo : undefined,
       blackElo: game.black_elo > 0 ? game.black_elo : undefined,
     });
-    gameListRef.current = null;
-    setGameList(null);
     setShowSolution(false);
     setAnalysisLines([]);
     setSelectedEngineLineIndex(null);
@@ -1862,7 +1844,7 @@ export default function App() {
 
       // Display the explanation/answer.
       // For training responses the story is shown first; navigation hint follows.
-      const isTraining = finalResponseType === "Opening" || finalResponseType === "Endgame";
+      const isTraining = finalResponseType === "Opening" || finalResponseType === "Middlegame" || finalResponseType === "Endgame";
       const displayText = isTraining
         ? ((parsedResponse as any).story || parsedResponse.explanation || "Ready! Press → to step through the moves.")
         : (parsedResponse.explanation || parsedResponse.answer || "No answer returned.");
@@ -1923,7 +1905,7 @@ export default function App() {
         } catch (fenError) {
           setStatusMessage(`Invalid FEN in response: ${(fenError as Error).message}`);
         }
-      } else if (finalResponseType === "Opening" || finalResponseType === "Endgame") {
+      } else if (finalResponseType === "Opening" || finalResponseType === "Middlegame" || finalResponseType === "Endgame") {
         const movesArr = Array.isArray(parsedResponse.moves) ? parsedResponse.moves : [];
         const startFen = parsedResponse.fen || "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
         setTrainingMoves(movesArr);
@@ -2061,14 +2043,15 @@ export default function App() {
     const width = windowSize.width || 1280;
     const height = windowSize.height || 720;
     const horizontalPadding = 48;
-    const verticalPadding = 96;
+    // root pt(24) + status bar(26) + content flex gap(16) + board chrome: PlayerBars+ECO+toolbar(110) = 176
+    const verticalPadding = 176;
     const usableWidth = Math.max(360, width - horizontalPadding);
     const usableHeight = Math.max(360, height - verticalPadding);
     const boardWidth = usableWidth * 0.6;
     const dimension = Math.min(boardWidth, usableHeight, 760);
     return { width: dimension, height: dimension };
   }, [windowSize.width, windowSize.height]);
-  const layoutHeight = useMemo(() => boardSize.height + 64, [boardSize.height]);
+  const layoutHeight = useMemo(() => boardSize.height + 110, [boardSize.height]);
   const isWideLayout = useMemo(() => {
     const width = windowSize.width || 1280;
     return width >= 1024;
@@ -2081,13 +2064,13 @@ export default function App() {
     <Box
       sx={{
         position: "relative",
-        minHeight: "100vh",
         height: "100vh",
         width: "100%",
+        display: "flex",
+        flexDirection: "column",
         background: "linear-gradient(160deg, #e4e8f4 0%, #f3f3f1 45%, #f2ede4 100%)",
         px: { xs: 2, md: 4 },
         pt: { xs: 2, md: 3 },
-        pb: "30px",
         overflow: "hidden"
       }}
     >
@@ -2126,11 +2109,13 @@ export default function App() {
       {viewMode === "settings" || !engineStatus?.configured ? (
         <Box
           sx={{
-            height: "100%",
-            overflow: "hidden",
+            flex: 1,
+            minHeight: 0,
+            overflowY: "auto",
+            overflowX: "hidden",
             display: "flex",
             justifyContent: "center",
-            alignItems: "stretch",
+            alignItems: "flex-start",
             px: { xs: 1, md: 3 },
             py: { xs: 1, md: 2 }
           }}
@@ -2138,8 +2123,6 @@ export default function App() {
           <Container
             maxWidth="md"
             sx={{
-              height: "100%",
-              overflow: "hidden",
               display: "flex",
               alignItems: "stretch"
             }}
@@ -2593,6 +2576,26 @@ export default function App() {
                   gameMode={gameMode}
                   gameMoveIndex={gameMoveIndex}
                   gameTotalMoves={gamePgnFens.length}
+                  gameList={gameList}
+                  onGameSelect={(idx) => {
+                    const game = gameList?.[idx];
+                    if (!game) return;
+                    const loaded = loadGameFromRow(game);
+                    if (!loaded) {
+                      setQuestionResponse("Sorry, I couldn't parse the moves for that game.");
+                    } else {
+                      setCurrentResponseType("Game");
+                      setQuestionResponse("");
+                    }
+                  }}
+                  onBackToGameList={() => {
+                    setGameMode(false);
+                    setCurrentResponseType("GameList");
+                    setCurrentGameInfo(null);
+                    setGamePgnFens([]);
+                    setCurrentFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+                    setAnalysisLines([]);
+                  }}
                   advancedAnalysisMode={advancedAnalysisMode}
                   deepAnalysisResults={deepAnalysisResults}
                   deepAnalysisLoading={deepAnalysisLoading}

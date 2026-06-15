@@ -237,7 +237,7 @@ ollama pull qwen3:14b
 The chess board is shown in the centre of the screen. You can:
 
 - **Load any position** — type or paste a FEN string to jump to any board position.
-- **Step through engine lines** — the engine shows up to 4 best moves with their evaluations. Click any line to walk through it on the board with the ← → arrow keys.
+- **Step through engine lines** — the engine shows up to 4 best moves with their evaluations. Click any line to walk through it on the board with the ← → arrow keys (see [Keyboard Shortcuts](#keyboard-shortcuts)).
 - **Ask about the position** — type a question in the chat box (e.g. *"Why is this position good for White?"* or *"What should I play next?"*) and get a plain-language explanation.
 
 ### Puzzle Training
@@ -265,9 +265,60 @@ You can search and replay games from a local database of master-level games. Ask
 - *"Find a game where Carlsen beat Nakamura"*
 - *"I want to see a King's Indian game"*
 
-The app returns a list of matching games. Type the **number** of the game you want to load, and it appears on the board with the players' names and ratings shown above and below the board. Use the ← → arrow keys to step through the moves.
+The app returns a clickable list of matching games. Click any game to load it on the board with the players' names and ratings shown above and below the board.
 
 > The games database is not included in the installer due to its size. See [Setting up the Games Database](#setting-up-the-games-database) below.
+
+### Opening Training
+
+Ask the chat about any opening and the app enters Opening Training mode. For example:
+
+- *"Teach me the Sicilian Defence"*
+- *"What's a good opening for White?"*
+- *"Explain the Ruy Lopez"*
+- *"Show me a good opening for kids"*
+
+A dedicated opening coach walks you through the main line of the opening move by move, starting from the initial position. Each move includes a child-friendly explanation of the strategic idea — why that square, why that piece — plus real stories about famous grandmasters and tournaments where the opening was played. Use the ← → arrow keys to step through the moves at your own pace, and ask follow-up questions at any time.
+
+Children benefit from learning openings early because good opening play leads to comfortable middlegame positions. The coach introduces technical terms like "development" and "center control" but always defines them simply the first time they appear.
+
+### Middlegame Training
+
+Ask about plans, strategy, or the middle game and the app switches to Middlegame Training mode. For example:
+
+- *"What's the plan here?"*
+- *"How do I attack?"*
+- *"Teach me about pawn structures"*
+- *"How do I improve my pieces?"*
+
+The coach looks at the **current board position** and explains the key strategic ideas specific to what you see on the board — which pieces are active, what the pawn structure means for both sides, how to build an attack, or how to defend. Illustrative moves are shown step by step so you can follow the plan on the board.
+
+The middlegame is where most games are decided, and it is often the hardest phase for improving players to understand. The Middlegame agent focuses on plans and long-term thinking rather than single-move calculation, which is covered by the engine analysis lines.
+
+### Endgame Training
+
+Ask about endgame technique and the app opens an Endgame Training session. For example:
+
+- *"Teach me king and pawn endings"*
+- *"How do I checkmate with a rook?"*
+- *"Explain the Lucena position"*
+- *"How do I win this endgame?"*
+
+A dedicated endgame coach sets up the relevant theoretical position on the board and demonstrates the correct winning or drawing technique from both sides, move by move. Explanations are encouraging and define technical terms — zugzwang, opposition, key squares, Philidor position — the moment they appear, so children build vocabulary naturally.
+
+Endgames are often neglected by beginners but are essential for converting advantages into wins. Understanding even a few core endgame principles (king activity, passed pawns, opposition) has an outsized effect on results.
+
+---
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| **→ (Right arrow)** | Advance one move (engine lines, puzzle solutions, master games) |
+| **← (Left arrow)** | Go back one move |
+| **Enter** | Submit your typed move or question |
+
+These shortcuts work whenever a game, puzzle solution, or engine line is loaded on the board. You can also ask a question about any position at any point while navigating — just type in the chat box.
 
 ---
 
@@ -322,16 +373,6 @@ The master games database is not bundled with the installer because it can be ve
 5. Once complete, the game count is displayed and games search is ready.
 
 > If you ask for games while the import is still running, the app will tell you the current progress and ask you to try again shortly.
-
----
-
-## Keyboard Shortcuts
-
-| Key | Action |
-|-----|--------|
-| **← Left arrow** | Previous move (when stepping through an engine line or game) |
-| **→ Right arrow** | Next move |
-| **Enter** | Submit chat message |
 
 ---
 
