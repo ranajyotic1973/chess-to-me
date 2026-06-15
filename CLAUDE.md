@@ -35,3 +35,11 @@ Tests live alongside the code they test (e.g. `src/utils/foo.ts` → `src/utils/
 ### Architecture
 - The Electron main process (`electron/main.ts`) owns all LLM routing and classification (PASS 1 + PASS 2). The renderer must not duplicate classification logic.
 - Engine analysis (LC0 / Stockfish) is run in the main process. The renderer passes the current FEN; the main process decides whether engine lines are needed.
+
+### Web Asset Paths — Relative Only
+This is an Electron application. In production the renderer is loaded from an ASAR bundle via `file://`, so absolute web paths (e.g. `/assets/foo.js`, `/chesspieces/wK.png`) resolve against the filesystem root and fail silently, causing blank screens or missing images.
+
+- **Never use an absolute path** (leading `/`) for any web asset: scripts, stylesheets, images, fonts, or any `src`/`href`/`url()` value in renderer code.
+- Always use **relative paths** (`./`, `../`) in TSX/CSS/HTML for anything that is loaded by the browser context.
+- `vite.config.ts` must keep `base: "./"` — do not remove or change this.
+- Native OS filesystem paths in the Electron main process (`electron/main.ts`, `electron/preload.ts`) are unaffected by this rule; they are not web URLs.
