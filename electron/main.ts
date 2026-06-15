@@ -1995,10 +1995,13 @@ function getLlmToolDefinitions(): Array<{
       inputSchema: {
         type: "object",
         properties: {
-          player: { type: "string", description: "Player name to search for (partial match, e.g. 'Carlsen', 'Kasparov')" },
-          eco: { type: "string", description: "ECO opening code to filter by (optional, e.g. 'B20' for Sicilian)" },
-          min_elo: { type: "number", description: "Minimum Elo rating filter (optional)" },
-          limit: { type: "number", description: "Maximum number of games to return (optional, default 5)" }
+          player:           { type: "string", description: "Player name to search for (partial match, e.g. 'Carlsen', 'Kasparov')" },
+          eco:              { type: "string", description: "ECO opening code to filter by (optional, e.g. 'B20' for Sicilian)" },
+          min_elo:          { type: "number", description: "Minimum Elo rating filter (optional)" },
+          limit:            { type: "number", description: "Maximum number of games to return (optional, default 5)" },
+          opening_name:     { type: "string", description: "Opening name to filter by (partial match, e.g. 'Sicilian Defense', 'Ruy Lopez')" },
+          first_move_white: { type: "string", description: "White's first move in SAN notation (e.g. 'e4', 'd4', 'Nf3', 'c4')" },
+          first_move_black: { type: "string", description: "Black's first move in SAN notation (e.g. 'e5', 'c5', 'd5', 'Nf6')" }
         },
         required: ["player"]
       }
@@ -2046,7 +2049,10 @@ async function executeTool(toolName: string, args: Record<string, any>): Promise
             player: args.player,
             eco: args.eco,
             minElo: args.min_elo,
-            limit: args.limit || 5
+            limit: args.limit || 5,
+            opening_name: args.opening_name,
+            first_move_white: args.first_move_white,
+            first_move_black: args.first_move_black,
           });
           result = { ok: true, games, count: games.length };
         }
@@ -3056,6 +3062,9 @@ interface GameSearchExtracted {
   player_won?: boolean;
   year_from?: number;
   year_to?: number;
+  opening_name?: string;
+  first_move_white?: string;
+  first_move_black?: string;
 }
 
 async function extractGameSearchParams(
@@ -3083,12 +3092,15 @@ async function extractGameSearchParams(
     const p = JSON.parse(raw.trim());
     const validResults = new Set(["1-0", "0-1", "1/2-1/2"]);
     return {
-      player:     typeof p.player   === "string" && p.player.trim()   ? p.player.trim()   : undefined,
-      opponent:   typeof p.opponent === "string" && p.opponent.trim() ? p.opponent.trim() : undefined,
-      result:     validResults.has(p.result)                          ? p.result          : undefined,
-      player_won: p.player_won === true && !validResults.has(p.result) ? true              : undefined,
-      year_from:  Number.isInteger(p.year_from)                       ? p.year_from       : undefined,
-      year_to:    Number.isInteger(p.year_to)                         ? p.year_to         : undefined,
+      player:           typeof p.player          === "string" && p.player.trim()          ? p.player.trim()          : undefined,
+      opponent:         typeof p.opponent        === "string" && p.opponent.trim()        ? p.opponent.trim()        : undefined,
+      result:           validResults.has(p.result)                                        ? p.result                 : undefined,
+      player_won:       p.player_won === true && !validResults.has(p.result)             ? true                     : undefined,
+      year_from:        Number.isInteger(p.year_from)                                     ? p.year_from              : undefined,
+      year_to:          Number.isInteger(p.year_to)                                       ? p.year_to                : undefined,
+      opening_name:     typeof p.opening_name    === "string" && p.opening_name.trim()   ? p.opening_name.trim()    : undefined,
+      first_move_white: typeof p.first_move_white === "string" && p.first_move_white.trim() ? p.first_move_white.trim() : undefined,
+      first_move_black: typeof p.first_move_black === "string" && p.first_move_black.trim() ? p.first_move_black.trim() : undefined,
     };
   } catch (err) {
     console.warn(`[LLM] Game search param extraction failed, using regex fallback: ${(err as Error).message}`);
@@ -3217,9 +3229,12 @@ async function handlePlayerGamesRequest(question: string, payload: unknown, llmP
 
   // Build a human-readable summary of the filters applied
   const filterParts: string[] = [];
-  if (searchParams.opponent)  filterParts.push(`vs ${searchParams.opponent}`);
-  if (player_won)             filterParts.push("wins");
-  else if (searchParams.result) filterParts.push({ "1-0": "White wins", "0-1": "Black wins", "1/2-1/2": "draws" }[searchParams.result] ?? searchParams.result);
+  if (searchParams.opponent)        filterParts.push(`vs ${searchParams.opponent}`);
+  if (player_won)                   filterParts.push("wins");
+  else if (searchParams.result)     filterParts.push({ "1-0": "White wins", "0-1": "Black wins", "1/2-1/2": "draws" }[searchParams.result] ?? searchParams.result);
+  if (searchParams.opening_name)    filterParts.push(`opening: ${searchParams.opening_name}`);
+  if (searchParams.first_move_white) filterParts.push(`1. ${searchParams.first_move_white}`);
+  if (searchParams.first_move_black) filterParts.push(`1...${searchParams.first_move_black}`);
   if (searchParams.year_from && searchParams.year_to && searchParams.year_from === searchParams.year_to) {
     filterParts.push(`in ${searchParams.year_from}`);
   } else {
@@ -3350,68 +3365,7 @@ ipcMain.handle("llm:ask-question", async (_event, payload) => {
   const baseUrl = (payload?.baseUrl || (llmProvider === "ollama" ? settings.get("ollamaBaseUrl") : null) || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
 
   try {
-    // PASS 1a: Regex pre-screen for training intents — avoids an LLM round-trip for clear signals
-    const lq = question.toLowerCase();
-    const openingTrainingSignals = [
-      /teach me (an? |the )?opening/i,
-      /show me (the |an? )?opening/i,
-      /show me (the |a )?\w[\w\s]+ (defense|defence|opening|gambit|attack)/i,
-      /i want to (learn|practice) (the |an? )?\w[\w\s]+ (defense|defence|opening|gambit)/i,
-      /how does (the |a )?\w[\w\s]+ (defense|defence|opening|gambit) start/i,
-      /opening for (white|black)/i,
-      /play the \w[\w\s]+ (defense|defence|opening|gambit)/i,
-      /teach me (the |a )?\w[\w\s]+ (defense|defence|opening|gambit)/i,
-      /teach me (the |a )?(?!.*\bendgame\b)\w[\w\s'-]+/i,
-    ];
-    const endgameTrainingSignals = [
-      /endgame (practice|training|lesson)/i,
-      /end game (practice|training|lesson)/i,
-      /teach me (a |an )?\w[\w\s]* endgame/i,
-      /teach me endgame/i,
-      /practice (a |an )?\w[\w\s]* endgame/i,
-      /(rook|queen|bishop|knight|pawn) (and|vs?\.?) (rook|queen|bishop|knight|pawn|king) endgame/i,
-      /king and (rook|pawn|queen|bishop|knight) endgame/i,
-      /how (do i|to) checkmate with (a |an )?\w[\w\s]*/i,
-      /\w[\w\s]* (and|vs?\.?) \w[\w\s]* endgame/i,
-      /show me (a |an )?\w[\w\s]* endgame/i,
-    ];
-
-    const isOpeningTraining = openingTrainingSignals.some(re => re.test(question));
-    const isEndgameTraining = !isOpeningTraining && endgameTrainingSignals.some(re => re.test(question));
-
-    if (isOpeningTraining) {
-      console.log(`[LLM] Pre-screen: opening_training → direct route (no PASS 1 call)`);
-      const conversationHistory = Array.isArray(payload?.conversationHistory)
-        ? (payload.conversationHistory as ConversationMessage[])
-        : [];
-      const runLlm = ({ messages, timeoutMs, responseFormat }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number; responseFormat?: Record<string, any> }) =>
-        runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat, includeTools: false });
-      const result = await handleOpeningRequest(question, conversationHistory, runLlm);
-      if (result.ok) {
-        console.log(`[LLM] ✓ Complete (Type: OPENING_TRAINING) | Provider: ${llmProvider}`);
-      } else {
-        console.error(`[LLM] ✗ Failed (Type: OPENING_TRAINING) | Error: ${result.error}`);
-      }
-      return result;
-    }
-
-    if (isEndgameTraining) {
-      console.log(`[LLM] Pre-screen: endgame_training → direct route (no PASS 1 call)`);
-      const conversationHistory = Array.isArray(payload?.conversationHistory)
-        ? (payload.conversationHistory as ConversationMessage[])
-        : [];
-      const runLlm = ({ messages, timeoutMs, responseFormat }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number; responseFormat?: Record<string, any> }) =>
-        runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat, includeTools: false });
-      const result = await handleEndgameRequest(question, conversationHistory, runLlm);
-      if (result.ok) {
-        console.log(`[LLM] ✓ Complete (Type: ENDGAME_TRAINING) | Provider: ${llmProvider}`);
-      } else {
-        console.error(`[LLM] ✗ Failed (Type: ENDGAME_TRAINING) | Error: ${result.error}`);
-      }
-      return result;
-    }
-
-    // PASS 1: Classify the request
+    // PASS 1: Classify the request (LLM decides intent — no keyword pre-screening)
     console.log(`[LLM] PASS 1: Classification - Starting | Provider: ${llmProvider} | Model: ${model} | Question: "${question.substring(0, 60)}..."`);
 
     // Include last 4 conversation turns so the classifier has context for

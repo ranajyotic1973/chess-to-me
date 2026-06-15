@@ -482,6 +482,9 @@ export interface GameSearchParams {
   eco?: string;
   minElo?: number;
   limit?: number;
+  opening_name?: string;
+  first_move_white?: string;
+  first_move_black?: string;
 }
 
 // ============================================================================

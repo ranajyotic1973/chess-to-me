@@ -34,9 +34,19 @@ export default function SelectableList({
   if (selectedId !== null) {
     return (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-        <Box sx={{ display: "flex", alignItems: "center" }}>
-          <Tooltip title="Back">
-            <IconButton size="small" onClick={onBack} aria-label="back">
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            position: "sticky",
+            top: 0,
+            zIndex: 1,
+            bgcolor: "background.paper",
+            pb: 0.5,
+          }}
+        >
+          <Tooltip title="Back to list">
+            <IconButton size="small" onClick={onBack} aria-label="back to list">
               <ArrowBackIcon fontSize="small" />
             </IconButton>
           </Tooltip>

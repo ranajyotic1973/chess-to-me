@@ -1837,6 +1837,13 @@ export default function App() {
       setCurrentResponseType(finalResponseType);
       setCurrentResponseData(parsedResponse);
 
+      // Clear game list when switching to a non-game mode so the list doesn't linger
+      const isModeSwitching = ["Puzzle", "Position", "Opening", "Middlegame", "Endgame"].includes(finalResponseType);
+      if (isModeSwitching) {
+        setGameList(null);
+        gameListRef.current = null;
+      }
+
       // Update analysis lines if engine was used
       if (engineAnalysisLines.length > 0) {
         setAnalysisLines(engineAnalysisLines);

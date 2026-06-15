@@ -53,12 +53,15 @@ export const GAME_SEARCH_PARAMS_FORMAT = {
     schema: {
       type: "object",
       properties: {
-        player:     { type: "string",  description: "Primary player name as likely stored in a chess DB (e.g. 'Kasparov', 'Carlsen')" },
-        opponent:   { type: "string",  description: "Second player when query is about games between two specific players" },
-        result:     { type: "string",  enum: ["1-0", "0-1", "1/2-1/2"], description: "Game result filter — use only when color is explicit (e.g. 'as white'). 1-0 = White won, 0-1 = Black won, 1/2-1/2 = draw" },
-        player_won: { type: "boolean", description: "True when user asks for wins by the primary player regardless of which color they played" },
-        year_from:  { type: "integer", description: "Earliest year (inclusive)" },
-        year_to:    { type: "integer", description: "Latest year (inclusive)" }
+        player:            { type: "string",  description: "Primary player name as likely stored in a chess DB (e.g. 'Kasparov', 'Carlsen')" },
+        opponent:          { type: "string",  description: "Second player when query is about games between two specific players" },
+        result:            { type: "string",  enum: ["1-0", "0-1", "1/2-1/2"], description: "Game result filter — use only when color is explicit (e.g. 'as white'). 1-0 = White won, 0-1 = Black won, 1/2-1/2 = draw" },
+        player_won:        { type: "boolean", description: "True when user asks for wins by the primary player regardless of which color they played" },
+        year_from:         { type: "integer", description: "Earliest year (inclusive)" },
+        year_to:           { type: "integer", description: "Latest year (inclusive)" },
+        opening_name:      { type: "string",  description: "Opening name to filter by (partial match, e.g. 'Sicilian', 'Ruy Lopez', 'King\\'s Indian')" },
+        first_move_white:  { type: "string",  description: "White's first move in SAN notation (e.g. 'e4', 'd4', 'Nf3', 'c4')" },
+        first_move_black:  { type: "string",  description: "Black's first move in SAN notation (e.g. 'e5', 'c5', 'd5', 'Nf6')" }
       },
       required: ["player"]
     }
@@ -85,6 +88,9 @@ Fields:
 - player_won (optional): set to true when the user asks for wins by the named player regardless of which color they played. Do not combine with result.
 - year_from (optional): earliest year as an integer
 - year_to (optional): latest year as an integer
+- opening_name (optional): partial opening name when user asks for games in a specific opening (e.g. "Sicilian", "Ruy Lopez", "King's Indian Defense")
+- first_move_white (optional): White's first move in SAN when user asks about games starting with a specific White first move (e.g. "e4", "d4", "Nf3", "c4")
+- first_move_black (optional): Black's first move in SAN when user asks about games with a specific Black response (e.g. "e5", "c5", "d5", "Nf6")
 
 Examples:
 "show me Kasparov games" → {"player":"Kasparov"}
@@ -92,24 +98,35 @@ Examples:
 "games of Magnus where he won" → {"player":"Carlsen","player_won":true}
 "Kasparov wins as white against Karpov 1984-1986" → {"player":"Kasparov","opponent":"Karpov","result":"1-0","year_from":1984,"year_to":1986}
 "Tal wins as black in 1960" → {"player":"Tal","result":"0-1","year_from":1960,"year_to":1960}
-"Tal draws in 1960" → {"player":"Tal","result":"1/2-1/2","year_from":1960,"year_to":1960}`;
+"Carlsen Sicilian Defense games" → {"player":"Carlsen","opening_name":"Sicilian"}
+"Kasparov games starting with e4" → {"player":"Kasparov","first_move_white":"e4"}
+"show me Fischer games where opponent played e5 against his e4" → {"player":"Fischer","first_move_white":"e4","first_move_black":"e5"}
+"Karpov's Ruy Lopez games as white" → {"player":"Karpov","opening_name":"Ruy Lopez","result":"1-0"}`;
 
 // ============================================================================
 // Classifier
 // ============================================================================
 
 export const CLASSIFIER_SYSTEM_PROMPT =
-  `Classify the chess request into exactly one category:
+  `Classify the chess request into exactly one category based on the user's INTENT, not on individual words.
+
+Categories:
 - ANALYSIS: pure engine evaluation or move calculation — "what's the best move?", "evaluate this position", "what does the engine think?", tactical calculation requests
 - PUZZLE: generate or solve a chess puzzle or tactical problem
 - POSITION: create or set up a chess position on the board
-- PLAYER_GAMES: games by a specific named player (e.g. "Carlsen's games") OR selecting a game by number from a previously shown list (user types just "1", "2", etc.)
+- PLAYER_GAMES: find or browse games by a specific named player (e.g. "Carlsen's games", "Kasparov Sicilian games", "Fischer games starting with e4") OR selecting a game by number from a previously shown list (user types just "1", "2", etc.)
 - HISTORIC_GAME: famous or historical games from tournaments
 - LOCAL_GAMES: user's own local chess game files
-- OPENING_TRAINING: anything about the opening phase — teach me an opening, opening theory, first moves, opening principles, "how does the Sicilian start", "what's a good opening for White", "explain the Ruy Lopez", "opening for kids"
-- MIDDLEGAME_ANALYSIS: anything about the middlegame phase — plans and strategy in the middle of the game, pawn structures, piece activity, attack and defence ideas, "what's the plan here?", "how do I attack?", "teach me middlegame strategy", "explain this middlegame position", "how do I improve my pieces?"
-- ENDGAME_TRAINING: anything about the endgame phase — endgame technique, king and pawn endings, rook endgames, theoretical positions, "how to checkmate with a rook", "teach me endgame", "how do I win this endgame?", "explain the Lucena position"
-- OTHER: not chess-related`;
+- OPENING_TRAINING: interactive opening LESSON where the user wants to LEARN or PRACTICE opening moves — e.g. "teach me the Ruy Lopez", "show me how the Sicilian starts", "I want to learn an opening for kids", "let's practice the King's Indian"
+- MIDDLEGAME_ANALYSIS: interactive LESSON about middlegame strategy and plans — e.g. "teach me middlegame strategy", "what's the plan in this pawn structure?", "how do I improve my pieces?", "explain this middlegame position"
+- ENDGAME_TRAINING: interactive LESSON about endgame technique — e.g. "teach me king and pawn endgames", "how to checkmate with a rook", "explain the Lucena position", "practice a rook ending"
+- OTHER: not chess-related
+
+DISAMBIGUATION RULES — read these carefully:
+1. OPENING_TRAINING is ONLY for requests to learn or practice opening moves interactively. If the word "opening" appears but the user is asking to FIND GAMES (e.g. "Carlsen's Sicilian games", "show me games in the Ruy Lopez"), classify as PLAYER_GAMES.
+2. MIDDLEGAME_ANALYSIS is ONLY for requests to be taught or coached about middlegame concepts. If the user asks "what's the best move here?" or "analyse this position", that is ANALYSIS even if the position happens to be a middlegame.
+3. ENDGAME_TRAINING is ONLY for requests to learn endgame theory interactively. A question like "who is winning this endgame?" is ANALYSIS, not ENDGAME_TRAINING.
+4. Use conversation history for context — if the previous message showed a game list and the user types "3", classify as PLAYER_GAMES (game selection).`;
 
 // ============================================================================
 // Analysis agents

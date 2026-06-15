@@ -238,8 +238,8 @@ export default function ChatPanel({
             </Box>
           )}
 
-          {/* Game list — always rendered when active, independent of questionResponse */}
-          {(responseType === "GameList" || responseType === "Game") && gameList && gameList.length > 0 && (
+          {/* Game list — shown whenever data exists; clears only when App sets gameList=null */}
+          {gameList && gameList.length > 0 && (
             <SelectableList
               items={gameList.map((game, idx) => ({
                 id: String(idx),
@@ -285,7 +285,7 @@ export default function ChatPanel({
           )}
 
           {/* Empty state — only when not loading, no response, and no active game list */}
-          {!questionLoading && !questionResponse && !(gameList && (responseType === "GameList" || responseType === "Game")) && (
+          {!questionLoading && !questionResponse && !(gameList && gameList.length > 0) && (
             <Typography variant="body2" color="text.secondary" sx={{ color: "#999" }}>
               Ask a question to see the response here...
             </Typography>

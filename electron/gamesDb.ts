@@ -183,23 +183,39 @@ export function importPgnText(db: Database.Database, pgnText: string): number {
 /** Build extra WHERE conditions and bind args for optional filters.
  *  alias: table alias prefix, e.g. "g" → column refs become "g.result", "g.date" etc. */
 function buildExtraConditions(
-  params: Pick<GameSearchParams, "result" | "year_from" | "year_to" | "eco" | "minElo">,
+  params: Pick<GameSearchParams, "result" | "year_from" | "year_to" | "eco" | "minElo" | "opening_name" | "first_move_white" | "first_move_black">,
   alias = ""
 ): { conditions: string[]; args: (string | number)[] } {
   const p = alias ? `${alias}.` : "";
   const conditions: string[] = [];
   const args: (string | number)[] = [];
-  if (params.result)                  { conditions.push(`${p}result = ?`);                                     args.push(params.result); }
-  if (params.year_from !== undefined) { conditions.push(`CAST(SUBSTR(${p}date,1,4) AS INTEGER) >= ?`);        args.push(params.year_from); }
-  if (params.year_to   !== undefined) { conditions.push(`CAST(SUBSTR(${p}date,1,4) AS INTEGER) <= ?`);        args.push(params.year_to); }
-  if (params.eco)                     { conditions.push(`${p}eco = ?`);                                        args.push(params.eco); }
+  if (params.result)                  { conditions.push(`${p}result = ?`);                                          args.push(params.result); }
+  if (params.year_from !== undefined) { conditions.push(`CAST(SUBSTR(${p}date,1,4) AS INTEGER) >= ?`);             args.push(params.year_from); }
+  if (params.year_to   !== undefined) { conditions.push(`CAST(SUBSTR(${p}date,1,4) AS INTEGER) <= ?`);             args.push(params.year_to); }
+  if (params.eco)                     { conditions.push(`${p}eco = ?`);                                             args.push(params.eco); }
   if (params.minElo !== undefined)    { conditions.push(`${p}white_elo >= ?`); conditions.push(`${p}black_elo >= ?`); args.push(params.minElo, params.minElo); }
+  if (params.opening_name) {
+    const name = params.opening_name.replace(/[%_]/g, "");
+    conditions.push(`${p}opening LIKE ?`);
+    args.push(`%${name}%`);
+  }
+  if (params.first_move_white) {
+    const mv = params.first_move_white.trim().replace(/[%_]/g, "");
+    conditions.push(`(${p}pgn_moves LIKE ? OR ${p}pgn_moves LIKE ?)`);
+    args.push(`1. ${mv} %`, `1.${mv} %`);
+  }
+  if (params.first_move_black) {
+    const mv = params.first_move_black.trim().replace(/[%_]/g, "");
+    // Matches "1. <any white move> <black move> 2." in standard PGN layout
+    conditions.push(`(${p}pgn_moves LIKE ? OR ${p}pgn_moves LIKE ?)`);
+    args.push(`1. % ${mv} 2.%`, `1.% ${mv} 2.%`);
+  }
   return { conditions, args };
 }
 
 export function searchGames(db: Database.Database, params: GameSearchParams): GameRow[] {
-  const { player, opponent, result, year_from, year_to, eco, minElo, limit = 10 } = params;
-  const filterParams = { result, year_from, year_to, eco, minElo };
+  const { player, opponent, result, year_from, year_to, eco, minElo, opening_name, first_move_white, first_move_black, limit = 10 } = params;
+  const filterParams = { result, year_from, year_to, eco, minElo, opening_name, first_move_white, first_move_black };
 
   // Two-player search: find games where both players appear on either side
   if (player && opponent) {
