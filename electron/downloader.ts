@@ -6,9 +6,16 @@ import { decompress } from "fzstd";
 import Seven from "node-7z";
 import { path7za } from "7zip-bin";
 
-const PUZZLE_CSV_URL = "https://database.lichess.org/lichess_db_puzzle.csv.zst";
+const PUZZLE_CSV_URL       = "https://database.lichess.org/lichess_db_puzzle.csv.zst";
 const PARALLEL_CONNECTIONS = 3;
 const PROGRESS_INTERVAL_MS = 250;
+const SOCKET_TIMEOUT_MS    = 45_000;  // abort if socket is idle for 45 s (connect + stall)
+const MAX_ATTEMPTS         = 5;       // 1 initial + 4 retries
+
+function backoffMs(attempt: number, retryAfterSec?: number): number {
+  if (retryAfterSec) return retryAfterSec * 1000;
+  return Math.min(5_000 * Math.pow(2, attempt), 60_000); // 5 s, 10 s, 20 s, 40 s, 60 s
+}
 
 // ── Low-level HTTP helpers ───────────────────────────────────────────────────
 
@@ -26,12 +33,13 @@ function httpsHead(url: string): Promise<Record<string, string>> {
         resolve(res.headers as Record<string, string>);
       }
     );
+    req.setTimeout(SOCKET_TIMEOUT_MS, () => req.destroy(new Error("HEAD request timed out")));
     req.on("error", reject);
     req.end();
   });
 }
 
-/** Download a single byte range into `dest` at `destOffset`. Retries on 429. */
+/** Download a single byte range into `dest` at `destOffset`. Retries on any error. */
 async function downloadRange(
   url: string,
   start: number,
@@ -41,15 +49,14 @@ async function downloadRange(
   onBytes: (n: number) => void,
   attempt = 0
 ): Promise<void> {
-  const MAX_ATTEMPTS = 4;
   try {
     await downloadRangeOnce(url, start, end, dest, destOffset, onBytes);
   } catch (err: any) {
-    const is429 = err?.status === 429;
-    if (is429 && attempt < MAX_ATTEMPTS) {
-      const retryAfterMs = (err.retryAfter ?? Math.pow(2, attempt) * 3) * 1000;
-      console.warn(`[downloader] 429 on range ${start}-${end}, retrying in ${retryAfterMs / 1000}s (attempt ${attempt + 1})`);
-      await new Promise(r => setTimeout(r, retryAfterMs));
+    if (attempt < MAX_ATTEMPTS - 1) {
+      const retryAfterSec = err?.status === 429 ? (err.retryAfter ?? undefined) : undefined;
+      const delay = backoffMs(attempt, retryAfterSec);
+      console.warn(`[downloader] range ${start}-${end} failed (${err.message}), retry ${attempt + 1}/${MAX_ATTEMPTS - 1} in ${delay / 1000}s`);
+      await new Promise(r => setTimeout(r, delay));
       return downloadRange(url, start, end, dest, destOffset, onBytes, attempt + 1);
     }
     throw err;
@@ -81,7 +88,7 @@ function downloadRangeOnce(
         }
         if (res.statusCode === 429) {
           const retryAfter = parseInt(res.headers["retry-after"] || "0", 10) || undefined;
-          res.resume(); // drain so socket is released
+          res.resume();
           const e: any = new Error(`HTTP 429 for range ${start}-${end}`);
           e.status = 429;
           e.retryAfter = retryAfter;
@@ -103,24 +110,47 @@ function downloadRangeOnce(
         res.on("error", reject);
       }
     );
+    // Abort if socket is idle (covers both initial connect and mid-stream stalls)
+    req.setTimeout(SOCKET_TIMEOUT_MS, () =>
+      req.destroy(new Error(`Socket idle for ${SOCKET_TIMEOUT_MS / 1000}s on range ${start}-${end}`))
+    );
     req.on("error", reject);
     req.end();
   });
 }
 
-/** Single-connection fallback for servers without range support. */
-function downloadSingle(
+/** Single-connection fallback for servers without range support. Retries on any error. */
+async function downloadSingle(
+  url: string,
+  onProgress?: (received: number, total: number) => void,
+  attempt = 0
+): Promise<{ data: Buffer; headers: Record<string, string> }> {
+  try {
+    return await downloadSingleOnce(url, onProgress);
+  } catch (err: any) {
+    if (attempt < MAX_ATTEMPTS - 1) {
+      const delay = backoffMs(attempt);
+      console.warn(`[downloader] single download failed (${err.message}), retry ${attempt + 1}/${MAX_ATTEMPTS - 1} in ${delay / 1000}s`);
+      await new Promise(r => setTimeout(r, delay));
+      return downloadSingle(url, onProgress, attempt + 1);
+    }
+    throw err;
+  }
+}
+
+function downloadSingleOnce(
   url: string,
   onProgress?: (received: number, total: number) => void
 ): Promise<{ data: Buffer; headers: Record<string, string> }> {
   return new Promise((resolve, reject) => {
     const client = url.startsWith("https") ? https : http;
-    client.get(url, (res) => {
+    const req = client.get(url, (res) => {
       if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        downloadSingle(res.headers.location, onProgress).then(resolve).catch(reject);
+        downloadSingleOnce(res.headers.location, onProgress).then(resolve).catch(reject);
         return;
       }
       if (res.statusCode && res.statusCode >= 400) {
+        res.resume();
         reject(new Error(`HTTP ${res.statusCode}`));
         return;
       }
@@ -141,7 +171,11 @@ function downloadSingle(
         resolve({ data: Buffer.concat(chunks), headers: res.headers as Record<string, string> });
       });
       res.on("error", reject);
-    }).on("error", reject);
+    });
+    req.setTimeout(SOCKET_TIMEOUT_MS, () =>
+      req.destroy(new Error(`Socket idle for ${SOCKET_TIMEOUT_MS / 1000}s`))
+    );
+    req.on("error", reject);
   });
 }
 
