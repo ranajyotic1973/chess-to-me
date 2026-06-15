@@ -104,7 +104,6 @@ export default function SettingsPanel({
   const dbProgressUnsubRef = useRef<(() => void) | null>(null);
 
   // OTB directory import state
-  const [otbDir, setOtbDir] = useState<string>(formState.otbImportDir || "");
   const [otbImporting, setOtbImporting] = useState<boolean>(false);
   const [otbDirProgress, setOtbDirProgress] = useState<{ fileIndex: number; totalFiles: number; fileName: string; message: string } | null>(null);
   const otbProgressUnsubRef = useRef<(() => void) | null>(null);
@@ -306,16 +305,12 @@ export default function SettingsPanel({
     fetchDbStatus();
   };
 
-  const handleBrowseOtbDir = async () => {
-    if (!electronAPI?.browseOtbDir) return;
+  const handleImportOtbDir = async () => {
+    if (!electronAPI?.browseOtbDir || !electronAPI?.importOtbDir) return;
     const { dirPath } = await electronAPI.browseOtbDir();
     if (!dirPath) return;
-    setOtbDir(dirPath);
     onFieldChange("otbImportDir", dirPath);
-  };
 
-  const handleImportOtbDir = async () => {
-    if (!otbDir || !electronAPI?.importOtbDir) return;
     setOtbImporting(true);
     setDbActionLoading("games");
     setOtbDirProgress(null);
@@ -344,7 +339,7 @@ export default function SettingsPanel({
     });
 
     try {
-      const result = await electronAPI.importOtbDir(otbDir);
+      const result = await electronAPI.importOtbDir(dirPath);
       if (!result.ok) {
         setOtbImporting(false);
         setDbActionLoading(null);
@@ -768,41 +763,28 @@ export default function SettingsPanel({
 
               {/* OTB bulk import instructions */}
               <Box sx={{ mt: 1.5, p: 1.5, bgcolor: "action.hover", borderRadius: 1 }}>
-                <Typography variant="body2" fontWeight="medium" gutterBottom>
-                  Build a complete OTB games library
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-                  Visit{" "}
-                  <Link
-                    component="button"
-                    variant="caption"
-                    onClick={() => electronAPI?.openExternalUrl?.("https://lumbrasgigabase.com/en/download-in-pgn-format-en/")}
-                    sx={{ cursor: "pointer" }}
-                  >
-                    lumbrasgigabase.com
-                  </Link>
-                  {" "}and download all <strong>OTB *.7z</strong> files into a single folder on your computer.
-                  For monthly updates, add the new file to the same folder and click Import All again — already-imported files are skipped automatically.
-                </Typography>
-                <Stack direction="row" spacing={0.5} alignItems="center">
-                  <TextField
-                    size="small"
-                    placeholder="Select folder containing OTB archive files…"
-                    value={otbDir}
-                    onChange={(e) => setOtbDir(e.target.value)}
-                    sx={{ flex: 1 }}
-                    inputProps={{ readOnly: false }}
-                  />
-                  <Tooltip title="Browse for folder">
+                <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1}>
+                  <Box>
+                    <Typography variant="body2" fontWeight="medium" gutterBottom>
+                      Build a complete OTB games library
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                      Download all <strong>OTB *.7z</strong> files from{" "}
+                      <Link
+                        component="button"
+                        variant="caption"
+                        onClick={() => electronAPI?.openExternalUrl?.("https://lumbrasgigabase.com/en/download-in-pgn-format-en/")}
+                        sx={{ cursor: "pointer" }}
+                      >
+                        lumbrasgigabase.com
+                      </Link>
+                      {" "}into a single folder. Click the button to select that folder and import everything.
+                      Already-imported files are skipped automatically on future runs.
+                    </Typography>
+                  </Box>
+                  <Tooltip title="Select folder with OTB archives and import all">
                     <span>
-                      <IconButton onClick={handleBrowseOtbDir} disabled={!!dbActionLoading} size="small">
-                        <FolderOpenIcon />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
-                  <Tooltip title="Import all OTB archive files from folder">
-                    <span>
-                      <IconButton onClick={handleImportOtbDir} disabled={!otbDir || !!dbActionLoading} color="primary" size="small">
+                      <IconButton onClick={handleImportOtbDir} disabled={!!dbActionLoading} color="primary" size="small">
                         {otbImporting ? <CircularProgress size={20} /> : <UnarchiveIcon />}
                       </IconButton>
                     </span>
