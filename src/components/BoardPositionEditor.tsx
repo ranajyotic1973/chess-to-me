@@ -55,7 +55,7 @@ const PIECE_SYMBOLS = {
 };
 
 const getPieceImageUrl = (piece: string): string => {
-  return `/chesspieces/wikipedia/${piece}.png`;
+  return `./chesspieces/wikipedia/${piece}.png`;
 };
 
 export default function BoardPositionEditor({
