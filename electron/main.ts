@@ -1461,22 +1461,27 @@ async function createWindow(): Promise<void> {
 async function doImportGamesFile(
   filePath: string,
   sendProgress: (phase: string, pct: number, msg: string) => void,
-  opts: { skipFts?: boolean } = {}
+  opts: {
+    skipFts?: boolean;
+    db?: Database.Database;       // shared connection for batch imports
+    extractDir?: string;          // per-slot temp dir for parallel extraction
+  } = {}
 ): Promise<{ ok: boolean; count?: number; error?: string }> {
-  const { gamesDbPath, gamesExtractDir } = getDbPaths();
+  const { gamesDbPath, gamesExtractDir: defaultExtractDir } = getDbPaths();
+  const extractDir = opts.extractDir ?? defaultExtractDir;
   downloadInProgress = true;
   const lower = filePath.toLowerCase();
   try {
     let pgnFiles: string[];
 
     if (lower.endsWith(".7z")) {
-      // Always start with a clean extract dir to avoid leftover files from a previous failed run
-      if (fs.existsSync(gamesExtractDir)) {
-        fs.rmSync(gamesExtractDir, { recursive: true, force: true });
+      // Clean the slot's extract dir before starting so stale files never interfere
+      if (fs.existsSync(extractDir)) {
+        fs.rmSync(extractDir, { recursive: true, force: true });
       }
       sendProgress("decompressing", 0, "Extracting 7z archive…");
-      await extract7z(filePath, gamesExtractDir, (pct, msg) => sendProgress("decompressing", pct, msg));
-      pgnFiles = findPgnFiles(gamesExtractDir);
+      await extract7z(filePath, extractDir, (pct, msg) => sendProgress("decompressing", pct, msg));
+      pgnFiles = findPgnFiles(extractDir);
     } else if (lower.endsWith(".pgn")) {
       pgnFiles = [filePath];
     } else {
@@ -1485,13 +1490,20 @@ async function doImportGamesFile(
 
     if (pgnFiles.length === 0) return { ok: false, error: "No PGN files found in the archive." };
 
-    if (gamesDb) { gamesDb.close(); gamesDb = null; }
-    gamesDb = initGamesDb(gamesDbPath);
+    // Use provided shared DB, or open our own
+    let db: Database.Database;
+    if (opts.db) {
+      db = opts.db;
+    } else {
+      if (gamesDb) { gamesDb.close(); gamesDb = null; }
+      gamesDb = initGamesDb(gamesDbPath);
+      db = gamesDb;
+    }
 
     sendProgress("importing", 0, `Streaming ${pgnFiles.length} PGN file(s)…`);
     let total = 0;
     for (let i = 0; i < pgnFiles.length; i++) {
-      total += await importPgnFile(gamesDb, pgnFiles[i], (n) =>
+      total += await importPgnFile(db, pgnFiles[i], (n) =>
         sendProgress("importing",
           Math.round(((i / pgnFiles.length) + (n / 500000 / pgnFiles.length)) * 90),
           `Imported ${(total + n).toLocaleString()} games…`)
@@ -1501,14 +1513,14 @@ async function doImportGamesFile(
 
     if (!opts.skipFts) {
       sendProgress("importing", 95, "Rebuilding search index…");
-      setGamesSource(gamesDb, "Lumbra's Gigabase");
-      rebuildFts(gamesDb);
-      gamesDb.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('fts_built', 'true')").run();
-      gamesDb.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('last_update_import', ?)").run(new Date().toISOString().slice(0, 10));
+      setGamesSource(db, "Lumbra's Gigabase");
+      rebuildFts(db);
+      db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('fts_built', 'true')").run();
+      db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('last_update_import', ?)").run(new Date().toISOString().slice(0, 10));
     }
 
-    if (lower.endsWith(".7z") && fs.existsSync(gamesExtractDir)) {
-      fs.rmSync(gamesExtractDir, { recursive: true, force: true });
+    if (lower.endsWith(".7z") && fs.existsSync(extractDir)) {
+      fs.rmSync(extractDir, { recursive: true, force: true });
     }
 
     sendProgress("importing", 100, `Done — ${total.toLocaleString()} games added`);
@@ -1516,9 +1528,8 @@ async function doImportGamesFile(
     return { ok: true, count: total };
   } catch (err: any) {
     console.error("[DB] Games import failed:", err);
-    // Clean up a partial extraction so the next attempt starts fresh
-    if (lower.endsWith(".7z") && fs.existsSync(gamesExtractDir)) {
-      try { fs.rmSync(gamesExtractDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    if (lower.endsWith(".7z") && fs.existsSync(extractDir)) {
+      try { fs.rmSync(extractDir, { recursive: true, force: true }); } catch { /* ignore */ }
     }
     return { ok: false, error: (err as Error).message };
   } finally {
@@ -3654,50 +3665,74 @@ ipcMain.handle("db:import-otb-dir", async (event, { dirPath }: { dirPath: string
 
   gamesImportState = { status: "importing", count: 0, message: "Starting OTB directory import…" };
 
-  // Run import in background to match existing single-file pattern
+  // Run import in background — up to 4 files in parallel, each using its own extract-dir slot
   (async () => {
-    for (let i = 0; i < toImport.length; i++) {
-      const filePath = toImport[i];
-      const fileName = path.basename(filePath);
+    const { gamesDbPath, gamesExtractDir } = getDbPaths();
 
-      const sendProgress = (phase: string, pct: number, msg: string) => {
-        const countMatch = msg.match(/[\d,]+/);
-        const parsedCount = countMatch ? parseInt(countMatch[0].replace(/,/g, ""), 10) : 0;
-        gamesImportState = {
-          status: "importing",
-          count: parsedCount > 0 ? parsedCount : gamesImportState.count,
-          message: msg,
+    // Open one shared DB connection for the whole batch
+    if (gamesDb) { gamesDb.close(); gamesDb = null; }
+    gamesDb = initGamesDb(gamesDbPath);
+    const sharedDb = gamesDb;
+
+    // Atomic queue index — safe in Node.js single-threaded event loop
+    let nextIdx = 0;
+    const SLOTS = Math.min(4, totalFiles);
+
+    const workers = Array.from({ length: SLOTS }, async (_, slotIdx) => {
+      const slotExtractDir = `${gamesExtractDir}-slot${slotIdx}`;
+
+      while (true) {
+        const i = nextIdx++;
+        if (i >= toImport.length) break;
+
+        const filePath = toImport[i];
+        const fileName = path.basename(filePath);
+
+        const sendProgress = (phase: string, pct: number, msg: string) => {
+          const countMatch = msg.match(/[\d,]+/);
+          const parsedCount = countMatch ? parseInt(countMatch[0].replace(/,/g, ""), 10) : 0;
+          gamesImportState = {
+            status: "importing",
+            count: parsedCount > 0 ? parsedCount : gamesImportState.count,
+            message: msg,
+          };
+          event.sender.send("db:otb-dir-progress", {
+            fileIndex: i + 1,
+            totalFiles,
+            fileName,
+            phase,
+            percent: pct,
+            message: msg,
+          });
         };
-        event.sender.send("db:otb-dir-progress", {
-          fileIndex: i + 1,
-          totalFiles,
-          fileName,
-          phase,
-          percent: pct,
-          message: msg,
+
+        // Use shared DB and per-slot extract dir; skip per-file FTS rebuild
+        const result = await doImportGamesFile(filePath, sendProgress, {
+          skipFts: true,
+          db: sharedDb,
+          extractDir: slotExtractDir,
         });
-      };
 
-      // Skip FTS rebuild on every file — do one rebuild at the end
-      const result = await doImportGamesFile(filePath, sendProgress, { skipFts: true });
-
-      if (result.ok) {
-        imported++;
-        // Persist after each successful file so partial progress survives a crash
-        const current = readOtbTracking(userData);
-        if (!current.includes(fileName)) {
-          writeOtbTracking(userData, [...current, fileName]);
+        if (result.ok) {
+          imported++;
+          // Persist after each successful file so partial progress survives a crash
+          const current = readOtbTracking(userData);
+          if (!current.includes(fileName)) {
+            writeOtbTracking(userData, [...current, fileName]);
+          }
+        } else {
+          errors++;
+          const errMsg = `${fileName}: ${result.error}`;
+          console.error(`[DB] OTB dir import failed — ${errMsg}`);
+          errorMessages.push(errMsg);
         }
-      } else {
-        errors++;
-        const errMsg = `${fileName}: ${result.error}`;
-        console.error(`[DB] OTB dir import failed — ${errMsg}`);
-        errorMessages.push(errMsg);
       }
-    }
+    });
 
-    // Rebuild FTS once after all files are processed
-    if (imported > 0 && gamesDb) {
+    await Promise.all(workers);
+
+    // Rebuild FTS once after all slots finish
+    if (imported > 0) {
       event.sender.send("db:otb-dir-progress", {
         fileIndex: totalFiles,
         totalFiles,
@@ -3707,10 +3742,10 @@ ipcMain.handle("db:import-otb-dir", async (event, { dirPath }: { dirPath: string
         message: "Rebuilding search index…",
       });
       try {
-        setGamesSource(gamesDb, "Lumbra's Gigabase");
-        rebuildFts(gamesDb);
-        gamesDb.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('fts_built', 'true')").run();
-        gamesDb.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('last_update_import', ?)").run(new Date().toISOString().slice(0, 10));
+        setGamesSource(sharedDb, "Lumbra's Gigabase");
+        rebuildFts(sharedDb);
+        sharedDb.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('fts_built', 'true')").run();
+        sharedDb.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('last_update_import', ?)").run(new Date().toISOString().slice(0, 10));
       } catch (ftsErr) {
         console.error("[DB] FTS rebuild failed:", ftsErr);
       }
