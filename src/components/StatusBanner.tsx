@@ -7,7 +7,18 @@ export default function StatusBanner({ statusMessage, analysisStatus }: StatusBa
   }
 
   return (
-    <Stack spacing={1} sx={{ width: "100%" }}>
+    <Stack
+      spacing={1}
+      sx={{
+        width: "100%",
+        position: "fixed",
+        top: 16,
+        left: 16,
+        right: 16,
+        zIndex: 1300,
+        maxWidth: "calc(100% - 32px)"
+      }}
+    >
       {statusMessage && (
         <Alert severity="info" variant="filled">
           {statusMessage}

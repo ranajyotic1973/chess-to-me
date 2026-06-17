@@ -862,6 +862,48 @@ export default function App() {
     setCurrentFen(chess.fen());
   }, [puzzleStartFen, puzzleSolution]);
 
+  const formatJsonToMarkdown = (text: string): string => {
+    try {
+      const parsed = JSON.parse(text);
+      const lines: string[] = [];
+
+      // Helper to format field names: capitalize and add colon
+      const formatFieldName = (name: string): string => {
+        return name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, " $1").trim();
+      };
+
+      // Helper to format values
+      const formatValue = (value: any): string => {
+        if (Array.isArray(value)) {
+          return value.map((item) => {
+            if (typeof item === "object" && item !== null) {
+              return Object.entries(item)
+                .map(([k, v]) => `- **${formatFieldName(k)}:** ${v}`)
+                .join("\n");
+            }
+            return String(item);
+          }).join("\n");
+        }
+        if (typeof value === "object" && value !== null) {
+          return JSON.stringify(value, null, 2);
+        }
+        return String(value);
+      };
+
+      // Format each field as markdown
+      Object.entries(parsed).forEach(([key, value]) => {
+        const fieldName = formatFieldName(key);
+        const formattedValue = formatValue(value);
+        lines.push(`**${fieldName}:**\n${formattedValue}\n`);
+      });
+
+      return lines.join("\n");
+    } catch {
+      // Not JSON, return as-is
+      return text;
+    }
+  };
+
   const fetchPerMoveExplanation = useCallback(async (
     lineIndex: number,
     lineData: AnalysisLine,
@@ -874,7 +916,7 @@ export default function App() {
     try {
       const pv = lineData.pv || lineData.line || "";
       const response = await electronAPI.askQuestion({
-        question: `Explain the move ${moveSan} (move ${moveIndex + 1} in the line). Full line: ${pv}. Explain the tactical and strategic ideas behind this move concisely. Focus purely on chess. Format your response as clear, well-structured markdown with sections and bold headers for different aspects of the move.`,
+        question: `Explain the move ${moveSan} (move ${moveIndex + 1} in the line). Full line: ${pv}. Explain the tactical and strategic ideas behind this move concisely. Focus purely on chess.`,
         fen: baseFen,
         language: formState.explainLanguage,
         model: getModelForProvider(formState.llmProvider, formState.ollamaModel, formState.llmModel),
@@ -884,16 +926,8 @@ export default function App() {
       });
       if (response?.ok && (response as any).answer) {
         let text = (response as any).answer as string;
-
-        // Try to parse as JSON and extract commentary field
-        try {
-          const parsed = JSON.parse(text);
-          if (parsed.commentary && typeof parsed.commentary === "string") {
-            text = parsed.commentary;
-          }
-        } catch {
-          // Not JSON or no commentary field, use as-is
-        }
+        // Convert JSON to formatted markdown
+        text = formatJsonToMarkdown(text);
 
         const cacheKey = `${baseFen}:${lineIndex}:${moveIndex}`;
         explanationCache.current.set(cacheKey, text);
