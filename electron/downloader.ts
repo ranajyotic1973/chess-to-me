@@ -4,13 +4,24 @@ import https from "node:https";
 import http from "node:http";
 import { decompress } from "fzstd";
 import Seven from "node-7z";
-import { path7za } from "7zip-bin";
+import { path7za as originalPath7za } from "7zip-bin";
 
 const PUZZLE_CSV_URL       = "https://database.lichess.org/lichess_db_puzzle.csv.zst";
 const PARALLEL_CONNECTIONS = 3;
 const PROGRESS_INTERVAL_MS = 250;
 const SOCKET_TIMEOUT_MS    = 45_000;  // abort if socket is idle for 45 s (connect + stall)
 const MAX_ATTEMPTS         = 5;       // 1 initial + 4 retries
+
+function getPath7za(): string {
+  const originalPath = originalPath7za;
+  if (fs.existsSync(originalPath)) return originalPath;
+
+  if (originalPath.includes(".asar")) {
+    const asarUnpackPath = originalPath.replace(/\.asar([\/\\])/, ".asar.unpacked$1");
+    if (fs.existsSync(asarUnpackPath)) return asarUnpackPath;
+  }
+  return originalPath;
+}
 
 function backoffMs(attempt: number, retryAfterSec?: number): number {
   if (retryAfterSec) return retryAfterSec * 1000;
@@ -277,9 +288,10 @@ export function extract7z(
   if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
 
   return new Promise((resolve, reject) => {
+    const path7zaResolved = getPath7za();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const stream = (Seven as any).extractFull(archivePath, destDir, {
-      $bin: path7za,
+      $bin: path7zaResolved,
       $progress: true,
       overwrite: "a",
     });
