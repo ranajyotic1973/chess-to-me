@@ -42,6 +42,16 @@ import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from "electron";
 
 const DEFAULT_OLLAMA_MODEL = "qwen3:8b";
 
+function extractValidApiKey(payloadKey: string | undefined): string {
+  if (!payloadKey) return "";
+  const trimmed = payloadKey.trim();
+  // Check if the key is just a mask (all dots)
+  if (trimmed && /^•+$/.test(trimmed)) {
+    return ""; // Return empty to trigger fallback to stored key
+  }
+  return trimmed;
+}
+
 // ============================================================================
 // Database state (lazily initialised, closed on delete)
 // ============================================================================
@@ -2449,7 +2459,8 @@ ipcMain.handle("llm:explain-lines", async (_event, payload) => {
   const fen = payload?.fen || "";
   const language = payload?.language || settings.get("explainLanguage") || "English";
   const llmProvider = payload?.llmProvider || settings.get("llmProvider") || "ollama";
-  const llmApiKey = payload?.llmApiKey || settings.get("llmApiKey") || "";
+  const validPayloadKey = extractValidApiKey(payload?.llmApiKey);
+  const llmApiKey = validPayloadKey || settings.get("llmApiKey") || "";
 
   // Get the correct model from settings based on provider, or use payload override
   let model = payload?.model;
@@ -3348,7 +3359,8 @@ ipcMain.handle("llm:ask-question", async (_event, payload) => {
   // Use payload provider if explicitly provided, otherwise use saved settings
   // Don't default to ollama - require explicit configuration
   const llmProvider = payloadProvider || savedProvider || "ollama";
-  const llmApiKey = payload?.llmApiKey || settings.get("llmApiKey") || "";
+  const validPayloadKey = extractValidApiKey(payload?.llmApiKey);
+  const llmApiKey = validPayloadKey || settings.get("llmApiKey") || "";
 
   console.log(`[LLM] Provider selection | Payload: "${payloadProvider}" | Saved (raw): "${savedProviderRaw}" | Saved (trim): "${savedProvider}" | Final: "${llmProvider}"`);
 

@@ -904,7 +904,13 @@ export default function App() {
     setSelectedLineBaseFen(currentFen);
     const lineNum = line.rank || lineIndex + 1;
     setStatusMessage(`Line ${lineNum} selected.`);
-  }, [currentFen]);
+    // Fetch explanation for the first move in the line
+    const pv = line.pv || line.line || "";
+    const moves = pv.split(/\s+/).filter((m) => m.trim());
+    if (moves.length > 0) {
+      void fetchPerMoveExplanation(lineIndex, line, currentFen, 0, moves[0]);
+    }
+  }, [currentFen, fetchPerMoveExplanation]);
 
   const handleKeyboardNavigation = useCallback((event: KeyboardEvent) => {
     // Do not intercept when the user is typing in any input/textarea
@@ -1369,7 +1375,7 @@ export default function App() {
         ollamaBaseUrl: formState.ollamaBaseUrl,
         llmProvider: formState.llmProvider,
         llmModel: formState.llmModel,
-        llmApiKey: formState.llmApiKey,
+        llmApiKey: formState.llmApiKey || "",
         puzzleRatingMin: formState.puzzleRatingMin ?? 1000,
         puzzleRatingMax: formState.puzzleRatingMax ?? 1500,
         otbImportDir: formState.otbImportDir || ""

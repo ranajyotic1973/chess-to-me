@@ -188,7 +188,7 @@ export default function SettingsPanel({
       const savedName = (formState as any).displayName || "";
       setDisplayName(savedName);
     }).catch(() => {});
-  }, []);
+  }, [formState]);
 
   useEffect(() => {
     if (!electronAPI?.onDbRefreshStatus) return;
