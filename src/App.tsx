@@ -1375,7 +1375,7 @@ export default function App() {
         ollamaBaseUrl: formState.ollamaBaseUrl,
         llmProvider: formState.llmProvider,
         llmModel: formState.llmModel,
-        llmApiKey: formState.llmApiKey || "",
+        llmApiKey: formState.llmApiKey,
         puzzleRatingMin: formState.puzzleRatingMin ?? 1000,
         puzzleRatingMax: formState.puzzleRatingMax ?? 1500,
         otbImportDir: formState.otbImportDir || ""
