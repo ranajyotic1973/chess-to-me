@@ -862,6 +862,19 @@ export default function App() {
     setCurrentFen(chess.fen());
   }, [puzzleStartFen, puzzleSolution]);
 
+  const extractExplanationText = (text: string): string => {
+    // Try to parse as JSON and extract explanation field
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.explanation && typeof parsed.explanation === "string") {
+        return parsed.explanation;
+      }
+    } catch {
+      // Not JSON, return as-is
+    }
+    return text;
+  };
+
   const fetchPerMoveExplanation = useCallback(async (
     lineIndex: number,
     lineData: AnalysisLine,
@@ -884,9 +897,10 @@ export default function App() {
       });
       if (response?.ok && (response as any).answer) {
         const text = (response as any).answer as string;
+        const explanation = extractExplanationText(text);
         const cacheKey = `${baseFen}:${lineIndex}:${moveIndex}`;
-        explanationCache.current.set(cacheKey, text);
-        setQuestionResponse(text);
+        explanationCache.current.set(cacheKey, explanation);
+        setQuestionResponse(explanation);
       } else {
         setQuestionResponse(`⚠️ ${(response as any)?.error || "Unable to generate explanation."}`);
       }
