@@ -863,15 +863,18 @@ export default function App() {
   }, [puzzleStartFen, puzzleSolution]);
 
   const extractExplanationText = (text: string): string => {
-    // Try to parse as JSON and extract explanation field
+    // First, try to parse response as structured JSON output
     try {
       const parsed = JSON.parse(text);
+      // If JSON has an explanation field, use it
       if (parsed.explanation && typeof parsed.explanation === "string") {
         return parsed.explanation;
       }
+      // If JSON doesn't have explanation field, fall through to treat as text
     } catch {
-      // Not JSON, return as-is
+      // JSON parsing failed, treat entire response as plain text
     }
+    // Fallback: return response as-is (either plain text or full JSON if no explanation field)
     return text;
   };
 
