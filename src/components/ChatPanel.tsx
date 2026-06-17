@@ -178,23 +178,40 @@ export default function ChatPanel({
               onSelect={(_id, idx) => onSelectEngineLine?.(idx, analysisLines[idx])}
               onBack={() => onDeselectLine?.()}
             >
-              {/* Detail content: shown when a line is selected */}
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-                <Chip
-                  label={`Line ${selectedLineNum} selected`}
-                  size="small"
-                  color="primary"
-                  variant="outlined"
-                />
-              </Stack>
-              <Typography variant="caption" sx={{ color: "info.main", fontStyle: "italic" }}>
-                Line {selectedLineNum} selected. Use → to advance moves, ← to go back.
-                {" "}Move {currentMoveIndex + 1} of{" "}
-                {selectedEngineLineIndex !== null
-                  ? (analysisEntries[selectedEngineLineIndex]?.moves?.length ??
-                      (selectedLine?.pv || "").split(/\s+/).filter(Boolean).length)
-                  : "?"}
-              </Typography>
+              {/* Detail content: shown when a line is selected - floating on top */}
+              {selectedEngineLineIndex !== null && (
+                <Box
+                  sx={{
+                    position: "sticky",
+                    top: 0,
+                    zIndex: 1200,
+                    backgroundColor: "background.paper",
+                    borderRadius: 1,
+                    p: 1.5,
+                    mb: 2,
+                    border: 1,
+                    borderColor: "primary.main",
+                    boxShadow: 1
+                  }}
+                >
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                    <Chip
+                      label={`Line ${selectedLineNum} selected`}
+                      size="small"
+                      color="primary"
+                      variant="filled"
+                    />
+                  </Stack>
+                  <Typography variant="caption" sx={{ color: "info.main", fontStyle: "italic" }}>
+                    Line {selectedLineNum} selected. Use → to advance moves, ← to go back.
+                    {" "}Move {currentMoveIndex + 1} of{" "}
+                    {selectedEngineLineIndex !== null
+                      ? (analysisEntries[selectedEngineLineIndex]?.moves?.length ??
+                          (selectedLine?.pv || "").split(/\s+/).filter(Boolean).length)
+                      : "?"}
+                  </Typography>
+                </Box>
+              )}
 
               {/* Deep analysis fields */}
               {advancedAnalysisMode && selectedEngineLineIndex !== null && (

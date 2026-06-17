@@ -862,22 +862,6 @@ export default function App() {
     setCurrentFen(chess.fen());
   }, [puzzleStartFen, puzzleSolution]);
 
-  const extractExplanationText = (text: string): string => {
-    // First, try to parse response as structured JSON output
-    try {
-      const parsed = JSON.parse(text);
-      // If JSON has an explanation field, use it
-      if (parsed.explanation && typeof parsed.explanation === "string") {
-        return parsed.explanation;
-      }
-      // If JSON doesn't have explanation field, fall through to treat as text
-    } catch {
-      // JSON parsing failed, treat entire response as plain text
-    }
-    // Fallback: return response as-is (either plain text or full JSON if no explanation field)
-    return text;
-  };
-
   const fetchPerMoveExplanation = useCallback(async (
     lineIndex: number,
     lineData: AnalysisLine,
@@ -890,7 +874,7 @@ export default function App() {
     try {
       const pv = lineData.pv || lineData.line || "";
       const response = await electronAPI.askQuestion({
-        question: `Explain the move ${moveSan} (move ${moveIndex + 1} in the line). Full line: ${pv}. Explain the tactical and strategic ideas behind this move concisely. Focus purely on chess.`,
+        question: `Explain the move ${moveSan} (move ${moveIndex + 1} in the line). Full line: ${pv}. Explain the tactical and strategic ideas behind this move concisely. Focus purely on chess. Format your response as clear, well-structured markdown with sections and bold headers for different aspects of the move.`,
         fen: baseFen,
         language: formState.explainLanguage,
         model: getModelForProvider(formState.llmProvider, formState.ollamaModel, formState.llmModel),
@@ -900,10 +884,9 @@ export default function App() {
       });
       if (response?.ok && (response as any).answer) {
         const text = (response as any).answer as string;
-        const explanation = extractExplanationText(text);
         const cacheKey = `${baseFen}:${lineIndex}:${moveIndex}`;
-        explanationCache.current.set(cacheKey, explanation);
-        setQuestionResponse(explanation);
+        explanationCache.current.set(cacheKey, text);
+        setQuestionResponse(text);
       } else {
         setQuestionResponse(`⚠️ ${(response as any)?.error || "Unable to generate explanation."}`);
       }
