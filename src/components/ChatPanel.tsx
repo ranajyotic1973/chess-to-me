@@ -92,6 +92,16 @@ export default function ChatPanel({
     if (!gameList || gameList.length === 0) setSelectedGameItemId(null);
   }, [gameList]);
 
+  // Auto-dismiss info bar after 5 seconds when a line is selected
+  useEffect(() => {
+    if (selectedEngineLineIndex !== null) {
+      const timer = setTimeout(() => {
+        onDeselectLine?.();
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedEngineLineIndex, onDeselectLine]);
+
   const paperSx = Array.isArray(sx) ? sx : sx ? [sx] : [];
   const providerName = llmProvider
     ? llmProvider.charAt(0).toUpperCase() + llmProvider.slice(1)
