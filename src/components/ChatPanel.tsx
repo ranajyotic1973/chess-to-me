@@ -175,7 +175,8 @@ export default function ChatPanel({
             gap: 1.5,
             overflowY: "auto",
             overflowX: "hidden",
-            mb: 2
+            mb: 2,
+            position: "relative"
           }}
         >
           {/* Analysis lines — list or detail view via SelectableList */}
@@ -192,16 +193,17 @@ export default function ChatPanel({
               {selectedEngineLineIndex !== null && (
                 <Box
                   sx={{
-                    position: "sticky",
-                    top: 0,
-                    zIndex: 1200,
+                    position: "absolute",
+                    top: 16,
+                    left: 16,
+                    right: 16,
+                    zIndex: 1300,
                     backgroundColor: "background.paper",
                     borderRadius: 1,
                     p: 1.5,
-                    mb: 2,
-                    border: 1,
+                    border: 2,
                     borderColor: "primary.main",
-                    boxShadow: 1
+                    boxShadow: 3
                   }}
                 >
                   <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>

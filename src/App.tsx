@@ -883,7 +883,18 @@ export default function App() {
         llmApiKey: formState.llmApiKey
       });
       if (response?.ok && (response as any).answer) {
-        const text = (response as any).answer as string;
+        let text = (response as any).answer as string;
+
+        // Try to parse as JSON and extract commentary field
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed.commentary && typeof parsed.commentary === "string") {
+            text = parsed.commentary;
+          }
+        } catch {
+          // Not JSON or no commentary field, use as-is
+        }
+
         const cacheKey = `${baseFen}:${lineIndex}:${moveIndex}`;
         explanationCache.current.set(cacheKey, text);
         setQuestionResponse(text);
