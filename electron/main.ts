@@ -2039,17 +2039,19 @@ function getLlmToolDefinitions(): Array<{
   ];
 }
 
-async function executeTool(toolName: string, args: Record<string, any>): Promise<string> {
-  console.log(`[Tool] Executing: ${toolName} | args: ${JSON.stringify(args)}`);
+async function executeTool(toolName: string, args: Record<string, any> | string): Promise<string> {
+  // Parse args if it's a string (from some providers)
+  let parsedArgs = typeof args === "string" ? JSON.parse(args) : args;
+  console.log(`[Tool] Executing: ${toolName} | args: ${JSON.stringify(parsedArgs)}`);
 
   try {
     let result: any;
     switch (toolName) {
       case "validate_move":
-        result = boardManager.validateMove(args.from, args.to);
+        result = boardManager.validateMove(parsedArgs.from, parsedArgs.to);
         break;
       case "apply_move":
-        result = boardManager.applyMove(args.from, args.to);
+        result = boardManager.applyMove(parsedArgs.from, parsedArgs.to);
         break;
       case "get_board_fen":
         result = { fen: boardManager.getBoardFen() };
@@ -2061,8 +2063,8 @@ async function executeTool(toolName: string, args: Record<string, any>): Promise
         try {
           const analysisResult = await performAnalysis(
             "stockfish",
-            args.fen || boardManager.getBoardFen(),
-            Math.min(args.depth || 5, 5),
+            parsedArgs.fen || boardManager.getBoardFen(),
+            Math.min(parsedArgs.depth || 5, 5),
             4
           );
           result = analysisResult;
@@ -2076,13 +2078,13 @@ async function executeTool(toolName: string, args: Record<string, any>): Promise
           result = { ok: false, error: "Games database not available. The database may still be initializing.", games: [] };
         } else {
           const games = searchGames(db, {
-            player: args.player,
-            eco: args.eco,
-            minElo: args.min_elo,
-            limit: args.limit || 5,
-            opening_name: args.opening_name,
-            first_move_white: args.first_move_white,
-            first_move_black: args.first_move_black,
+            player: parsedArgs.player,
+            eco: parsedArgs.eco,
+            minElo: parsedArgs.min_elo,
+            limit: parsedArgs.limit || 5,
+            opening_name: parsedArgs.opening_name,
+            first_move_white: parsedArgs.first_move_white,
+            first_move_black: parsedArgs.first_move_black,
           });
           result = { ok: true, games, count: games.length };
         }
@@ -2090,7 +2092,7 @@ async function executeTool(toolName: string, args: Record<string, any>): Promise
       }
       case "identify_opening": {
         try {
-          const fen = args.fen;
+          const fen = parsedArgs.fen;
           console.log(`[Tool] identify_opening | FEN: ${fen}`);
           const opening = lookupOpeningByFen(fen);
           if (opening) {
