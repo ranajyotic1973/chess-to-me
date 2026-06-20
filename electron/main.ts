@@ -4097,6 +4097,31 @@ ipcMain.handle("endgame:ask", async (_event, payload) => {
   return handleEndgameRequest(question, conversationHistory, runLlm);
 });
 
+ipcMain.handle("opening:identify", async (_event, payload) => {
+  const moves = String(payload?.moves || "").trim();
+  const startFen = String(payload?.fen || "").trim() || undefined;
+
+  if (!moves) {
+    return { ok: true, name: undefined, eco: undefined };
+  }
+
+  try {
+    const moveList = moves.split(/\s+/).filter(m => m.trim());
+    const opening = lookupOpeningByMoves(moveList, startFen);
+
+    if (opening) {
+      console.log(`[IPC] opening:identify → Found: ${opening.name} (${opening.eco})`);
+      return { ok: true, name: opening.name, eco: opening.eco };
+    } else {
+      console.log(`[IPC] opening:identify → No opening found for moves: ${moves}`);
+      return { ok: true, name: undefined, eco: undefined };
+    }
+  } catch (err) {
+    console.error(`[IPC] opening:identify → Error: ${(err as Error).message}`);
+    return { ok: true, name: undefined, eco: undefined };
+  }
+});
+
 // ============================================================================
 // Deep Analysis IPC Handlers (Tasks 1.1 – 1.6)
 // ============================================================================

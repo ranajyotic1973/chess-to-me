@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // LLM
   explainLines: (payload: IpcPayloads["explainLines"]) =>
     ipcRenderer.invoke("llm:explain-lines", payload) as Promise<IpcResponses["explainLines"]>,
+  identifyOpening: (payload: IpcPayloads["opening:identify"]) =>
+    ipcRenderer.invoke("opening:identify", payload) as Promise<IpcResponses["opening:identify"]>,
   askQuestion: (payload?: IpcPayloads["askQuestion"]) => {
     const { userMessage, question, ...rest } = payload || {};
     return ipcRenderer.invoke("llm:ask-question", { userMessage, question, ...rest }) as Promise<IpcResponses["askQuestion"]>;

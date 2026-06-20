@@ -365,6 +365,7 @@ export interface IpcPayloads {
   "conversation:save": { mode: string; history: ConversationMessage[] };
   "opening:ask": { question: string; fen?: string; conversationHistory?: ConversationMessage[]; llmProvider?: string; llmApiKey?: string; model?: string; baseUrl?: string };
   "endgame:ask": { question: string; fen?: string; conversationHistory?: ConversationMessage[]; llmProvider?: string; llmApiKey?: string; model?: string; baseUrl?: string };
+  "opening:identify": { moves: string; fen?: string };
 }
 
 export interface IpcResponses {
@@ -405,6 +406,7 @@ export interface IpcResponses {
   "conversation:save": { ok: boolean; error?: string };
   "opening:ask": { ok: boolean; answer?: string; error?: string };
   "endgame:ask": { ok: boolean; answer?: string; error?: string };
+  "opening:identify": { ok: boolean; name?: string; eco?: string };
 }
 
 // ============================================================================

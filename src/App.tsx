@@ -943,17 +943,32 @@ export default function App() {
     moveIndex: number,
     moveSan: string
   ): Promise<void> => {
-    if (!electronAPI?.explainLines) return;
+    if (!electronAPI?.explainLines || !electronAPI?.identifyOpening) return;
     setIsExplanationLoading(true);
     try {
       const pv = lineData.pv || lineData.line || "";
 
-      // The LLM can use the identify_opening tool to look up openings via the tool.
-      // Do not provide opening info in the prompt - let the LLM use the tool if needed.
+      // First, try to identify the opening locally
+      const openingResult = await electronAPI.identifyOpening({
+        moves: pv,
+        fen: baseFen
+      });
+
+      let openingInfo = "";
+      if (openingResult?.ok && openingResult.name) {
+        openingInfo = `This is the ${openingResult.name}${openingResult.eco ? ` (${openingResult.eco})` : ""}. `;
+      }
+
+      // Only call LLM if opening was found or if there are moves to explain
+      // Skip LLM if no opening found and we can't explain anything useful
+      const question = openingInfo
+        ? `${openingInfo}Explain the move ${moveSan} (move ${moveIndex + 1} in the line). Full line: ${pv}. Focus on the strategic goal and key ideas.`
+        : `Explain the move ${moveSan} (move ${moveIndex + 1} in the line). Full line: ${pv}. Focus on the tactical and strategic ideas behind this move.`;
+
       const response = await electronAPI.explainLines({
         lines: [lineData],
         fen: baseFen,
-        question: `Explain the move ${moveSan} (move ${moveIndex + 1} in the line). Full line: ${pv}. Focus on the tactical and strategic ideas behind this move.`,
+        question,
         language: formState.explainLanguage,
         model: getModelForProvider(formState.llmProvider, formState.ollamaModel, formState.llmModel),
         baseUrl: getBaseUrlForProvider(formState.llmProvider, formState.ollamaBaseUrl),
