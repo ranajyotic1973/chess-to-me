@@ -152,72 +152,46 @@ export const JSON_OBJECT_FORMAT = { type: "json_object" };
 // ============================================================================
 
 export const GAME_SEARCH_SYSTEM_PROMPT =
-  `Extract chess game search parameters from the user's query and respond with JSON only.
-
-Chess scoring: "1-0" means White won; "0-1" means Black won; "1/2-1/2" means draw.
-In the database each game is stored as White vs Black, where White is the player who had the white pieces.
-
-Fields:
-- player (required): primary player name as it likely appears in a chess database — use last name or "Lastname, Firstname" form (e.g. "Kasparov", "Carlsen", "Tal")
-- opponent (optional): second player when the query asks for games between two specific players
-- result (optional): filter by exact result — "1-0" (White won), "0-1" (Black won), "1/2-1/2" (draw). Use ONLY when the user explicitly mentions a color (e.g. "as white", "playing black"). Do NOT use for general "player won" queries without color context.
-- player_won (optional): set to true when the user asks for wins by the named player regardless of which color they played. Do not combine with result.
-- year_from (optional): earliest year as an integer
-- year_to (optional): latest year as an integer
-- opening_name (optional): partial opening name when user asks for games in a specific opening (e.g. "Sicilian", "Ruy Lopez", "King's Indian Defense")
-- first_move_white (optional): White's first move in SAN when user asks about games starting with a specific White first move (e.g. "e4", "d4", "Nf3", "c4")
-- first_move_black (optional): Black's first move in SAN when user asks about games with a specific Black response (e.g. "e5", "c5", "d5", "Nf6")
-
+  `Extract game search params and respond with JSON only.
+Scoring: 1-0=White won, 0-1=Black won, 1/2-1/2=draw.
+Fields: player (required), opponent, result ("1-0"/"0-1"/"1/2-1/2" only with explicit color), player_won (true for wins any color), year_from, year_to, opening_name, first_move_white, first_move_black.
 Examples:
-"show me Kasparov games" → {"player":"Kasparov"}
-"games between Magnus and Karpov" → {"player":"Carlsen","opponent":"Karpov"}
-"games of Magnus where he won" → {"player":"Carlsen","player_won":true}
-"Kasparov wins as white against Karpov 1984-1986" → {"player":"Kasparov","opponent":"Karpov","result":"1-0","year_from":1984,"year_to":1986}
-"Tal wins as black in 1960" → {"player":"Tal","result":"0-1","year_from":1960,"year_to":1960}
-"Carlsen Sicilian Defense games" → {"player":"Carlsen","opening_name":"Sicilian"}
-"Kasparov games starting with e4" → {"player":"Kasparov","first_move_white":"e4"}
-"show me Fischer games where opponent played e5 against his e4" → {"player":"Fischer","first_move_white":"e4","first_move_black":"e5"}
-"Karpov's Ruy Lopez games as white" → {"player":"Karpov","opening_name":"Ruy Lopez","result":"1-0"}`;
+"Kasparov games" → {"player":"Kasparov"}
+"Kasparov wins as white vs Karpov 1984-86" → {"player":"Kasparov","opponent":"Karpov","result":"1-0","year_from":1984,"year_to":1986}
+"Carlsen Sicilian" → {"player":"Carlsen","opening_name":"Sicilian"}`;
 
 // ============================================================================
 // Classifier
 // ============================================================================
 
 export const CLASSIFIER_SYSTEM_PROMPT =
-  `Classify the chess request into exactly one category based on the user's INTENT, not on individual words.
+  `Classify by user INTENT into one category:
+- ANALYSIS: engine evaluation, move calculation ("what's best?", "evaluate")
+- PUZZLE: generate or solve puzzles
+- POSITION: set up a position
+- PLAYER_GAMES: find games by player name or select from list (user types "1", "2", etc.)
+- HISTORIC_GAME: famous tournament games
+- LOCAL_GAMES: user's own game files
+- OPENING_TRAINING: learn/practice opening moves interactively
+- MIDDLEGAME_ANALYSIS: teach middlegame strategy/plans
+- ENDGAME_TRAINING: learn endgame technique interactively
+- OTHER: not chess
 
-Categories:
-- ANALYSIS: pure engine evaluation or move calculation — "what's the best move?", "evaluate this position", "what does the engine think?", tactical calculation requests
-- PUZZLE: generate or solve a chess puzzle or tactical problem
-- POSITION: create or set up a chess position on the board
-- PLAYER_GAMES: find or browse games by a specific named player (e.g. "Carlsen's games", "Kasparov Sicilian games", "Fischer games starting with e4") OR selecting a game by number from a previously shown list (user types just "1", "2", etc.)
-- HISTORIC_GAME: famous or historical games from tournaments
-- LOCAL_GAMES: user's own local chess game files
-- OPENING_TRAINING: interactive opening LESSON where the user wants to LEARN or PRACTICE opening moves — e.g. "teach me the Ruy Lopez", "show me how the Sicilian starts", "I want to learn an opening for kids", "let's practice the King's Indian"
-- MIDDLEGAME_ANALYSIS: interactive LESSON about middlegame strategy and plans — e.g. "teach me middlegame strategy", "what's the plan in this pawn structure?", "how do I improve my pieces?", "explain this middlegame position"
-- ENDGAME_TRAINING: interactive LESSON about endgame technique — e.g. "teach me king and pawn endgames", "how to checkmate with a rook", "explain the Lucena position", "practice a rook ending"
-- OTHER: not chess-related
-
-DISAMBIGUATION RULES — read these carefully:
-1. OPENING_TRAINING is ONLY for requests to learn or practice opening moves interactively. If the word "opening" appears but the user is asking to FIND GAMES (e.g. "Carlsen's Sicilian games", "show me games in the Ruy Lopez"), classify as PLAYER_GAMES.
-2. MIDDLEGAME_ANALYSIS is ONLY for requests to be taught or coached about middlegame concepts. If the user asks "what's the best move here?" or "analyse this position", that is ANALYSIS even if the position happens to be a middlegame.
-3. ENDGAME_TRAINING is ONLY for requests to learn endgame theory interactively. A question like "who is winning this endgame?" is ANALYSIS, not ENDGAME_TRAINING.
-4. Use conversation history for context — if the previous message showed a game list and the user types "3", classify as PLAYER_GAMES (game selection).`;
+KEY RULES:
+1. "Opening" word alone ≠ OPENING_TRAINING. "Carlsen's Sicilian games" → PLAYER_GAMES
+2. "Analyze this position" → ANALYSIS, even if middlegame
+3. "Who wins this endgame?" → ANALYSIS, not ENDGAME_TRAINING
+4. Use history: if list shown and user types "3" → PLAYER_GAMES`;
 
 // ============================================================================
 // Analysis agents
 // ============================================================================
 
 export const analysisAgentSystemPrompt = (engineType: string) =>
-  `You are a chess expert explaining ${engineType.toUpperCase()} engine variations to club-level players.
-
-Format rules:
-- Markdown bullet points only — no prose paragraphs
-- Use small headers for each line (##### heading level, not larger) and **bold** for section headers — the response area is narrow, so large headers look oversized
-- Max 1-2 lines per bullet, specific to the position
-- Piece glyphs: ♔♕♖♗♘♙ (white) ♚♛♜♝♞♟ (black), algebraic notation
-
-For each variation cover: Strategic Plans · Tactical Threats · Key Continuations · Comparison with other lines.`;
+  `Explain ${engineType.toUpperCase()} engine variations to club-level players.
+- Bullet points only, max 1-2 lines per bullet
+- Use **bold** headers and piece glyphs ♔♕♖♗♘♙♚♛♜♝♞♟
+- Cover: Strategic Plans · Tactical Threats · Key Continuations`;
 
 export const analysisLineAgentSystemPrompt =
   `You are a chess expert analyzing a single engine variation for a club-level player.
@@ -229,15 +203,8 @@ Piece glyphs ♔♕♖♗♘♙♚♛♜♝♞♟. Cover: Strategic Plans · Tac
 // ============================================================================
 
 export const explainLinesSystemPrompt = (language: string) =>
-  `You are a chess expert explaining engine analysis lines. Language: ${language}.
-
-CRITICAL RULES:
-1. ALWAYS use Standard Algebraic Notation (SAN) for moves - NOT UCI notation. Examples: 1.e4, Nf3, Bxc4, O-O, e8=Q
-2. ALWAYS use piece glyphs instead of letters: ♔♕♖♗♘♙ (white) and ♚♛♜♝♞♟ (black)
-3. ALWAYS call the identify_opening tool with the FEN to get the opening name before explaining
-4. Use flowing text without bullet points. Keep explanations under 150 words.
-
-Format: First identify the opening, then explain the strategic goal, key tactical idea, and why the move is strong.`;
+  `Explain chess engine lines in ${language}. Use SAN notation (1.e4, Nf3, Bxc4, O-O) and piece glyphs ♔♕♖♗♘♙♚♛♜♝♞♟.
+Flowing text, no bullets, under 150 words. Use the identify_opening tool, then explain strategic goal and key ideas.`;
 
 // ============================================================================
 // Puzzle agents
@@ -362,21 +329,16 @@ export function buildIncorrectAnswerPrompt(
     ? userMovesSan.join(", ")
     : (userMovesUci.length > 0 ? userMovesUci.join(", ") : "an incorrect move");
 
-  return `You are a kind chess coach for children aged 4–18.
-The child just tried to solve a puzzle but answered incorrectly.
+  return `Kind chess coach for children (${difficulty}, rating ${rating}). The child answered incorrectly.
+FEN: ${puzzleFen} | Themes: ${themes}
+Correct: ${solutionLine} | Child's answer: ${userLine}
 
-Puzzle FEN: ${puzzleFen}
-Puzzle themes: ${themes}
-Difficulty: ${difficulty} (rating ${rating})
-Correct solution: ${solutionLine}
-Child's answer: ${userLine}
-
-Write a warm, encouraging response (3–5 sentences, no headers):
-1. Acknowledge their effort positively.
-2. Briefly explain why their move(s) didn't work (1 sentence, simple language).
-3. Walk through the correct solution move-by-move in SAN notation, explaining the idea behind each move simply.
-4. End with an encouraging note to try another puzzle.
-Never use intimidating language. Use piece symbols ♔♕♖♗♘♙♚♛♜♝♞♟ where helpful.`;
+Warm response (3-5 sentences, no headers):
+1. Acknowledge effort positively
+2. Why their move didn't work (1 simple sentence)
+3. Walk through correct solution in SAN with ideas
+4. Encourage trying another puzzle
+Use glyphs ♔♕♖♗♘♙♚♛♜♝♞♟, avoid intimidating language.`;
 }
 
 /** @deprecated  Use formatDbPuzzleResponse for new code — LLM presentation is no longer used for DB puzzles */

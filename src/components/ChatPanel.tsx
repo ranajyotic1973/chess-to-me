@@ -116,15 +116,13 @@ export default function ChatPanel({
 
   const analysisListItems: SelectableListItem[] = showAnalysisLines
     ? analysisLines.map((line, idx) => {
-        const lineNum = line.rank || idx + 1;
         const entry = analysisEntries[idx];
         const moveSequence = entry?.description || line.pv || line.line || "(no moves)";
         const explanation = lineExplanations[idx];
-        const sublabel = explanation ? `${moveSequence} • ${explanation}` : moveSequence;
         return {
           id: `line-${idx}`,
-          label: `Line ${lineNum}`,
-          sublabel,
+          label: moveSequence,
+          sublabel: explanation || "",
         };
       })
     : [];

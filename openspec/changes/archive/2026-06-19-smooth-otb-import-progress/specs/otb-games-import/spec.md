@@ -1,33 +1,4 @@
-## ADDED Requirements
-
-### Requirement: Settings panel displays OTB bulk-import instructions in the Games Database section
-The Games Database subsection in Settings SHALL display instructional text explaining that the user must manually download the complete OTB archive set from lumbrasgigabase.com before using the directory import feature. The instructions SHALL:
-1. Tell the user to visit the Lumbrasgigabase download page (shown as a clickable link).
-2. Explain they must download all files whose names match `*OTB*.7z` into a single local folder.
-3. Note that monthly update files from the same page can be added to the same folder and imported the same way.
-
-#### Scenario: User opens Settings with no OTB directory configured
-- **WHEN** the user opens Settings and no `otbImportDir` has been saved
-- **THEN** the Games Database section SHALL display the instructional text and link, with an empty directory path field
-
-#### Scenario: Instructional text is always visible
-- **WHEN** the user opens Settings regardless of whether a directory is configured or games are imported
-- **THEN** the instructional text and Lumbrasgigabase link SHALL be visible above the directory field
-
-### Requirement: Settings panel provides a directory path field and Browse button for the OTB import directory
-The Games Database section SHALL include a text input showing the currently saved `otbImportDir` path, and a "Browse…" button next to it. Clicking "Browse…" SHALL open an Electron `dialog.showOpenDialog` with the `openDirectory` property (selecting a folder, not individual files). The selected path SHALL be written to the `otbImportDir` settings key immediately and the text input SHALL update to reflect it.
-
-#### Scenario: User browses and selects a directory
-- **WHEN** the user clicks "Browse…" and selects a folder in the dialog
-- **THEN** the directory path text input SHALL update to show the selected folder path, and `otbImportDir` SHALL be saved to settings
-
-#### Scenario: User cancels the directory dialog
-- **WHEN** the user clicks "Browse…" and dismisses the dialog without selecting a folder
-- **THEN** the directory path text input SHALL remain unchanged
-
-#### Scenario: User pastes a path manually into the text field
-- **WHEN** the user types or pastes a path into the directory path text input
-- **THEN** the field SHALL update live and the value SHALL be saved to `otbImportDir` when the user clicks "Save settings"
+## MODIFIED Requirements
 
 ### Requirement: Import All OTB Files button triggers a two-phase directory import
 The Games Database section SHALL include an "Import All OTB Files" button. Clicking it SHALL invoke the `db:import-otb-dir` IPC handler with the current `otbImportDir` path. The handler SHALL execute the import in two sequential phases:
@@ -102,22 +73,8 @@ During a directory import the main process SHALL emit `db:otb-dir-progress` even
 - **WHEN** the final archive has been imported and the FTS rebuild is complete
 - **THEN** the `db:otb-dir-complete` event SHALL be emitted and no further `db:otb-dir-progress` events SHALL be sent
 
-### Requirement: OTB import directory path is persisted across sessions
-The `otbImportDir` value SHALL be saved in the existing electron-store settings object (same store as engine paths and LLM keys). On Settings panel mount, the saved value SHALL be loaded and pre-populate the directory path text input.
+## REMOVED Requirements
 
-#### Scenario: Directory path survives app restart
-- **WHEN** the user sets a directory path, saves settings, and restarts the app
-- **THEN** the Settings panel SHALL show the previously saved directory path in the text input on next open
-
-### Requirement: IPC handlers for OTB directory import are exposed in preload and typed
-The preload script SHALL expose:
-- `browseOtbDir(): Promise<{ dirPath: string | null }>` — opens the folder-select dialog
-- `importOtbDir(dirPath: string): Promise<{ ok: boolean; imported?: number; skipped?: number; errors?: number; error?: string }>` — triggers the directory scan and sequential import
-- `onOtbDirProgress(cb): () => void` — subscribes to `db:otb-dir-progress` events, returns an unsubscribe function
-- `onOtbDirComplete(cb): () => void` — subscribes to `db:otb-dir-complete` events, returns an unsubscribe function
-
-The `ElectronAPI` interface in `src/types/index.ts` SHALL include all four methods with correct TypeScript signatures.
-
-#### Scenario: Type safety for import result
-- **WHEN** the renderer calls `electronAPI.importOtbDir(path)` and the TypeScript compiler checks the return type
-- **THEN** the compiler SHALL enforce that `imported`, `skipped`, and `errors` are `number | undefined` and `error` is `string | undefined`
+### Requirement: OTB directory import progress is streamed via a dedicated IPC event
+**Reason**: Replaced by the updated requirement above which carries the same fields plus `overallPercent` and an explicit `phase` discriminator. The event channel (`db:otb-dir-progress`) is unchanged; only the payload contract is extended.
+**Migration**: Consumers that read `fileIndex`, `totalFiles`, `fileName`, `percent`, and `message` continue to work without changes. Consumers SHOULD additionally read `overallPercent` and `phase` to display smooth progress.
