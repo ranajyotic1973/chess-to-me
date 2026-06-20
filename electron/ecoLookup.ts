@@ -121,6 +121,21 @@ export function lookupOpeningByMoves(moves: string[], startFen?: string): EcoMat
   }
 }
 
+/**
+ * Check if a given position FEN is a valid named opening position in the ECO database.
+ * This is useful to avoid explaining positions that are not officially classified openings.
+ * Returns true only if the position exists in the ECO database.
+ */
+export function isValidOpeningPosition(fen: string): boolean {
+  if (!ecoAvailable || !cachedBook) return false;
+  try {
+    const opening = findOpening(cachedBook, fen, cachedPositionBook ?? undefined);
+    return opening !== undefined;
+  } catch {
+    return false;
+  }
+}
+
 /** True once initEcoLookup() has completed successfully. */
 export function isEcoAvailable(): boolean {
   return ecoAvailable;

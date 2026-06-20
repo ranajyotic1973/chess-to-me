@@ -7,7 +7,7 @@ import { loadPoints, getPoints, recordSolve as recordPuzzleSolve } from "./puzzl
 import { Chess } from "chess.js";
 import type { AnalysisLine, PuzzleRow, ConversationMessage } from "../src/types";
 import { sanLineWithGlyphs } from "./sanFormat";
-import { initEcoLookup, lookupOpeningByFen, lookupOpeningByMoves } from "./ecoLookup";
+import { initEcoLookup, lookupOpeningByFen, lookupOpeningByMoves, isValidOpeningPosition } from "./ecoLookup";
 import { handleOpeningRequest } from "./openingAgent";
 import { handleMiddlegameRequest } from "./middlegameAgent";
 import { handleEndgameRequest } from "./endgameAgent";
@@ -4108,6 +4108,23 @@ ipcMain.handle("opening:identify", async (_event, payload) => {
   } catch (err) {
     console.error(`[IPC] opening:identify → Error: ${(err as Error).message}`);
     return { ok: true, name: undefined, eco: undefined };
+  }
+});
+
+ipcMain.handle("opening:is-valid-position", async (_event, payload) => {
+  const fen = String(payload?.fen || "").trim();
+
+  if (!fen) {
+    return { ok: true, isValid: false };
+  }
+
+  try {
+    const isValid = isValidOpeningPosition(fen);
+    console.log(`[IPC] opening:is-valid-position | FEN: ${fen.substring(0, 30)}... → ${isValid ? "VALID" : "NOT VALID"}`);
+    return { ok: true, isValid };
+  } catch (err) {
+    console.error(`[IPC] opening:is-valid-position → Error: ${(err as Error).message}`);
+    return { ok: true, isValid: false };
   }
 });
 

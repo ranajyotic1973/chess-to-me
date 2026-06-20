@@ -943,12 +943,22 @@ export default function App() {
     moveIndex: number,
     moveSan: string
   ): Promise<void> => {
-    if (!electronAPI?.explainLines || !electronAPI?.identifyOpening) return;
+    if (!electronAPI?.explainLines || !electronAPI?.identifyOpening || !electronAPI?.isValidOpeningPosition) return;
     setIsExplanationLoading(true);
     try {
       const pv = lineData.pv || lineData.line || "";
 
-      // First, try to identify the opening locally
+      // Check if the CURRENT position is a valid named opening position
+      const positionCheckResult = await electronAPI.isValidOpeningPosition({ fen: baseFen });
+
+      if (!positionCheckResult?.ok || !positionCheckResult.isValid) {
+        console.log(`[App] Skipping LLM - current position is not a valid opening position`);
+        setIsExplanationLoading(false);
+        setQuestionResponse("");
+        return;
+      }
+
+      // Position is valid, now identify the specific opening from the moves
       const openingResult = await electronAPI.identifyOpening({
         moves: pv,
         fen: baseFen

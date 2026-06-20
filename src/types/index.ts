@@ -366,6 +366,7 @@ export interface IpcPayloads {
   "opening:ask": { question: string; fen?: string; conversationHistory?: ConversationMessage[]; llmProvider?: string; llmApiKey?: string; model?: string; baseUrl?: string };
   "endgame:ask": { question: string; fen?: string; conversationHistory?: ConversationMessage[]; llmProvider?: string; llmApiKey?: string; model?: string; baseUrl?: string };
   "opening:identify": { moves: string; fen?: string };
+  "opening:is-valid-position": { fen: string };
 }
 
 export interface IpcResponses {
@@ -407,6 +408,7 @@ export interface IpcResponses {
   "opening:ask": { ok: boolean; answer?: string; error?: string };
   "endgame:ask": { ok: boolean; answer?: string; error?: string };
   "opening:identify": { ok: boolean; name?: string; eco?: string };
+  "opening:is-valid-position": { ok: boolean; isValid: boolean };
 }
 
 // ============================================================================
