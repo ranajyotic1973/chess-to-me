@@ -954,16 +954,16 @@ export default function App() {
         fen: baseFen
       });
 
-      let openingInfo = "";
-      if (openingResult?.ok && openingResult.name) {
-        openingInfo = `This is the ${openingResult.name}${openingResult.eco ? ` (${openingResult.eco})` : ""}. `;
+      // Skip LLM entirely if no opening found - avoid unnecessary LLM overhead
+      if (!openingResult?.ok || !openingResult.name) {
+        console.log(`[App] Skipping LLM explanation - no opening found for moves: ${pv}`);
+        setIsExplanationLoading(false);
+        setQuestionResponse("");
+        return;
       }
 
-      // Only call LLM if opening was found or if there are moves to explain
-      // Skip LLM if no opening found and we can't explain anything useful
-      const question = openingInfo
-        ? `${openingInfo}Explain the move ${moveSan} (move ${moveIndex + 1} in the line). Full line: ${pv}. Focus on the strategic goal and key ideas.`
-        : `Explain the move ${moveSan} (move ${moveIndex + 1} in the line). Full line: ${pv}. Focus on the tactical and strategic ideas behind this move.`;
+      const openingInfo = `This is the ${openingResult.name}${openingResult.eco ? ` (${openingResult.eco})` : ""}. `;
+      const question = `${openingInfo}Explain the move ${moveSan} (move ${moveIndex + 1} in the line). Full line: ${pv}. Focus on the strategic goal and key ideas.`;
 
       const response = await electronAPI.explainLines({
         lines: [lineData],
