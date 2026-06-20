@@ -19,7 +19,7 @@ const colorNames: Record<string, string> = {
 const WHITE_GLYPHS: Record<string, string> = { N: "♘", B: "♗", R: "♖", Q: "♕", K: "♔" };
 const BLACK_GLYPHS: Record<string, string> = { N: "♞", B: "♝", R: "♜", Q: "♛", K: "♚" };
 
-const sanWithGlyph = (san: string, isBlack: boolean): string => {
+export const sanWithGlyph = (san: string, isBlack: boolean): string => {
   const map = isBlack ? BLACK_GLYPHS : WHITE_GLYPHS;
   return san.replace(/^([NBRQK])/, (_, l) => map[l] ?? l);
 };

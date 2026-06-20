@@ -1,34 +1,34 @@
-// Tests for ecoLookup helpers.
-// The @chess-openings/eco.json package is ESM-only; Jest uses the CJS stub in
-// __mocks__/chess-eco.js (mapped by jest.config.js moduleNameMapper).
+// Tests for ecoLookup helpers, backed by bundled local JSON files (see data/eco/).
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
+import { initEcoLookup, lookupOpeningByFen, lookupOpeningByMoves, isEcoAvailable } from "./ecoLookup";
 
 const RUY_LOPEZ_FEN = "r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3";
 // chess.js v1+ only includes the en passant square when capture is actually possible,
 // so after 1.e4 c5 (no white pawn on b5/d5) the ep field is "-", not "c6".
 const SICILIAN_FEN = "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2";
 
-const FAKE_BOOK: Record<string, { eco: string; name: string; src: string; moves: string }> = {
-  [RUY_LOPEZ_FEN]: { eco: "C60", name: "Ruy Lopez", src: "eco_tsv", moves: "1. e4 e5 2. Nf3 Nc6 3. Bb5" },
-  [SICILIAN_FEN]:  { eco: "B20", name: "Sicilian Defense", src: "eco_tsv", moves: "1. e4 c5" }
+const FAKE_BOOK: Record<string, { eco: string; name: string }> = {
+  [RUY_LOPEZ_FEN]: { eco: "C60", name: "Ruy Lopez" },
+  [SICILIAN_FEN]:  { eco: "B20", name: "Sicilian Defense" }
 };
 
-// Get stub BEFORE importing ecoLookup so we can configure it before initEcoLookup runs
-const ecoStub = require("../__mocks__/chess-eco") as {
-  openingBook: jest.Mock;
-  findOpening: jest.Mock;
-  getPositionBook: jest.Mock;
-};
-
-// Configure stub with FAKE_BOOK before the module is initialised
-ecoStub.openingBook.mockResolvedValue(FAKE_BOOK);
-ecoStub.findOpening.mockImplementation((_book: Record<string, any>, fen: string) => _book[fen] ?? undefined);
-ecoStub.getPositionBook.mockReturnValue({});
-
-import { initEcoLookup, lookupOpeningByFen, lookupOpeningByMoves, isEcoAvailable } from "./ecoLookup";
+const ECO_DATA_FILES = ["ecoA.json", "ecoB.json", "ecoC.json", "ecoD.json", "ecoE.json", "eco_interpolated.json"];
 
 describe("ecoLookup", () => {
+  let tmpDir: string;
+
   beforeAll(async () => {
-    await initEcoLookup();
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "eco-test-"));
+    for (const file of ECO_DATA_FILES) {
+      fs.writeFileSync(path.join(tmpDir, file), JSON.stringify(file === "ecoA.json" ? FAKE_BOOK : {}));
+    }
+    await initEcoLookup(tmpDir);
+  });
+
+  afterAll(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   test("library loads successfully", () => {
@@ -65,5 +65,14 @@ describe("ecoLookup", () => {
 
   test("lookupOpeningByFen returns null for unrecognised FEN", () => {
     expect(lookupOpeningByFen("UNKNOWN_FEN")).toBeNull();
+  });
+});
+
+describe("ecoLookup — data files missing", () => {
+  test("initEcoLookup degrades gracefully instead of throwing", async () => {
+    await initEcoLookup(path.join(os.tmpdir(), "eco-test-does-not-exist"));
+    expect(isEcoAvailable()).toBe(false);
+    expect(lookupOpeningByFen(RUY_LOPEZ_FEN)).toBeNull();
+    expect(lookupOpeningByMoves(["e2e4"])).toBeNull();
   });
 });

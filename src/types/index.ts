@@ -302,6 +302,8 @@ export interface IpcPayloads {
     baseUrl?: string;
     llmProvider?: "ollama" | "openai" | "anthropic" | "gemini" | "grok";
     llmApiKey?: string;
+    /** Optional override prompt for a single-line call — bypasses the generic "explain this line" template. */
+    question?: string;
   };
   askQuestion: {
     question?: string;
@@ -527,8 +529,14 @@ export interface ChatPanelProps {
   onMoveSuggested?: (from: string, to: string) => void;
   llmProvider?: string;
   analysisLines?: AnalysisLine[];
+  lineExplanations?: Record<number, string>;
+  currentOpening?: { name: string; eco: string } | null;
   onSelectEngineLine?: (lineIndex: number, line: AnalysisLine) => void;
   onDeselectLine?: () => void;
+  /** True when there's a parent level to return to (the user has drilled into a line). */
+  canGoBackToParentLines?: boolean;
+  /** True while a fresh analysis of the drilled-into position is being fetched. */
+  isDrillLoading?: boolean;
   selectedEngineLineIndex?: number | null;
   advancedAnalysisMode?: boolean;
   deepAnalysisResults?: Record<number, DeepLineAnalysis | null>;
@@ -549,6 +557,7 @@ export interface ChatPanelProps {
   gameList?: import("./index").GameRow[] | null;
   onGameSelect?: (index: number) => void;
   onBackToGameList?: () => void;
+  trainingMoveLabel?: string;
   sx?: any;
 }
 
@@ -607,6 +616,7 @@ export interface ElectronAPI {
     baseUrl?: string;
     llmProvider?: "ollama" | "openai" | "anthropic" | "gemini" | "grok";
     llmApiKey?: string;
+    question?: string;
   }): Promise<{ ok: true; explanations: Array<{ rank: number; text: string }> } | { ok: false; error: string }>;
 
   askQuestion(payload?: {
@@ -674,7 +684,7 @@ export interface ElectronAPI {
   puzzleExplainIncorrect(payload: IpcPayloads["puzzle:explain-incorrect"]): Promise<{ ok: boolean; explanation?: string; error?: string }>;
   browseOtbDir(): Promise<{ dirPath: string | null }>;
   importOtbDir(dirPath: string): Promise<{ ok: boolean; started?: boolean; imported?: number; skipped?: number; errors?: number; error?: string }>;
-  onOtbDirProgress(callback: (data: { fileIndex: number; totalFiles: number; fileName: string; phase: string; percent: number; message: string }) => void): () => void;
+  onOtbDirProgress(callback: (data: { fileIndex: number; totalFiles: number; fileName: string; phase: string; percent: number; message: string; overallPercent: number }) => void): () => void;
   onOtbDirComplete(callback: (data: { ok: boolean; imported: number; skipped: number; errors: number }) => void): () => void;
 
   // User profile

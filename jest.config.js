@@ -17,8 +17,6 @@ module.exports = {
     "^@/(.*)$": "<rootDir>/src/$1",
     // better-sqlite3 is compiled against Electron's Node.js ABI and cannot
     // load in the system Node.js test environment. The mock uses node:sqlite.
-    "^better-sqlite3$": "<rootDir>/__mocks__/better-sqlite3.js",
-    // @chess-openings/eco.json ships ESM-only; redirect to a CJS stub for Jest.
-    "^@chess-openings/eco\\.json$": "<rootDir>/__mocks__/chess-eco.js"
+    "^better-sqlite3$": "<rootDir>/__mocks__/better-sqlite3.js"
   }
 };

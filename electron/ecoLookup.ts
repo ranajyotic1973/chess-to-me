@@ -1,40 +1,76 @@
+import * as fs from "fs";
+import * as path from "path";
 import { Chess } from "chess.js";
-import type { Opening, OpeningCollection } from "@chess-openings/eco.json";
-import type { PositionBook } from "@chess-openings/eco.json";
 
 export interface EcoMatch {
   eco: string;
   name: string;
 }
 
+interface OpeningEntry {
+  eco: string;
+  name: string;
+}
+
+type OpeningCollection = Record<string, OpeningEntry>;
+type PositionBook = Record<string, string[]>;
+
+// Bundled locally under data/eco/ (see scripts that fetched them from
+// https://github.com/JeffML/eco.json) — no network access at runtime.
+const ECO_DATA_FILES = ["ecoA.json", "ecoB.json", "ecoC.json", "ecoD.json", "ecoE.json", "eco_interpolated.json"];
+
 let cachedBook: OpeningCollection | null = null;
 let cachedPositionBook: PositionBook | null = null;
 let ecoAvailable = false;
 
-// Lazily-imported functions — populated by initEcoLookup()
-let _findOpening: ((book: OpeningCollection, fen: string, posBook?: PositionBook) => Opening | undefined) | null = null;
-let _getPositionBook: ((book: OpeningCollection) => PositionBook) | null = null;
+/** Resolves the directory containing the bundled ECO JSON files, relative to this compiled file. */
+function defaultEcoDataDir(): string {
+  // Compiled to electron/dist/ecoLookup.js — two levels up is the project root in dev;
+  // electron-builder's extraResources entry copies the same folder alongside resources in prod.
+  return path.join(__dirname, "..", "..", "data", "eco");
+}
+
+function buildPositionBook(book: OpeningCollection): PositionBook {
+  const positionToFen: PositionBook = {};
+  for (const fen in book) {
+    const position = fen.split(" ")[0];
+    (positionToFen[position] ??= []).push(fen);
+  }
+  return positionToFen;
+}
+
+function findOpening(book: OpeningCollection, fen: string, positionBook?: PositionBook): OpeningEntry | undefined {
+  let opening = book[fen];
+  if (!opening && positionBook) {
+    const position = fen.split(" ")[0];
+    const posEntry = positionBook[position];
+    if (posEntry && posEntry.length > 0) {
+      opening = book[posEntry[0]];
+    }
+  }
+  return opening;
+}
 
 /**
- * Call once at main-process startup.  Downloads ECO data from GitHub and caches
- * it in memory.  If the network is unavailable or the package is missing, logs a
- * warning and all subsequent lookup calls return null.
+ * Call once at main-process startup. Loads the bundled ECO opening data files from disk
+ * (no network access, no third-party module-loading quirks). If the files are missing,
+ * logs a warning and all subsequent lookup calls return null.
  */
-export async function initEcoLookup(): Promise<void> {
+export async function initEcoLookup(baseDir?: string): Promise<void> {
   try {
-    // Dynamic import so a missing package does not crash the process at module load.
-    const ecoModule = await import("@chess-openings/eco.json");
-    const { openingBook, findOpening, getPositionBook } = ecoModule;
+    const dir = baseDir || defaultEcoDataDir();
+    const book: OpeningCollection = {};
+    for (const file of ECO_DATA_FILES) {
+      const raw = fs.readFileSync(path.join(dir, file), "utf-8");
+      Object.assign(book, JSON.parse(raw));
+    }
 
-    _findOpening = findOpening;
-    _getPositionBook = getPositionBook;
-
-    cachedBook = await openingBook();
-    cachedPositionBook = getPositionBook(cachedBook);
+    cachedBook = book;
+    cachedPositionBook = buildPositionBook(book);
     ecoAvailable = true;
-    console.log("[ECO] Opening book loaded successfully.");
+    console.log(`[ECO] Opening book loaded successfully (${Object.keys(book).length} positions).`);
   } catch (err) {
-    console.warn("[ECO] eco.json not available — opening lookup disabled.", String(err));
+    console.warn("[ECO] eco data not available — opening lookup disabled.", String(err));
     ecoAvailable = false;
   }
 }
@@ -44,9 +80,9 @@ export async function initEcoLookup(): Promise<void> {
  * Returns { eco, name } or null when the position is unknown or the library is unavailable.
  */
 export function lookupOpeningByFen(fen: string): EcoMatch | null {
-  if (!ecoAvailable || !cachedBook || !_findOpening) return null;
+  if (!ecoAvailable || !cachedBook) return null;
   try {
-    const result = _findOpening(cachedBook, fen, cachedPositionBook ?? undefined);
+    const result = findOpening(cachedBook, fen, cachedPositionBook ?? undefined);
     if (!result) return null;
     return { eco: result.eco, name: result.name };
   } catch {

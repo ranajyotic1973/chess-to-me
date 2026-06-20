@@ -6,6 +6,7 @@ import {
   readOtbTracking,
   writeOtbTracking,
   scanOtbFiles,
+  computeOverallPercent,
 } from "./otbImport";
 
 describe("getOtbTrackingFilePath", () => {
@@ -155,5 +156,39 @@ describe("scanOtbFiles", () => {
     const toImport = allFiles.filter(f => !tracked.has(path.basename(f)));
     expect(toImport).toHaveLength(1);
     expect(path.basename(toImport[0])).toBe("OTB_2400_2001-2010.7z");
+  });
+});
+
+describe("computeOverallPercent", () => {
+  test("extraction phase scales across the first half", () => {
+    expect(computeOverallPercent("extracting", 3, 10)).toBe(15);
+  });
+
+  test("import phase scales across the second half", () => {
+    expect(computeOverallPercent("importing", 7, 10)).toBe(85);
+  });
+
+  test("reaches 50 at the end of extraction", () => {
+    expect(computeOverallPercent("extracting", 10, 10)).toBe(50);
+  });
+
+  test("reaches 100 at the end of import", () => {
+    expect(computeOverallPercent("importing", 10, 10)).toBe(100);
+  });
+
+  test("returns 0 when total is 0", () => {
+    expect(computeOverallPercent("extracting", 0, 0)).toBe(0);
+  });
+
+  test("a full extract-then-import run is monotonically non-decreasing", () => {
+    const total = 7;
+    const values: number[] = [];
+    for (let i = 1; i <= total; i++) values.push(computeOverallPercent("extracting", i, total));
+    for (let i = 1; i <= total; i++) values.push(computeOverallPercent("importing", i, total));
+
+    for (let i = 1; i < values.length; i++) {
+      expect(values[i]).toBeGreaterThanOrEqual(values[i - 1]);
+    }
+    expect(values[values.length - 1]).toBe(100);
   });
 });

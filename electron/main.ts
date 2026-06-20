@@ -6,11 +6,12 @@ import { spawn, ChildProcess } from "node:child_process";
 import { loadPoints, getPoints, recordSolve as recordPuzzleSolve } from "./puzzlePoints";
 import { Chess } from "chess.js";
 import type { AnalysisLine, PuzzleRow, ConversationMessage } from "../src/types";
+import { sanLineWithGlyphs } from "./sanFormat";
 import { initEcoLookup, lookupOpeningByFen, lookupOpeningByMoves } from "./ecoLookup";
 import { handleOpeningRequest } from "./openingAgent";
 import { handleMiddlegameRequest } from "./middlegameAgent";
 import { handleEndgameRequest } from "./endgameAgent";
-import { readOtbTracking, writeOtbTracking, scanOtbFiles } from "./otbImport";
+import { readOtbTracking, writeOtbTracking, scanOtbFiles, computeOverallPercent } from "./otbImport";
 import { settings } from "./settings";
 import { initPuzzleDb, importPuzzlesFromCsv, searchPuzzles, getPuzzleDbStats, hasPuzzles, normalizeThemeKeyword } from "./puzzleDb";
 import { initGamesDb, importPgnFile, searchGames, getGamesDbStats, rebuildFts, setGamesSource } from "./gamesDb";
@@ -31,6 +32,9 @@ import {
   PLAYER_GAMES_AGENT_SYSTEM_PROMPT,
   CLASSIFIER_RESPONSE_FORMAT,
   PUZZLE_RESPONSE_FORMAT,
+  OPENING_RESPONSE_FORMAT,
+  MIDDLEGAME_RESPONSE_FORMAT,
+  ENDGAME_RESPONSE_FORMAT,
   JSON_OBJECT_FORMAT,
   GAME_SEARCH_PARAMS_FORMAT,
   GAME_SEARCH_SYSTEM_PROMPT
@@ -67,6 +71,14 @@ function getBundledGamesDbPath(): string | null {
   if (fs.existsSync(prodPath)) return prodPath;
   if (fs.existsSync(devPath))  return devPath;
   return null;
+}
+
+function getBundledEcoDataDir(): string {
+  // Production: electron-builder puts it in extraResources -> resources/eco
+  // Development: data/eco in the project root
+  const prodPath = path.join(process.resourcesPath ?? "", "eco");
+  const devPath  = path.join(app.getAppPath(), "data", "eco");
+  return fs.existsSync(prodPath) ? prodPath : devPath;
 }
 
 async function setupBundledGamesDb(): Promise<void> {
@@ -1467,6 +1479,7 @@ async function doImportGamesFile(
     skipFts?: boolean;
     db?: Database.Database;       // shared connection for batch imports
     extractDir?: string;          // per-slot temp dir for parallel extraction
+    preExtracted?: boolean;       // archive was already extracted to extractDir — skip extract7z
   } = {}
 ): Promise<{ ok: boolean; count?: number; error?: string }> {
   const { gamesDbPath, gamesExtractDir: defaultExtractDir } = getDbPaths();
@@ -1477,13 +1490,18 @@ async function doImportGamesFile(
     let pgnFiles: string[];
 
     if (lower.endsWith(".7z")) {
-      // Clean the slot's extract dir before starting so stale files never interfere
-      if (fs.existsSync(extractDir)) {
-        fs.rmSync(extractDir, { recursive: true, force: true });
+      if (opts.preExtracted) {
+        // Files are already on disk from the extraction phase — just read them.
+        pgnFiles = findPgnFiles(extractDir);
+      } else {
+        // Clean the slot's extract dir before starting so stale files never interfere
+        if (fs.existsSync(extractDir)) {
+          fs.rmSync(extractDir, { recursive: true, force: true });
+        }
+        sendProgress("decompressing", 0, "Extracting 7z archive…");
+        await extract7z(filePath, extractDir, (pct, msg) => sendProgress("decompressing", pct, msg));
+        pgnFiles = findPgnFiles(extractDir);
       }
-      sendProgress("decompressing", 0, "Extracting 7z archive…");
-      await extract7z(filePath, extractDir, (pct, msg) => sendProgress("decompressing", pct, msg));
-      pgnFiles = findPgnFiles(extractDir);
     } else if (lower.endsWith(".pgn")) {
       pgnFiles = [filePath];
     } else {
@@ -2005,6 +2023,18 @@ function getLlmToolDefinitions(): Array<{
         },
         required: ["player"]
       }
+    },
+    {
+      name: "identify_opening",
+      description:
+        "Identifies the chess opening name from a FEN position. Returns the opening name and ECO code if recognized, otherwise returns null.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          fen: { type: "string", description: "Position FEN (required)" }
+        },
+        required: ["fen"]
+      }
     }
   ];
 }
@@ -2055,6 +2085,15 @@ async function executeTool(toolName: string, args: Record<string, any>): Promise
             first_move_black: args.first_move_black,
           });
           result = { ok: true, games, count: games.length };
+        }
+        break;
+      }
+      case "identify_opening": {
+        try {
+          const opening = lookupOpeningByFen(args.fen);
+          result = opening ? { ok: true, name: opening.name, eco: opening.eco } : { ok: true, opening: null };
+        } catch (err) {
+          result = { ok: false, error: (err as Error).message };
         }
         break;
       }
@@ -2237,7 +2276,7 @@ async function runOpenAICompatibleChat(provider: string, baseUrl: string, model:
           parameters: tool.inputSchema || { type: "object", properties: {} }
         }
       }));
-      requestBody.tool_choice = "auto";
+      requestBody.tool_choice = "required";
     }
 
     // Both Grok and OpenAI use the OpenAI-compatible /chat/completions endpoint
@@ -2493,10 +2532,11 @@ ipcMain.handle("llm:explain-lines", async (_event, payload) => {
 
         messages.push({
           role: "user",
-          content: `Explain this engine line:\nVariation: ${line.pv || line.line || "No moves"}\nScore: ${lineScore}\nFEN: ${fen || "unknown"}`
+          content: payload?.question
+            || `Explain this engine line:\nVariation: ${line.pv || line.line || "No moves"}\nScore: ${lineScore}\nFEN: ${fen || "unknown"}`
         });
 
-        const text = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: false });
+        const text = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: true });
         return {
           rank: line.rank,
           text: text || `No explanation returned for line ${line.rank}.`
@@ -2589,9 +2629,11 @@ async function handleAnalysisRequest(question: string, fen: string, lines: Analy
   // Format engine output with engine type info
   const engineType = payload?.engine || settings.get("selectedEngine") || "stockfish";
   const engineAnalysis = analysisLines
-    .map((l) => {
-      const lineNum = l.rank || "?";
-      const pv = l.pv || l.line || "";
+    .map((l, idx) => {
+      const lineNum = l.rank || idx + 1;
+      // Use SAN (with piece glyphs) instead of raw UCI so the LLM echoes human-readable
+      // notation in its own response rather than copying engine coordinate moves.
+      const sanLine = sanLineWithGlyphs(l.pv || l.line || "", fen);
       let score = "?";
       if (l.score) {
         const s = l.score as any;
@@ -2603,7 +2645,7 @@ async function handleAnalysisRequest(question: string, fen: string, lines: Analy
           score = `${(s.winProb * 100).toFixed(1)}%`;
         }
       }
-      return `Line ${lineNum}: ${pv} (Score: ${score})`;
+      return `Line ${lineNum}: ${sanLine} (Score: ${score})`;
     })
     .join("\n");
 
@@ -3421,23 +3463,26 @@ ipcMain.handle("llm:ask-question", async (_event, payload) => {
         break;
       case "OPENING_TRAINING": {
         const convHistory = Array.isArray(payload?.conversationHistory) ? (payload.conversationHistory as ConversationMessage[]) : [];
-        const runLlmOpening = ({ messages, timeoutMs, responseFormat }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number; responseFormat?: Record<string, any> }) =>
-          runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat, includeTools: false });
+        const openingFormat = getStructuredOutputFormat(llmProvider, model, OPENING_RESPONSE_FORMAT);
+        const runLlmOpening = ({ messages, timeoutMs }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number }) =>
+          runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat: openingFormat, includeTools: false });
         result = await handleOpeningRequest(question, convHistory, runLlmOpening);
         break;
       }
       case "MIDDLEGAME_ANALYSIS": {
         const convHistory = Array.isArray(payload?.conversationHistory) ? (payload.conversationHistory as ConversationMessage[]) : [];
         const currentFen = typeof payload?.fen === "string" ? payload.fen : undefined;
-        const runLlmMiddlegame = ({ messages, timeoutMs, responseFormat }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number; responseFormat?: Record<string, any> }) =>
-          runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat, includeTools: false });
+        const middlegameFormat = getStructuredOutputFormat(llmProvider, model, MIDDLEGAME_RESPONSE_FORMAT);
+        const runLlmMiddlegame = ({ messages, timeoutMs }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number }) =>
+          runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat: middlegameFormat, includeTools: false });
         result = await handleMiddlegameRequest(question, convHistory, currentFen, runLlmMiddlegame);
         break;
       }
       case "ENDGAME_TRAINING": {
         const convHistory = Array.isArray(payload?.conversationHistory) ? (payload.conversationHistory as ConversationMessage[]) : [];
-        const runLlmEndgame = ({ messages, timeoutMs, responseFormat }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number; responseFormat?: Record<string, any> }) =>
-          runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat, includeTools: false });
+        const endgameFormat = getStructuredOutputFormat(llmProvider, model, ENDGAME_RESPONSE_FORMAT);
+        const runLlmEndgame = ({ messages, timeoutMs }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number }) =>
+          runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat: endgameFormat, includeTools: false });
         result = await handleEndgameRequest(question, convHistory, runLlmEndgame);
         break;
       }
@@ -3676,7 +3721,8 @@ ipcMain.handle("db:import-otb-dir", async (event, { dirPath }: { dirPath: string
 
   gamesImportState = { status: "importing", count: 0, message: "Starting OTB directory import…" };
 
-  // Run import in background — up to 4 files in parallel, each using its own extract-dir slot
+  // Run import in background as two sequential phases — extract everything first, then
+  // import everything — so the progress bar only ever moves forward (see design.md).
   (async () => {
     const { gamesDbPath, gamesExtractDir } = getDbPaths();
 
@@ -3685,64 +3731,125 @@ ipcMain.handle("db:import-otb-dir", async (event, { dirPath }: { dirPath: string
     gamesDb = initGamesDb(gamesDbPath);
     const sharedDb = gamesDb;
 
-    // Atomic queue index — safe in Node.js single-threaded event loop
-    let nextIdx = 0;
+    // ── Phase 1: extract every archive (up to 4 parallel workers) ──────────
+    // Each archive gets its own extract directory (named by its index, not by worker
+    // slot) so that one worker finishing early and picking up the next queued archive
+    // can never overwrite a directory that phase 2 still needs to read from.
+    type ExtractedArchive = { archivePath: string; extractDir: string; pgnFiles: string[] };
+    const extracted: Array<ExtractedArchive | undefined> = new Array(totalFiles);
+    let archivesExtracted = 0;
+
+    let nextExtractIdx = 0;
     const SLOTS = Math.min(4, totalFiles);
 
-    const workers = Array.from({ length: SLOTS }, async (_, slotIdx) => {
-      const slotExtractDir = `${gamesExtractDir}-slot${slotIdx}`;
-
+    const extractWorkers = Array.from({ length: SLOTS }, async () => {
       while (true) {
-        const i = nextIdx++;
+        const i = nextExtractIdx++;
         if (i >= toImport.length) break;
 
-        const filePath = toImport[i];
-        const fileName = path.basename(filePath);
+        const archivePath = toImport[i];
+        const fileName = path.basename(archivePath);
+        const archiveExtractDir = `${gamesExtractDir}-otb${i}`;
 
-        const sendProgress = (phase: string, pct: number, msg: string) => {
-          const countMatch = msg.match(/[\d,]+/);
-          const parsedCount = countMatch ? parseInt(countMatch[0].replace(/,/g, ""), 10) : 0;
-          gamesImportState = {
-            status: "importing",
-            count: parsedCount > 0 ? parsedCount : gamesImportState.count,
-            message: msg,
-          };
+        try {
+          if (fs.existsSync(archiveExtractDir)) {
+            fs.rmSync(archiveExtractDir, { recursive: true, force: true });
+          }
+          await extract7z(archivePath, archiveExtractDir, (pct, msg) => {
+            event.sender.send("db:otb-dir-progress", {
+              fileIndex: i + 1,
+              totalFiles,
+              fileName,
+              phase: "extracting",
+              percent: pct,
+              message: msg,
+              overallPercent: computeOverallPercent("extracting", archivesExtracted, totalFiles),
+            });
+          });
+          extracted[i] = { archivePath, extractDir: archiveExtractDir, pgnFiles: findPgnFiles(archiveExtractDir) };
+        } catch (err) {
+          errors++;
+          const errMsg = `${fileName}: ${(err as Error).message}`;
+          console.error(`[DB] OTB extraction failed — ${errMsg}`);
+          errorMessages.push(errMsg);
+        } finally {
+          archivesExtracted++;
           event.sender.send("db:otb-dir-progress", {
-            fileIndex: i + 1,
+            fileIndex: archivesExtracted,
             totalFiles,
             fileName,
-            phase,
-            percent: pct,
-            message: msg,
+            phase: "extracting",
+            percent: 100,
+            message: `Extracted ${fileName}`,
+            overallPercent: computeOverallPercent("extracting", archivesExtracted, totalFiles),
           });
-        };
-
-        // Use shared DB and per-slot extract dir; skip per-file FTS rebuild
-        const result = await doImportGamesFile(filePath, sendProgress, {
-          skipFts: true,
-          db: sharedDb,
-          extractDir: slotExtractDir,
-        });
-
-        if (result.ok) {
-          imported++;
-          // Persist after each successful file so partial progress survives a crash
-          const current = readOtbTracking(userData);
-          if (!current.includes(fileName)) {
-            writeOtbTracking(userData, [...current, fileName]);
-          }
-        } else {
-          errors++;
-          const errMsg = `${fileName}: ${result.error}`;
-          console.error(`[DB] OTB dir import failed — ${errMsg}`);
-          errorMessages.push(errMsg);
         }
       }
     });
 
-    await Promise.all(workers);
+    await Promise.all(extractWorkers);
 
-    // Rebuild FTS once after all slots finish
+    // ── Phase 2: import every successfully extracted archive, sequentially ─
+    let archivesImported = 0;
+    for (let i = 0; i < toImport.length; i++) {
+      const archive = extracted[i];
+      if (!archive) continue; // extraction failed — already counted in errors
+
+      const fileName = path.basename(archive.archivePath);
+      const sendProgress = (_phase: string, pct: number, msg: string) => {
+        const countMatch = msg.match(/[\d,]+/);
+        const parsedCount = countMatch ? parseInt(countMatch[0].replace(/,/g, ""), 10) : 0;
+        gamesImportState = {
+          status: "importing",
+          count: parsedCount > 0 ? parsedCount : gamesImportState.count,
+          message: msg,
+        };
+        event.sender.send("db:otb-dir-progress", {
+          fileIndex: i + 1,
+          totalFiles,
+          fileName,
+          phase: "importing",
+          percent: pct,
+          message: msg,
+          overallPercent: computeOverallPercent("importing", archivesImported, totalFiles),
+        });
+      };
+
+      // Use shared DB and the already-extracted directory; skip per-file FTS rebuild
+      const result = await doImportGamesFile(archive.archivePath, sendProgress, {
+        skipFts: true,
+        db: sharedDb,
+        extractDir: archive.extractDir,
+        preExtracted: true,
+      });
+
+      if (result.ok) {
+        imported++;
+        // Persist after each successful file so partial progress survives a crash
+        const current = readOtbTracking(userData);
+        if (!current.includes(fileName)) {
+          writeOtbTracking(userData, [...current, fileName]);
+        }
+      } else {
+        errors++;
+        const errMsg = `${fileName}: ${result.error}`;
+        console.error(`[DB] OTB dir import failed — ${errMsg}`);
+        errorMessages.push(errMsg);
+      }
+
+      archivesImported++;
+      event.sender.send("db:otb-dir-progress", {
+        fileIndex: i + 1,
+        totalFiles,
+        fileName,
+        phase: "importing",
+        percent: 100,
+        message: result.ok ? `Imported ${fileName}` : `Failed: ${fileName}`,
+        overallPercent: computeOverallPercent("importing", archivesImported, totalFiles),
+      });
+    }
+
+    // Rebuild FTS once after all imports finish
     if (imported > 0) {
       event.sender.send("db:otb-dir-progress", {
         fileIndex: totalFiles,
@@ -3751,6 +3858,7 @@ ipcMain.handle("db:import-otb-dir", async (event, { dirPath }: { dirPath: string
         phase: "importing",
         percent: 99,
         message: "Rebuilding search index…",
+        overallPercent: 99,
       });
       try {
         setGamesSource(sharedDb, "Lumbra's Gigabase");
@@ -3935,8 +4043,9 @@ ipcMain.handle("opening:ask", async (_event, payload) => {
   const baseUrl = (payload?.baseUrl || (llmProvider === "ollama" ? settings.get("ollamaBaseUrl") : null) || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
 
   const conversationHistory: ConversationMessage[] = Array.isArray(payload?.conversationHistory) ? payload.conversationHistory : [];
-  const runLlm = ({ messages, timeoutMs, responseFormat }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number; responseFormat?: Record<string, any> }) =>
-    runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat, includeTools: false });
+  const openingFormat = getStructuredOutputFormat(llmProvider, model, OPENING_RESPONSE_FORMAT);
+  const runLlm = ({ messages, timeoutMs }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number }) =>
+    runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat: openingFormat, includeTools: false });
 
   return handleOpeningRequest(question, conversationHistory, runLlm);
 });
@@ -3952,8 +4061,9 @@ ipcMain.handle("endgame:ask", async (_event, payload) => {
   const baseUrl = (payload?.baseUrl || (llmProvider === "ollama" ? settings.get("ollamaBaseUrl") : null) || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
 
   const conversationHistory: ConversationMessage[] = Array.isArray(payload?.conversationHistory) ? payload.conversationHistory : [];
-  const runLlm = ({ messages, timeoutMs, responseFormat }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number; responseFormat?: Record<string, any> }) =>
-    runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat, includeTools: false });
+  const endgameFormat = getStructuredOutputFormat(llmProvider, model, ENDGAME_RESPONSE_FORMAT);
+  const runLlm = ({ messages, timeoutMs }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number }) =>
+    runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat: endgameFormat, includeTools: false });
 
   return handleEndgameRequest(question, conversationHistory, runLlm);
 });
@@ -4194,7 +4304,7 @@ app.whenReady().then(async () => {
   setupBundledGamesDb().catch(err => console.error("[DB] First-run setup error:", err));
 
   // Load ECO opening book in the background — non-fatal if unavailable
-  initEcoLookup().catch(err => console.warn("[ECO] Startup init failed:", err));
+  initEcoLookup(getBundledEcoDataDir()).catch(err => console.warn("[ECO] Startup init failed:", err));
 
   // Show monthly update prompt after the window has fully loaded (30-day throttle)
   if (mainWindow) {

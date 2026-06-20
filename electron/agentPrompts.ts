@@ -45,6 +45,82 @@ export const PUZZLE_RESPONSE_FORMAT = {
   }
 };
 
+const TRAINING_MOVE_SCHEMA = {
+  type: "object",
+  properties: {
+    uci: { type: "string" },
+    san: { type: "string" },
+    commentary: { type: "string" }
+  },
+  required: ["uci", "san", "commentary"],
+  additionalProperties: false
+};
+
+export const OPENING_RESPONSE_FORMAT = {
+  type: "json_schema",
+  json_schema: {
+    name: "chess_opening_lesson",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        response_type: { type: "string", enum: ["Opening"] },
+        opening_name: { type: "string" },
+        eco_code: { type: "string" },
+        fen: { type: "string" },
+        moves: { type: "array", items: TRAINING_MOVE_SCHEMA },
+        story: { type: "string" },
+        explanation: { type: "string" }
+      },
+      required: ["response_type", "opening_name", "eco_code", "fen", "moves", "story", "explanation"],
+      additionalProperties: false
+    }
+  }
+};
+
+export const MIDDLEGAME_RESPONSE_FORMAT = {
+  type: "json_schema",
+  json_schema: {
+    name: "chess_middlegame_lesson",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        response_type: { type: "string", enum: ["Middlegame"] },
+        title: { type: "string" },
+        fen: { type: "string" },
+        theme: { type: "string" },
+        moves: { type: "array", items: TRAINING_MOVE_SCHEMA },
+        story: { type: "string" },
+        explanation: { type: "string" }
+      },
+      required: ["response_type", "title", "fen", "theme", "moves", "story", "explanation"],
+      additionalProperties: false
+    }
+  }
+};
+
+export const ENDGAME_RESPONSE_FORMAT = {
+  type: "json_schema",
+  json_schema: {
+    name: "chess_endgame_lesson",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        response_type: { type: "string", enum: ["Endgame"] },
+        title: { type: "string" },
+        fen: { type: "string" },
+        moves: { type: "array", items: TRAINING_MOVE_SCHEMA },
+        story: { type: "string" },
+        explanation: { type: "string" }
+      },
+      required: ["response_type", "title", "fen", "moves", "story", "explanation"],
+      additionalProperties: false
+    }
+  }
+};
+
 export const GAME_SEARCH_PARAMS_FORMAT = {
   type: "json_schema",
   json_schema: {
@@ -137,7 +213,7 @@ export const analysisAgentSystemPrompt = (engineType: string) =>
 
 Format rules:
 - Markdown bullet points only — no prose paragraphs
-- ### headers for each line, **bold** for section headers
+- Use small headers for each line (##### heading level, not larger) and **bold** for section headers — the response area is narrow, so large headers look oversized
 - Max 1-2 lines per bullet, specific to the position
 - Piece glyphs: ♔♕♖♗♘♙ (white) ♚♛♜♝♞♟ (black), algebraic notation
 
@@ -154,8 +230,14 @@ Piece glyphs ♔♕♖♗♘♙♚♛♜♝♞♟. Cover: Strategic Plans · Tac
 
 export const explainLinesSystemPrompt = (language: string) =>
   `You are a chess expert explaining engine analysis lines. Language: ${language}.
-For each line: state the strategic goal, key tactical idea, and why the move is strong.
-Markdown bullet points. Concise — 1-2 lines per point. Piece glyphs ♔♕♖♗♘♙♚♛♜♝♞♟.`;
+
+CRITICAL RULES:
+1. ALWAYS use Standard Algebraic Notation (SAN) for moves - NOT UCI notation. Examples: 1.e4, Nf3, Bxc4, O-O, e8=Q
+2. ALWAYS use piece glyphs instead of letters: ♔♕♖♗♘♙ (white) and ♚♛♜♝♞♟ (black)
+3. ALWAYS call the identify_opening tool with the FEN to get the opening name before explaining
+4. Use flowing text without bullet points. Keep explanations under 150 words.
+
+Format: First identify the opening, then explain the strategic goal, key tactical idea, and why the move is strong.`;
 
 // ============================================================================
 // Puzzle agents

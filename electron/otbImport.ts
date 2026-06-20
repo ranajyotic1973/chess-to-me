@@ -34,3 +34,18 @@ export function scanOtbFiles(dirPath: string): string[] {
     .map(name => path.join(dirPath, name))
     .sort();
 }
+
+/**
+ * Overall batch progress for the two-phase OTB import pipeline.
+ * Extraction accounts for the first 50%, import for the second 50%,
+ * so the value only ever moves forward as archives are processed.
+ */
+export function computeOverallPercent(
+  phase: "extracting" | "importing",
+  completed: number,
+  total: number
+): number {
+  if (total <= 0) return 0;
+  const half = Math.round((completed / total) * 50);
+  return phase === "extracting" ? half : 50 + half;
+}

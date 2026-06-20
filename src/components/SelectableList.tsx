@@ -18,6 +18,11 @@ interface SelectableListProps {
   onSelect: (id: string, index: number) => void;
   /** Called when the back button is pressed. Parent clears selectedId and handles any mode changes. */
   onBack: () => void;
+  /** Optional content rendered in the sticky header, before the back button (e.g. a selection summary). */
+  detailHeaderText?: ReactNode;
+  /** When true, also show a back button in the LIST view (e.g. this list is itself one level
+   *  of a drill-down and a parent list exists to return to). Uses the same onBack callback. */
+  showBackInList?: boolean;
   /** Content rendered inside the detail view when selectedId is non-null. */
   children?: ReactNode;
 }
@@ -29,6 +34,8 @@ export default function SelectableList({
   selectedId = null,
   onSelect,
   onBack,
+  detailHeaderText,
+  showBackInList = false,
   children
 }: SelectableListProps) {
   if (selectedId !== null) {
@@ -38,26 +45,40 @@ export default function SelectableList({
           sx={{
             display: "flex",
             alignItems: "center",
+            gap: 1,
             position: "sticky",
             top: 0,
             zIndex: 1,
+            flexShrink: 0,
             bgcolor: "background.paper",
             pb: 0.5,
           }}
         >
-          <Tooltip title="Back to list">
-            <IconButton size="small" onClick={onBack} aria-label="back to list">
+          {detailHeaderText}
+          <Tooltip title="Back">
+            <IconButton size="small" onClick={onBack} aria-label="Back">
               <ArrowBackIcon fontSize="small" />
             </IconButton>
           </Tooltip>
         </Box>
-        {children}
+        <Box sx={{ flexShrink: 1, minHeight: 0, maxHeight: "60vh", overflowY: "auto" }}>
+          {children}
+        </Box>
       </Box>
     );
   }
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+      {showBackInList && (
+        <Box sx={{ display: "flex", alignItems: "center" }}>
+          <Tooltip title="Back">
+            <IconButton size="small" onClick={onBack} aria-label="Back">
+              <ArrowBackIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      )}
       {title && (
         <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "primary.main" }}>
           {title}

@@ -111,6 +111,13 @@
         "filter": [
           "*.db"
         ]
+      },
+      {
+        "from": "data/eco",
+        "to": "eco",
+        "filter": [
+          "*.json"
+        ]
       }
     ],
     "directories": {

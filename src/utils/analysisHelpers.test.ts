@@ -1,7 +1,28 @@
-import { parseStockfishLine, deriveFenSequence, parseFenOrPgnInput } from "./analysisHelpers";
+import { parseStockfishLine, deriveFenSequence, parseFenOrPgnInput, sanWithGlyph } from "./analysisHelpers";
 
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 const AFTER_E4_FEN = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1";
+
+// ---------------------------------------------------------------------------
+// sanWithGlyph
+// ---------------------------------------------------------------------------
+describe("sanWithGlyph", () => {
+  test("replaces white piece letter with white glyph", () => {
+    expect(sanWithGlyph("Nf3", false)).toBe("♘f3");
+  });
+
+  test("replaces black piece letter with black glyph", () => {
+    expect(sanWithGlyph("Nf6", true)).toBe("♞f6");
+  });
+
+  test("leaves pawn moves unchanged (no leading piece letter)", () => {
+    expect(sanWithGlyph("e4", false)).toBe("e4");
+  });
+
+  test("leaves castling notation unchanged", () => {
+    expect(sanWithGlyph("O-O", false)).toBe("O-O");
+  });
+});
 
 // ---------------------------------------------------------------------------
 // parseStockfishLine

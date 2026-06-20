@@ -105,7 +105,7 @@ export default function SettingsPanel({
 
   // OTB directory import state
   const [otbImporting, setOtbImporting] = useState<boolean>(false);
-  const [otbDirProgress, setOtbDirProgress] = useState<{ fileIndex: number; totalFiles: number; fileName: string; message: string } | null>(null);
+  const [otbDirProgress, setOtbDirProgress] = useState<{ fileIndex: number; totalFiles: number; fileName: string; message: string; phase: string; overallPercent: number } | null>(null);
   const otbProgressUnsubRef = useRef<(() => void) | null>(null);
   const otbCompleteUnsubRef = useRef<(() => void) | null>(null);
 
@@ -318,7 +318,14 @@ export default function SettingsPanel({
 
     if (otbProgressUnsubRef.current) otbProgressUnsubRef.current();
     otbProgressUnsubRef.current = electronAPI.onOtbDirProgress((data) => {
-      setOtbDirProgress({ fileIndex: data.fileIndex, totalFiles: data.totalFiles, fileName: data.fileName, message: data.message });
+      setOtbDirProgress({
+        fileIndex: data.fileIndex,
+        totalFiles: data.totalFiles,
+        fileName: data.fileName,
+        message: data.message,
+        phase: data.phase,
+        overallPercent: data.overallPercent
+      });
     });
 
     if (otbCompleteUnsubRef.current) otbCompleteUnsubRef.current();
@@ -749,7 +756,7 @@ export default function SettingsPanel({
               {(gamesImporting || otbImporting) ? (
                 <Typography variant="body2" color="info.main" sx={{ mt: 0.5 }}>
                   {otbDirProgress
-                    ? `File ${otbDirProgress.fileIndex} of ${otbDirProgress.totalFiles}: ${otbDirProgress.fileName} — ${otbDirProgress.message}`
+                    ? `${otbDirProgress.overallPercent}% — ${otbDirProgress.phase === "extracting" ? "Extracting" : "Importing"}… File ${otbDirProgress.fileIndex} of ${otbDirProgress.totalFiles}: ${otbDirProgress.fileName} — ${otbDirProgress.message}`
                     : dbProgress ? dbProgress.message : "Importing in background…"}
                 </Typography>
               ) : dbStatus?.games ? (

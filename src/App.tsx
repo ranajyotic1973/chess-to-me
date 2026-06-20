@@ -42,7 +42,8 @@ import EvalBar from "./components/EvalBar";
 import {
   deriveFenSequence,
   parseFenOrPgnInput,
-  parseStockfishLine
+  parseStockfishLine,
+  sanWithGlyph
 } from "./utils/analysisHelpers";
 import {
   parseLLMResponse,
@@ -252,6 +253,18 @@ export default function App() {
   const [selectedEngineLineData, setSelectedEngineLineData] = useState<AnalysisLine | null>(null);
   const [currentMoveIndex, setCurrentMoveIndex] = useState<number>(0);
   const [analysisEntries, setAnalysisEntries] = useState<AnalysisEntry[]>([]);
+  const [lineExplanations, setLineExplanations] = useState<Record<number, string>>({});
+  const [currentOpening, setCurrentOpening] = useState<{ name: string; eco: string } | null>(null);
+  // History stack for drilling into an engine line: selecting a line previews its first
+  // move, runs a fresh analysis of the resulting position, and shows THAT as a new list
+  // ("drilling in"). Each frame is the parent level's state, popped on "back".
+  const [explorationStack, setExplorationStack] = useState<Array<{
+    fen: string;
+    lines: AnalysisLine[];
+    entries: AnalysisEntry[];
+    listResponse: string;
+  }>>([]);
+  const [isDrillLoading, setIsDrillLoading] = useState<boolean>(false);
   const [selectedAnalysisLineId, setSelectedAnalysisLineId] = useState<string | null>(null);
   const [analysisMode, setAnalysisMode] = useState<"main" | "logs">("main");
   const [logEntries, setLogEntries] = useState<{ stockfish: LogEntry[]; ollama: LogEntry[] }>({ stockfish: [], ollama: [] });
@@ -302,10 +315,21 @@ export default function App() {
   const formStateRef = useRef(formState);
   const engineStatusRef = useRef(engineStatus);
   const currentResponseTypeRef = useRef(currentResponseType);
+  const selectedEngineLineIndexRef = useRef<number | null>(selectedEngineLineIndex);
+  // Incremented on every drill-in attempt and on "back" — lets an in-flight drill
+  // analysis detect that the user has navigated away and discard its stale result.
+  const drillRequestIdRef = useRef(0);
+  // Set right before a drill-down sets currentFen to the post-move position — the
+  // auto-eval effect (keyed on currentFen) would otherwise immediately re-run for that
+  // same position, duplicating the analysis we just did AND wiping explorationStack.
+  const suppressNextAutoEvalRef = useRef(false);
   // Training agent state (Opening / Endgame)
   const [trainingMoves, setTrainingMoves] = useState<Array<{ uci: string; san: string; commentary: string }>>([]);
   const [trainingMoveIndex, setTrainingMoveIndex] = useState<number>(-1);
   const [trainingStartFen, setTrainingStartFen] = useState<string>("");
+  // Glyphed SAN label (e.g. "3. ♘f3") for the move currently shown during keyboard navigation.
+  // Empty string means navigation hasn't started yet — the opening name/story should be shown instead.
+  const [trainingMoveLabel, setTrainingMoveLabel] = useState<string>("");
   // Puzzle state
   const [puzzleSolution, setPuzzleSolution] = useState<string[]>([]);
   const [puzzleSolutionSan, setPuzzleSolutionSan] = useState<string[]>([]);
@@ -321,6 +345,10 @@ export default function App() {
   // Per-move explanation
   const [isExplanationLoading, setIsExplanationLoading] = useState<boolean>(false);
   const explanationCache = useRef<Map<string, string>>(new Map());
+  // The general (whole-list) LLM response shown before any line is selected — cached so
+  // that going back to the list restores it instantly instead of leaving the last
+  // per-move explanation showing, or needing a fresh LLM call.
+  const lastListResponseRef = useRef<string>("");
   // Base FEN at the time a line was selected (correct starting point for move replay)
   const [selectedLineBaseFen, setSelectedLineBaseFen] = useState<string>("");
   // Game browsing state
@@ -523,6 +551,20 @@ export default function App() {
     };
   }, []);
 
+  // Auto-dismiss the floating status banner messages after 2 seconds so they
+  // don't linger indefinitely — centralized here instead of at every call site.
+  useEffect(() => {
+    if (!statusMessage) return;
+    const t = setTimeout(() => setStatusMessage(""), 2000);
+    return () => clearTimeout(t);
+  }, [statusMessage]);
+
+  useEffect(() => {
+    if (!analysisStatus) return;
+    const t = setTimeout(() => setAnalysisStatus(""), 2000);
+    return () => clearTimeout(t);
+  }, [analysisStatus]);
+
   // Stop the engine and clear opening label when the app mode changes
   const prevResponseTypeRef = useRef<import("./types").ResponseType | null>(null);
   useEffect(() => {
@@ -651,6 +693,7 @@ export default function App() {
   formStateRef.current = formState;
   engineStatusRef.current = engineStatus;
   currentResponseTypeRef.current = currentResponseType;
+  selectedEngineLineIndexRef.current = selectedEngineLineIndex;
 
   // Reset puzzle conversation every time a new puzzle is presented
   useEffect(() => {
@@ -682,6 +725,17 @@ export default function App() {
 
     const timer = setTimeout(async () => {
       if (currentResponseTypeRef.current === "Puzzle") return;
+      // Skip while previewing a selected analysis line's moves — that FEN change is
+      // a temporary preview, not a real move, and re-analyzing would both show a
+      // redundant engine spinner and silently replace the line list being explored.
+      if (selectedEngineLineIndexRef.current !== null) return;
+      // Skip the one FEN change caused by a successful drill-down — that analysis was
+      // already run explicitly as part of the drill, so this would just duplicate it
+      // and (worse) wipe the exploration history stack it just built.
+      if (suppressNextAutoEvalRef.current) {
+        suppressNextAutoEvalRef.current = false;
+        return;
+      }
 
       // ECO opening detection — fast IPC (synchronous map lookup on main side)
       if (electronAPI?.ecoLookupFen && currentFen && currentFen !== "start") {
@@ -707,9 +761,28 @@ export default function App() {
         if (cancelled || !response?.ok) return;
         const lines: AnalysisLine[] = (response as any).analysis?.lines ?? [];
         if (!lines.length) return;
-        // Update lines and entries; do NOT call fetchExplanations (LLM cost on every move).
+        // Update lines and entries, then fetch LLM explanation for the top line.
         setAnalysisLines(lines);
         setAnalysisEntries(lines.map((line, i) => parseStockfishLine(line, i + 1, currentFen)));
+        setLineExplanations({}); // clear old explanations for fresh analysis
+        setExplorationStack([]); // a real board move starts a fresh top-level analysis
+
+        // Fetch LLM explanation for the top line asynchronously (non-blocking).
+        if (lines.length > 0) {
+          const topLine = lines[0];
+          const pv = topLine.pv || topLine.line || "";
+          const moves = pv.split(/\s+/).filter((m) => m.trim());
+          if (moves.length > 0) {
+            (async () => {
+              const cacheKey = `${currentFen}:0:0`;
+              try {
+                await fetchPerMoveExplanation(0, topLine, currentFen, 0, moves[0]);
+              } catch {
+                // Best-effort — explanations are optional when auto-analyzing
+              }
+            })();
+          }
+        }
       } catch {
         // Background analysis — ignore errors silently.
       }
@@ -750,6 +823,7 @@ export default function App() {
       setSelectedEngineLineIndex(null);
       setSelectedEngineLineData(null);
       setDeepAnalysisResults({});
+      setExplorationStack([]); // a fresh manual analysis starts a new top-level list
       const entries = (lines || []).map((line, index) =>
         parseStockfishLine(line, index + 1, currentFen)
       );
@@ -862,48 +936,6 @@ export default function App() {
     setCurrentFen(chess.fen());
   }, [puzzleStartFen, puzzleSolution]);
 
-  const formatJsonToMarkdown = (text: string): string => {
-    try {
-      const parsed = JSON.parse(text);
-      const lines: string[] = [];
-
-      // Helper to format field names: capitalize and add colon
-      const formatFieldName = (name: string): string => {
-        return name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, " $1").trim();
-      };
-
-      // Helper to format values
-      const formatValue = (value: any): string => {
-        if (Array.isArray(value)) {
-          return value.map((item) => {
-            if (typeof item === "object" && item !== null) {
-              return Object.entries(item)
-                .map(([k, v]) => `- **${formatFieldName(k)}:** ${v}`)
-                .join("\n");
-            }
-            return String(item);
-          }).join("\n");
-        }
-        if (typeof value === "object" && value !== null) {
-          return JSON.stringify(value, null, 2);
-        }
-        return String(value);
-      };
-
-      // Format each field as markdown
-      Object.entries(parsed).forEach(([key, value]) => {
-        const fieldName = formatFieldName(key);
-        const formattedValue = formatValue(value);
-        lines.push(`**${fieldName}:**\n${formattedValue}\n`);
-      });
-
-      return lines.join("\n");
-    } catch {
-      // Not JSON, return as-is
-      return text;
-    }
-  };
-
   const fetchPerMoveExplanation = useCallback(async (
     lineIndex: number,
     lineData: AnalysisLine,
@@ -911,23 +943,25 @@ export default function App() {
     moveIndex: number,
     moveSan: string
   ): Promise<void> => {
-    if (!electronAPI?.askQuestion) return;
+    if (!electronAPI?.explainLines) return;
     setIsExplanationLoading(true);
     try {
       const pv = lineData.pv || lineData.line || "";
-      const response = await electronAPI.askQuestion({
-        question: `Explain the move ${moveSan} (move ${moveIndex + 1} in the line). Full line: ${pv}. Explain the tactical and strategic ideas behind this move concisely. Focus purely on chess.`,
+
+      // The LLM can use the identify_opening tool to look up openings via the tool.
+      // Do not provide opening info in the prompt - let the LLM use the tool if needed.
+      const response = await electronAPI.explainLines({
+        lines: [lineData],
         fen: baseFen,
+        question: `Explain the move ${moveSan} (move ${moveIndex + 1} in the line). Full line: ${pv}. Focus on the tactical and strategic ideas behind this move.`,
         language: formState.explainLanguage,
         model: getModelForProvider(formState.llmProvider, formState.ollamaModel, formState.llmModel),
         baseUrl: getBaseUrlForProvider(formState.llmProvider, formState.ollamaBaseUrl),
         llmProvider: formState.llmProvider,
         llmApiKey: formState.llmApiKey
       });
-      if (response?.ok && (response as any).answer) {
-        let text = (response as any).answer as string;
-        // Convert JSON to formatted markdown
-        text = formatJsonToMarkdown(text);
+      if (response?.ok && response.explanations?.[0]?.text) {
+        const text = response.explanations[0].text;
 
         const cacheKey = `${baseFen}:${lineIndex}:${moveIndex}`;
         explanationCache.current.set(cacheKey, text);
@@ -942,20 +976,102 @@ export default function App() {
     }
   }, [formState.explainLanguage, formState.ollamaModel, formState.ollamaBaseUrl, formState.llmProvider, formState.llmApiKey, formState.llmModel]);
 
-  const handleSelectEngineLine = useCallback((lineIndex: number, line: AnalysisLine) => {
+  const handleSelectEngineLine = useCallback(async (lineIndex: number, line: AnalysisLine) => {
+    // Snapshot this level before drilling in, so "back" can restore it without a fresh call.
+    const parentFrame = {
+      fen: currentFen,
+      lines: analysisLines,
+      entries: analysisEntries,
+      listResponse: lastListResponseRef.current
+    };
+    setExplorationStack((stack) => [...stack, parentFrame]);
+
     setSelectedEngineLineIndex(lineIndex);
     setSelectedEngineLineData(line);
     setCurrentMoveIndex(0);
     setSelectedLineBaseFen(currentFen);
     const lineNum = line.rank || lineIndex + 1;
     setStatusMessage(`Line ${lineNum} selected.`);
-    // Fetch explanation for the first move in the line
+
     const pv = line.pv || line.line || "";
     const moves = pv.split(/\s+/).filter((m) => m.trim());
-    if (moves.length > 0) {
-      void fetchPerMoveExplanation(lineIndex, line, currentFen, 0, moves[0]);
+    if (moves.length === 0) return;
+
+    const myRequestId = ++drillRequestIdRef.current;
+    await fetchPerMoveExplanation(lineIndex, line, currentFen, 0, moves[0]);
+    if (drillRequestIdRef.current !== myRequestId) return; // user navigated away while this was in flight
+
+    // Drill in: run a fresh analysis of the position after this move, and present
+    // its top candidates as a new list — lets the user keep exploring deeper.
+    const cacheKey = `${currentFen}:${lineIndex}:0`;
+    const explanationText = explanationCache.current.get(cacheKey);
+    if (!explanationText) return; // explanation failed — nothing useful to drill into
+
+    const chess = new Chess();
+    let resultingFen: string;
+    try {
+      chess.load(currentFen);
+      const moveResult = chess.move({ from: moves[0].slice(0, 2), to: moves[0].slice(2, 4), promotion: moves[0][4] as any });
+      if (!moveResult) return;
+      resultingFen = chess.fen();
+    } catch {
+      return;
     }
-  }, [currentFen, fetchPerMoveExplanation]);
+
+    if (!engineStatusRef.current?.configured || !electronAPI?.analyzePosition) return;
+    setIsDrillLoading(true);
+    try {
+      const response = await electronAPI.analyzePosition({
+        engine: formStateRef.current.selectedEngine,
+        fen: resultingFen,
+        depth: 5,
+        multiPv: 4,
+      });
+      if (drillRequestIdRef.current !== myRequestId) return; // stale — user already navigated away
+      if (response?.ok) {
+        const newLines: AnalysisLine[] = (response as any).analysis?.lines ?? [];
+        if (newLines.length > 0) {
+          setAnalysisLines(newLines);
+          setAnalysisEntries(newLines.map((l, i) => parseStockfishLine(l, i + 1, resultingFen)));
+          suppressNextAutoEvalRef.current = true;
+          setCurrentFen(resultingFen);
+          setSelectedEngineLineIndex(null);
+          setSelectedEngineLineData(null);
+          setCurrentMoveIndex(0);
+          lastListResponseRef.current = explanationText;
+        }
+      }
+    } catch {
+      // Drill-down analysis is best-effort — keep showing the move explanation on failure.
+    } finally {
+      if (drillRequestIdRef.current === myRequestId) setIsDrillLoading(false);
+    }
+  }, [currentFen, analysisLines, analysisEntries, fetchPerMoveExplanation]);
+
+  // Pops one level of the exploration stack (or just clears the current selection at
+  // the top level), restoring the prior list and its response without a fresh call.
+  const handleBackFromLine = useCallback(() => {
+    drillRequestIdRef.current++; // invalidate any in-flight drill so it can't clobber this
+    setIsDrillLoading(false);
+    setSelectedEngineLineIndex(null);
+    setSelectedEngineLineData(null);
+    setCurrentMoveIndex(0);
+
+    if (explorationStack.length > 0) {
+      const parent = explorationStack[explorationStack.length - 1];
+      setExplorationStack((stack) => stack.slice(0, -1));
+      setAnalysisLines(parent.lines);
+      setAnalysisEntries(parent.entries);
+      suppressNextAutoEvalRef.current = true;
+      setCurrentFen(parent.fen);
+      lastListResponseRef.current = parent.listResponse;
+      setQuestionResponse("");
+      setTimeout(() => setQuestionResponse(parent.listResponse), 80);
+    } else {
+      setQuestionResponse("");
+      setTimeout(() => setQuestionResponse(lastListResponseRef.current), 80);
+    }
+  }, [explorationStack]);
 
   const handleKeyboardNavigation = useCallback((event: KeyboardEvent) => {
     // Do not intercept when the user is typing in any input/textarea
@@ -984,12 +1100,14 @@ export default function App() {
         // Replay moves 0..next from trainingStartFen for correctness
         const chess = new Chess();
         try { chess.load(trainingStartFen); } catch { /* use default */ }
+        let lastResult: ReturnType<Chess["move"]> | null = null;
         for (let i = 0; i <= next; i++) {
           const m = trainingMoves[i];
-          chess.move({ from: m.uci.slice(0, 2), to: m.uci.slice(2, 4), promotion: m.uci[4] });
+          lastResult = chess.move({ from: m.uci.slice(0, 2), to: m.uci.slice(2, 4), promotion: m.uci[4] });
         }
         setCurrentFen(chess.fen());
         setQuestionResponse(trainingMoves[next].commentary);
+        setTrainingMoveLabel(`${next + 1}. ${sanWithGlyph(trainingMoves[next].san, lastResult?.color === "b")}`);
       } else {
         // Retreat to previous position
         const prev = trainingMoveIndex - 1;
@@ -997,15 +1115,18 @@ export default function App() {
         if (prev < 0) {
           setCurrentFen(trainingStartFen);
           setQuestionResponse("Back to the start! Press → to step through the moves.");
+          setTrainingMoveLabel("");
         } else {
           const chess = new Chess();
           try { chess.load(trainingStartFen); } catch { /* use default */ }
+          let lastResult: ReturnType<Chess["move"]> | null = null;
           for (let i = 0; i <= prev; i++) {
             const m = trainingMoves[i];
-            chess.move({ from: m.uci.slice(0, 2), to: m.uci.slice(2, 4), promotion: m.uci[4] });
+            lastResult = chess.move({ from: m.uci.slice(0, 2), to: m.uci.slice(2, 4), promotion: m.uci[4] });
           }
           setCurrentFen(chess.fen());
           setQuestionResponse(trainingMoves[prev].commentary);
+          setTrainingMoveLabel(`${prev + 1}. ${sanWithGlyph(trainingMoves[prev].san, lastResult?.color === "b")}`);
         }
       }
       return;
@@ -1066,6 +1187,11 @@ export default function App() {
         return;
       }
       setCurrentMoveIndex(nextIndex);
+      // Update board position to show the position after this move
+      const fenSequence = deriveFenSequence(moves.slice(0, nextIndex + 1), selectedLineBaseFen);
+      if (fenSequence && fenSequence.length > 0) {
+        setCurrentFen(fenSequence[fenSequence.length - 1]);
+      }
       const cacheKey = `${selectedLineBaseFen}:${selectedEngineLineIndex}:${nextIndex}`;
       const cached = explanationCache.current.get(cacheKey);
       if (cached) {
@@ -1081,9 +1207,20 @@ export default function App() {
       }
     } else if (event.key === "ArrowLeft") {
       event.preventDefault();
-      if (currentMoveIndex <= 0) return;
+      if (currentMoveIndex <= 0) {
+        // Go back to the line's starting position
+        setCurrentFen(selectedLineBaseFen);
+        setCurrentMoveIndex(0);
+        setQuestionResponse("");
+        return;
+      }
       const prevIndex = currentMoveIndex - 1;
       setCurrentMoveIndex(prevIndex);
+      // Update board position to show the position after this move
+      const fenSequence = deriveFenSequence(moves.slice(0, prevIndex + 1), selectedLineBaseFen);
+      if (fenSequence && fenSequence.length > 0) {
+        setCurrentFen(fenSequence[fenSequence.length - 1]);
+      }
       const cacheKey = `${selectedLineBaseFen}:${selectedEngineLineIndex}:${prevIndex}`;
       const cached = explanationCache.current.get(cacheKey);
       if (cached) {
@@ -1638,12 +1775,13 @@ export default function App() {
     setAnalysisLines([]);
     setSelectedEngineLineIndex(null);
     setSelectedEngineLineData(null);
+    setExplorationStack([]);
     setCurrentRawPgn(game.pgn_moves || "");
     return true;
   }, [parsePgnToFens, setCurrentGameInfo]);
 
-  const handleQuestion = useCallback(async (): Promise<void> => {
-    let question = String(questionText || "").trim();
+  const handleQuestion = useCallback(async (overrideQuestion?: string): Promise<void> => {
+    let question = String(overrideQuestion ?? questionText ?? "").trim();
     if (!question) {
       setStatusMessage("Ask a question about the current position.");
       return;
@@ -1747,6 +1885,7 @@ export default function App() {
             setPuzzleMeta(null);
             setCurrentMoveIndex(0);
             setAnalysisLines([]);
+            setExplorationStack([]);
             setPuzzleExplainLoading(false);
             setQuestionResponse("");
             conversationModeRef.current = "analysis";
@@ -1898,6 +2037,7 @@ export default function App() {
       // Update analysis lines if engine was used
       if (engineAnalysisLines.length > 0) {
         setAnalysisLines(engineAnalysisLines);
+        setExplorationStack([]); // a new question starts a fresh top-level list
       }
 
       // Display the explanation/answer.
@@ -1907,6 +2047,9 @@ export default function App() {
         ? ((parsedResponse as any).story || parsedResponse.explanation || "Ready! Press → to step through the moves.")
         : (parsedResponse.explanation || parsedResponse.answer || "No answer returned.");
       setQuestionResponse(displayText);
+      // Cache this as "the response for the current list" so it can be restored when
+      // the user backs out of a selected line's detail view without a fresh LLM call.
+      lastListResponseRef.current = displayText;
 
       // Add to conversation history and save to the mode that was active when the question was asked
       const questionMode = conversationModeRef.current;
@@ -1968,6 +2111,7 @@ export default function App() {
         const startFen = parsedResponse.fen || "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
         setTrainingMoves(movesArr);
         setTrainingMoveIndex(-1);
+        setTrainingMoveLabel("");
         setTrainingStartFen(startFen);
         setCurrentFen(startFen);
       } else if (finalResponseType === "GameList") {
@@ -2474,14 +2618,6 @@ export default function App() {
                     {gameEcoLabel}
                   </Typography>
                 )}
-                {!gameMode && analysisEcoLabel && (
-                  <Typography
-                    variant="caption"
-                    sx={{ color: "text.secondary", px: 1.5, pt: 0.25, display: "block", fontStyle: "italic" }}
-                  >
-                    {analysisEcoLabel}
-                  </Typography>
-                )}
                 <Box sx={{ display: "flex", justifyContent: "space-between", pt: 1 }}>
                   <Stack direction="row" spacing={1}>
                     <Tooltip title="Import position">
@@ -2614,16 +2750,17 @@ export default function App() {
                   onMoveSuggested={handleMoveSuggested}
                   llmProvider={formState.llmProvider}
                   analysisLines={analysisLines}
+                  lineExplanations={lineExplanations}
+                  currentOpening={currentOpening}
                   onSelectEngineLine={handleSelectEngineLine}
-                  onDeselectLine={() => {
-                    setSelectedEngineLineIndex(null);
-                    setSelectedEngineLineData(null);
-                    setCurrentMoveIndex(0);
-                  }}
+                  onDeselectLine={handleBackFromLine}
+                  canGoBackToParentLines={explorationStack.length > 0}
+                  isDrillLoading={isDrillLoading}
                   selectedEngineLineIndex={selectedEngineLineIndex}
                   currentMoveIndex={currentMoveIndex}
                   responseType={currentResponseType}
                   responseData={currentResponseData}
+                  trainingMoveLabel={trainingMoveLabel}
                   showSolution={showSolution}
                   onShowSolution={handleShowSolution}
                   puzzleIncorrect={puzzleIncorrect}
@@ -2636,15 +2773,10 @@ export default function App() {
                   gameTotalMoves={gamePgnFens.length}
                   gameList={gameList}
                   onGameSelect={(idx) => {
-                    const game = gameList?.[idx];
-                    if (!game) return;
-                    const loaded = loadGameFromRow(game);
-                    if (!loaded) {
-                      setQuestionResponse("Sorry, I couldn't parse the moves for that game.");
-                    } else {
-                      setCurrentResponseType("Game");
-                      setQuestionResponse("");
-                    }
+                    // Reuse the same path as typing the game number in chat, so clicking a
+                    // list item loads the game AND asks the LLM for a contextual introduction
+                    // instead of a static caption.
+                    handleQuestion(String(idx + 1));
                   }}
                   onBackToGameList={() => {
                     setGameMode(false);
@@ -2653,6 +2785,7 @@ export default function App() {
                     setGamePgnFens([]);
                     setCurrentFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
                     setAnalysisLines([]);
+                    setExplorationStack([]);
                   }}
                   advancedAnalysisMode={advancedAnalysisMode}
                   deepAnalysisResults={deepAnalysisResults}

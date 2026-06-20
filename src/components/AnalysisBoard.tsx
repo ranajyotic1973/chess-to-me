@@ -107,7 +107,7 @@ export default function AnalysisBoard({
       return;
     }
     boardInstance.current.resize();
-    boardInstance.current.position(currentFen, false);
+    boardInstance.current.position(currentFen, true);
   }, [currentFen, dimension]);
 
   useEffect(() => {

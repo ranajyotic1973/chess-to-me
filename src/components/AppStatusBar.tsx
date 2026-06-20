@@ -155,13 +155,10 @@ export default function AppStatusBar({
         const fileIdx: number = data?.fileIndex ?? 0;
         const total: number = data?.totalFiles ?? 0;
         const phase: string = data?.phase ?? "";
-        const pct: number = data?.percent ?? 0;
         const msg: string = data?.message ?? "";
-        const overallPct = total > 0
-          ? Math.round(((fileIdx - 1) / total) * 100 + (pct / total))
-          : pct;
+        const overallPct: number = data?.overallPercent ?? 0;
         const label =
-          phase === "decompressing" ? `Extracting games (${fileIdx}/${total})` :
+          phase === "extracting" ? `Extracting archives (${fileIdx}/${total})` :
           phase === "importing" ? `Importing games (${fileIdx}/${total})` :
           `Processing games (${fileIdx}/${total})`;
         setSlot("otb-import", { priority: 30, text: label, detail: msg, percent: overallPct, color: "#7c3aed" });

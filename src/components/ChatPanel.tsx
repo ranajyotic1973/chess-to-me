@@ -21,6 +21,7 @@ import { useRef, useState, useEffect } from "react";
 import type { ChatPanelProps, DeepLineAnalysis } from "../types";
 import SelectableList from "./SelectableList";
 import type { SelectableListItem } from "./SelectableList";
+import { formatFieldLabel } from "../utils/formatLabel";
 
 interface DetectedMove {
   from: string;
@@ -63,8 +64,12 @@ export default function ChatPanel({
   onMoveSuggested,
   llmProvider = "LLM",
   analysisLines = [],
+  lineExplanations = {},
+  currentOpening = null,
   onSelectEngineLine,
   onDeselectLine,
+  canGoBackToParentLines = false,
+  isDrillLoading = false,
   selectedEngineLineIndex = null,
   currentMoveIndex = 0,
   responseType,
@@ -79,6 +84,7 @@ export default function ChatPanel({
   gameList,
   onGameSelect,
   onBackToGameList,
+  trainingMoveLabel = "",
   advancedAnalysisMode = false,
   deepAnalysisResults = {},
   deepAnalysisLoading = false,
@@ -92,16 +98,6 @@ export default function ChatPanel({
     if (!gameList || gameList.length === 0) setSelectedGameItemId(null);
   }, [gameList]);
 
-  // Auto-dismiss info bar after 5 seconds when a line is selected
-  useEffect(() => {
-    if (selectedEngineLineIndex !== null) {
-      const timer = setTimeout(() => {
-        onDeselectLine?.();
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [selectedEngineLineIndex, onDeselectLine]);
-
   const paperSx = Array.isArray(sx) ? sx : sx ? [sx] : [];
   const providerName = llmProvider
     ? llmProvider.charAt(0).toUpperCase() + llmProvider.slice(1)
@@ -112,6 +108,9 @@ export default function ChatPanel({
   const showAnalysisLines = analysisLines.length > 0 &&
     (responseType === "Analysis" || responseType === "Position" || responseType === "Game");
 
+  const isTrainingResponse = responseType === "Opening" || responseType === "Middlegame" || responseType === "Endgame";
+  const showTrainingIntro = isTrainingResponse && !trainingMoveLabel;
+
   const selectedLine = selectedEngineLineIndex !== null ? analysisLines[selectedEngineLineIndex] : null;
   const selectedLineNum = selectedLine ? (selectedLine.rank || (selectedEngineLineIndex ?? 0) + 1) : null;
 
@@ -119,10 +118,13 @@ export default function ChatPanel({
     ? analysisLines.map((line, idx) => {
         const lineNum = line.rank || idx + 1;
         const entry = analysisEntries[idx];
+        const moveSequence = entry?.description || line.pv || line.line || "(no moves)";
+        const explanation = lineExplanations[idx];
+        const sublabel = explanation ? `${moveSequence} • ${explanation}` : moveSequence;
         return {
           id: `line-${idx}`,
           label: `Line ${lineNum}`,
-          sublabel: entry?.description || line.pv || line.line || "(no moves)",
+          sublabel,
         };
       })
     : [];
@@ -175,7 +177,13 @@ export default function ChatPanel({
             gap: 1.5,
             overflowY: "auto",
             overflowX: "hidden",
-            mb: 2
+            mb: 2,
+            fontSize: "0.85rem",
+            lineHeight: 1.4,
+            "& h6": { fontSize: "0.95rem" },
+            "& .MuiTypography-body2": { fontSize: "0.8rem" },
+            "& .MuiTypography-caption": { fontSize: "0.7rem" },
+            "& .MuiTypography-subtitle2": { fontSize: "0.85rem" }
           }}
         >
           {/* Analysis lines — list or detail view via SelectableList */}
@@ -183,10 +191,21 @@ export default function ChatPanel({
             <SelectableList
               items={analysisListItems}
               title="Engine Analysis (Top Lines)"
-              hint={`Click a line or type its number (1–${analysisLines.length}) to select`}
+              hint={`Click a line, type its number (1–${analysisLines.length}) or make a move to select`}
               selectedId={analysisSelectedId}
               onSelect={(_id, idx) => onSelectEngineLine?.(idx, analysisLines[idx])}
               onBack={() => onDeselectLine?.()}
+              showBackInList={canGoBackToParentLines}
+              detailHeaderText={
+                <Typography variant="caption" sx={{ color: "info.main", fontStyle: "italic", flex: 1 }}>
+                  Line {selectedLineNum} selected. Use → to advance moves, ← to go back.
+                  {" "}Move {currentMoveIndex + 1} of{" "}
+                  {selectedEngineLineIndex !== null
+                    ? (analysisEntries[selectedEngineLineIndex]?.moves?.length ??
+                        (selectedLine?.pv || "").split(/\s+/).filter(Boolean).length)
+                    : "?"}
+                </Typography>
+              }
             >
               {/* Detail content: shown when a line is selected */}
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
@@ -197,14 +216,11 @@ export default function ChatPanel({
                   variant="outlined"
                 />
               </Stack>
-              <Typography variant="caption" sx={{ color: "info.main", fontStyle: "italic" }}>
-                Line {selectedLineNum} selected. Use → to advance moves, ← to go back.
-                {" "}Move {currentMoveIndex + 1} of{" "}
-                {selectedEngineLineIndex !== null
-                  ? (analysisEntries[selectedEngineLineIndex]?.moves?.length ??
-                      (selectedLine?.pv || "").split(/\s+/).filter(Boolean).length)
-                  : "?"}
-              </Typography>
+              {selectedEngineLineIndex !== null && analysisEntries[selectedEngineLineIndex]?.description && (
+                <Typography variant="body2" sx={{ fontFamily: "monospace", fontWeight: 600, mb: 0.5 }}>
+                  {analysisEntries[selectedEngineLineIndex].description}
+                </Typography>
+              )}
 
               {/* Deep analysis fields */}
               {advancedAnalysisMode && selectedEngineLineIndex !== null && (
@@ -370,6 +386,39 @@ export default function ChatPanel({
                   </Box>
                 )}
 
+                {/* Opening Name / Story — shown before the user starts stepping through moves */}
+                {showTrainingIntro && (responseData?.opening_name || responseData?.story) && (
+                  <Box sx={{ display: "flex", flexDirection: "column", gap: 1, mb: 1 }}>
+                    {responseData?.opening_name && (
+                      <Box>
+                        <Typography variant="caption" sx={{ fontWeight: 700, color: "primary.main", display: "block" }}>
+                          {formatFieldLabel("opening_name")}
+                        </Typography>
+                        <Typography variant="body2">{responseData.opening_name}</Typography>
+                      </Box>
+                    )}
+                    {responseData?.story && (
+                      <Box>
+                        <Typography variant="caption" sx={{ fontWeight: 700, color: "primary.main", display: "block" }}>
+                          {formatFieldLabel("story")}
+                        </Typography>
+                        <Typography variant="body2">{responseData.story}</Typography>
+                      </Box>
+                    )}
+                  </Box>
+                )}
+
+                {/* Current move (glyphed SAN) — shown while stepping through training moves */}
+                {isTrainingResponse && trainingMoveLabel && (
+                  <Chip
+                    label={trainingMoveLabel}
+                    size="small"
+                    color="primary"
+                    variant="outlined"
+                    sx={{ alignSelf: "flex-start", fontWeight: 700, fontFamily: "monospace" }}
+                  />
+                )}
+
                 {/* Side-to-move badge for puzzles */}
                 {responseType === "Puzzle" && responseData?.side_to_move && (
                   <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
@@ -449,8 +498,8 @@ export default function ChatPanel({
                   </Box>
                 )}
 
-                {/* Markdown response — hidden for puzzle with unrevealed solution or when game list handles display */}
-                {responseType !== "GameList" && (!responseData?.hidden_solution || showSolution) && (
+                {/* Markdown response — hidden for puzzle with unrevealed solution, game list, or the training intro (shown above as Opening Name/Story) */}
+                {responseType !== "GameList" && !showTrainingIntro && (!responseData?.hidden_solution || showSolution) && (
                   <Box
                     sx={{
                       color: "#333",
@@ -465,6 +514,15 @@ export default function ChatPanel({
                     }}
                   >
                     <ReactMarkdown>{questionResponse}</ReactMarkdown>
+                  </Box>
+                )}
+
+                {isDrillLoading && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: 1 }}>
+                    <CircularProgress size={16} />
+                    <Typography variant="caption" color="text.secondary" sx={{ fontStyle: "italic" }}>
+                      Looking for the next best moves...
+                    </Typography>
                   </Box>
                 )}
               </Box>
