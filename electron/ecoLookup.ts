@@ -122,15 +122,29 @@ export function lookupOpeningByMoves(moves: string[], startFen?: string): EcoMat
 }
 
 /**
- * Check if a given position FEN is a valid named opening position in the ECO database.
- * This is useful to avoid explaining positions that are not officially classified openings.
- * Returns true only if the position exists in the ECO database.
+ * Check if a given position FEN is a valid named opening position.
+ * Returns true only if:
+ * 1. The position exists in the ECO database (is a recognized opening)
+ * 2. The position is not too shallow (at least move 4 of the game)
+ *
+ * This prevents explaining positions like "after 1.e4" which are not
+ * actual playable openings, only the starting point for opening theory.
  */
 export function isValidOpeningPosition(fen: string): boolean {
   if (!ecoAvailable || !cachedBook) return false;
   try {
+    // Check if position exists in ECO database
     const opening = findOpening(cachedBook, fen, cachedPositionBook ?? undefined);
-    return opening !== undefined;
+    if (!opening) return false;
+
+    // Extract move number from FEN (last field before move counter)
+    // FEN format: "piece_placement active_color castling en_passant halfmove_clock fullmove_number"
+    const fenParts = fen.split(" ");
+    const moveNumber = parseInt(fenParts[5] || "1", 10);
+
+    // Only consider it a valid opening position if we're at least 4 moves in
+    // (i.e., after Black's 2nd move, which is move 4 in the game)
+    return moveNumber >= 4;
   } catch {
     return false;
   }
