@@ -509,6 +509,7 @@ export interface AnalysisBoardProps {
   onStopAnalysis?: () => void;
   isAnalysisRunning?: boolean;
   puzzleMode?: boolean;
+  onReset?: () => void;
 }
 
 export interface StatusBannerProps {

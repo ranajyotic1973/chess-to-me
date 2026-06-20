@@ -522,6 +522,11 @@ export default function App() {
     warmupOllama();
   }, [settingsLoaded, formState.llmProvider, formState.ollamaModel, formState.ollamaBaseUrl, warmupOllama]);
 
+  // Clear chat when switching modes
+  useEffect(() => {
+    setQuestionResponse("");
+  }, [viewMode]);
+
   // Listen for engine warmup start/finish events pushed from the main process
   useEffect(() => {
     if (!electronAPI?.onEngineWarmingUp || !electronAPI?.onEngineReady) return;
@@ -910,6 +915,13 @@ export default function App() {
     setAnalysisLoading(false);
     setAnalysisStatus("Analysis stopped.");
   }, []);
+
+  const handleResetBoard = useCallback(() => {
+    setCurrentFen("start");
+    setQuestionResponse("");
+    setViewMode("analysis");
+    setStatusMessage("Board reset. Ready to analyze.");
+  }, [setStatusMessage]);
 
   const applyPuzzleSolutionMove = useCallback((moveIndex: number) => {
     if (!puzzleStartFen) return;
@@ -2624,6 +2636,7 @@ export default function App() {
                     isAnalysisRunning={isAnalysisRunning}
                     onMoveAttempt={handleMoveAttempt}
                     puzzleMode={currentResponseType === "Puzzle" || gameMode}
+                    onReset={handleResetBoard}
                   />
                 </Box>
                 {/* White player bar — shown below the board when a DB game is loaded */}

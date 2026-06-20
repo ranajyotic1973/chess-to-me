@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Box } from "@mui/material";
+import { Box, IconButton, Tooltip } from "@mui/material";
+import { RestartAlt } from "@mui/icons-material";
 import { Chess } from "chess.js";
 import type { AnalysisBoardProps } from "../types";
 
@@ -21,7 +22,8 @@ export default function AnalysisBoard({
   onStartAnalysis,
   onStopAnalysis,
   isAnalysisRunning = false,
-  puzzleMode = false
+  puzzleMode = false,
+  onReset
 }: AnalysisBoardProps) {
   const boardRef = useRef<HTMLDivElement>(null);
   const boardInstance = useRef<any>(null);
@@ -138,8 +140,10 @@ export default function AnalysisBoard({
         width: dimension,
         maxWidth: "100%",
         display: "flex",
+        flexDirection: "column",
         justifyContent: "center",
-        alignItems: "center"
+        alignItems: "center",
+        gap: 1
       }}
     >
       <Box
@@ -152,6 +156,20 @@ export default function AnalysisBoard({
           boxShadow: 12
         }}
       />
+      <Tooltip title="Reset board, clear chat, and return to analysis mode">
+        <IconButton
+          onClick={onReset}
+          size="medium"
+          sx={{
+            color: "primary.main",
+            "&:hover": {
+              backgroundColor: "action.hover"
+            }
+          }}
+        >
+          <RestartAlt />
+        </IconButton>
+      </Tooltip>
     </Box>
   );
 }
