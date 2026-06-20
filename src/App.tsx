@@ -40,6 +40,7 @@ import BoardPositionEditor from "./components/BoardPositionEditor";
 import ProfileIcon from "./components/ProfileIcon";
 import EvalBar from "./components/EvalBar";
 import SplashScreen from "./components/SplashScreen";
+import FancyTitleBar from "./components/FancyTitleBar";
 import {
   deriveFenSequence,
   parseFenOrPgnInput,
@@ -508,6 +509,9 @@ export default function App() {
       } finally {
         if (!cancelled) {
           setAppLoading(false);
+          if (typeof window !== "undefined" && (window as any).hideSplashScreen) {
+            (window as any).hideSplashScreen();
+          }
         }
       }
     };
@@ -2309,14 +2313,23 @@ export default function App() {
         display: "flex",
         flexDirection: "column",
         background: "linear-gradient(160deg, #e4e8f4 0%, #f3f3f1 45%, #f2ede4 100%)",
-        px: { xs: 2, md: 4 },
-        pt: { xs: 2, md: 3 },
         overflow: "hidden"
       }}
     >
-      <Box sx={{ position: "absolute", top: 12, right: 16, zIndex: (theme) => theme.zIndex.drawer + 3 }}>
-        <ProfileIcon refreshTrigger={profileRefreshTrigger} />
-      </Box>
+      <FancyTitleBar version="1.0.0" />
+
+      <Box
+        sx={{
+          px: { xs: 2, md: 4 },
+          pt: { xs: 2, md: 3 },
+          flex: 1,
+          overflow: "auto",
+          position: "relative"
+        }}
+      >
+        <Box sx={{ position: "absolute", top: 12, right: 16, zIndex: (theme) => theme.zIndex.drawer + 3 }}>
+          <ProfileIcon refreshTrigger={profileRefreshTrigger} />
+        </Box>
 
       {appLoading && (
         <Box
@@ -2981,6 +2994,7 @@ export default function App() {
         isEngineRunning={isAnalysisRunning}
         llmProvider={formState.llmProvider}
       />
+      </Box>
     </Box>
   );
 }
