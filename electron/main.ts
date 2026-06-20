@@ -2500,6 +2500,21 @@ ipcMain.handle("llm:explain-lines", async (_event, payload) => {
     }
   }
 
+  // For chess explanation, use a faster non-reasoning model variant to avoid long response times
+  // Reasoning models add unnecessary overhead for straightforward explanations
+  if (model && model.includes("reasoning")) {
+    const reasoningMap: Record<string, string> = {
+      "grok-4-fast-reasoning": "grok-2-1212",
+      "grok-3-reasoning": "grok-2-1212",
+      "o1": "gpt-4o",
+      "o1-mini": "gpt-4o-mini"
+    };
+    if (reasoningMap[model]) {
+      model = reasoningMap[model];
+      console.log(`[LLM] Using faster model for chess explanation: ${reasoningMap[model]} (replaced reasoning variant)`);
+    }
+  }
+
   const baseUrl = (payload?.baseUrl || (llmProvider === "ollama" ? settings.get("ollamaBaseUrl") : null) || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
 
   if (!lines.length) {
