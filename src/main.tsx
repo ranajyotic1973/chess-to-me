@@ -22,6 +22,11 @@ if (typeof window !== "undefined") {
 
 import App from "./App";
 
+// Hide splash screen immediately when React mounts
+if (typeof window !== "undefined" && (window as any).hideSplashScreen) {
+  (window as any).hideSplashScreen();
+}
+
 const root = document.getElementById("root");
 if (root) {
   createRoot(root).render(

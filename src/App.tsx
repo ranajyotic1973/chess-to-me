@@ -39,8 +39,6 @@ import AppStatusBar from "./components/AppStatusBar";
 import BoardPositionEditor from "./components/BoardPositionEditor";
 import ProfileIcon from "./components/ProfileIcon";
 import EvalBar from "./components/EvalBar";
-import SplashScreen from "./components/SplashScreen";
-import FancyTitleBar from "./components/FancyTitleBar";
 import {
   deriveFenSequence,
   parseFenOrPgnInput,
@@ -509,9 +507,6 @@ export default function App() {
       } finally {
         if (!cancelled) {
           setAppLoading(false);
-          if (typeof window !== "undefined" && (window as any).hideSplashScreen) {
-            (window as any).hideSplashScreen();
-          }
         }
       }
     };
@@ -531,6 +526,16 @@ export default function App() {
   useEffect(() => {
     setQuestionResponse("");
   }, [viewMode]);
+
+  // Auto-switch to analysis if engine is already configured on first load
+  useEffect(() => {
+    if (settingsLoaded && engineStatus?.configured && viewMode === "settings") {
+      setViewMode("analysis");
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(SETTINGS_FLAG, "true");
+      }
+    }
+  }, [settingsLoaded, engineStatus?.configured, viewMode]);
 
   // Listen for engine warmup start/finish events pushed from the main process
   useEffect(() => {
@@ -2313,38 +2318,14 @@ export default function App() {
         display: "flex",
         flexDirection: "column",
         background: "linear-gradient(160deg, #e4e8f4 0%, #f3f3f1 45%, #f2ede4 100%)",
+        px: { xs: 2, md: 4 },
+        pt: { xs: 2, md: 3 },
         overflow: "hidden"
       }}
     >
-      <FancyTitleBar version="1.0.0" />
-
-      <Box
-        sx={{
-          px: { xs: 2, md: 4 },
-          pt: { xs: 2, md: 3 },
-          flex: 1,
-          overflow: "auto",
-          position: "relative"
-        }}
-      >
-        <Box sx={{ position: "absolute", top: 12, right: 16, zIndex: (theme) => theme.zIndex.drawer + 3 }}>
-          <ProfileIcon refreshTrigger={profileRefreshTrigger} />
-        </Box>
-
-      {appLoading && (
-        <Box
-          sx={{
-            position: "absolute",
-            width: "100%",
-            height: "100%",
-            zIndex: (theme) => theme.zIndex.drawer + 5,
-            top: 0,
-            left: 0
-          }}
-        >
-          <SplashScreen version="1.0.0" />
-        </Box>
-      )}
+      <Box sx={{ position: "absolute", top: 12, right: 16, zIndex: (theme) => theme.zIndex.drawer + 3 }}>
+        <ProfileIcon refreshTrigger={profileRefreshTrigger} />
+      </Box>
 
       <Backdrop
         open={!appLoading && (engineWarming || engineAnalyzing)}
@@ -2994,7 +2975,6 @@ export default function App() {
         isEngineRunning={isAnalysisRunning}
         llmProvider={formState.llmProvider}
       />
-      </Box>
     </Box>
   );
 }
