@@ -2090,9 +2090,18 @@ async function executeTool(toolName: string, args: Record<string, any>): Promise
       }
       case "identify_opening": {
         try {
-          const opening = lookupOpeningByFen(args.fen);
-          result = opening ? { ok: true, name: opening.name, eco: opening.eco } : { ok: true, opening: null };
+          const fen = args.fen;
+          console.log(`[Tool] identify_opening | FEN: ${fen}`);
+          const opening = lookupOpeningByFen(fen);
+          if (opening) {
+            console.log(`[Tool] identify_opening → Found: ${opening.name} (${opening.eco})`);
+            result = { ok: true, name: opening.name, eco: opening.eco };
+          } else {
+            console.log(`[Tool] identify_opening → No opening found for FEN`);
+            result = { ok: true, opening: null };
+          }
         } catch (err) {
+          console.log(`[Tool] identify_opening → Error: ${(err as Error).message}`);
           result = { ok: false, error: (err as Error).message };
         }
         break;
@@ -2341,10 +2350,14 @@ async function runOpenAICompatibleChat(provider: string, baseUrl: string, model:
         });
       }
 
+      // Log tool results being sent back to LLM
+      const toolResultsJson = JSON.stringify(toolResults);
+      console.log(`[LLM] Tool results to send back (${toolResultsJson.length} chars): ${toolResultsJson.substring(0, 300)}${toolResultsJson.length > 300 ? "..." : ""}`);
+
       // Add tool results to conversation
       conversationMessages.push({
         role: "user",
-        content: JSON.stringify(toolResults)
+        content: toolResultsJson
       });
     } else {
       // No tool calls, return the response
