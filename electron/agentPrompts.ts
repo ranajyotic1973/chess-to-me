@@ -205,10 +205,10 @@ Piece glyphs ♔♕♖♗♘♙♚♛♜♝♞♟. Cover: Strategic Plans · Tac
 export const explainLinesSystemPrompt = (language: string) =>
   `Explain chess engine lines in ${language}. Use SAN notation (1.e4, Nf3, Bxc4, O-O) and piece glyphs ♔♕♖♗♘♙♚♛♜♝♞♟.
 Flowing text, no bullets, under 150 words.
-Opening identification: call identify_opening with the full move sequence in UCI format (e.g., moves: "e2e4 c7c5 g1f3").
+Opening identification: when you have the full line of moves, call identify_opening with: moves (space-separated UCI) and fen (the current position's FEN if provided in context).
 - If the tool returns an opening name: mention it briefly, then explain strategic goal and key ideas.
-- If the tool returns null/"no opening found": skip the opening entirely, just explain the strategic goal and key ideas directly.
-Do not attempt to infer or guess an opening name. Simply proceed with move explanation.`;
+- If the tool returns null/"no opening found": skip the opening, just explain strategic goal and key ideas directly.
+Do not guess opening names. Always use the tool for identification.`;
 
 // ============================================================================
 // Puzzle agents
