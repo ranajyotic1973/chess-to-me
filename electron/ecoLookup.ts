@@ -125,10 +125,15 @@ export function lookupOpeningByMoves(moves: string[], startFen?: string): EcoMat
  * Check if a given position FEN is a valid named opening position.
  * Returns true only if:
  * 1. The position exists in the ECO database (is a recognized opening)
- * 2. The position is not too shallow (at least move 4 of the game)
+ * 2. The position is at least move 2 (both sides have moved once)
  *
- * This prevents explaining positions like "after 1.e4" which are not
- * actual playable openings, only the starting point for opening theory.
+ * ECO classifications start at move 2:
+ * - 1.e4 e5 → C20 (King's Pawn Game)
+ * - 1.e4 c5 → B20 (Sicilian Defense)
+ * - 1.e4 e6 → C00 (French Defense)
+ *
+ * This prevents explaining positions like "after 1.e4" which don't have
+ * an ECO classification until Black responds.
  */
 export function isValidOpeningPosition(fen: string): boolean {
   if (!ecoAvailable || !cachedBook) return false;
@@ -137,14 +142,13 @@ export function isValidOpeningPosition(fen: string): boolean {
     const opening = findOpening(cachedBook, fen, cachedPositionBook ?? undefined);
     if (!opening) return false;
 
-    // Extract move number from FEN (last field before move counter)
+    // Extract move number from FEN
     // FEN format: "piece_placement active_color castling en_passant halfmove_clock fullmove_number"
     const fenParts = fen.split(" ");
     const moveNumber = parseInt(fenParts[5] || "1", 10);
 
-    // Only consider it a valid opening position if we're at least 4 moves in
-    // (i.e., after Black's 2nd move, which is move 4 in the game)
-    return moveNumber >= 4;
+    // ECO classifications begin at move 2 (after Black's first response)
+    return moveNumber >= 2;
   } catch {
     return false;
   }
