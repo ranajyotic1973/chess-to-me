@@ -46,6 +46,17 @@ import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from "electron";
 
 const DEFAULT_OLLAMA_MODEL = "qwen3:8b";
 
+// Read app version from package.json
+function getAppVersion(): string {
+  try {
+    const packageJsonPath = path.join(__dirname, "..", "..", "package.json");
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+    return packageJson.version || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 // ============================================================================
 // Database state (lazily initialised, closed on delete)
 // ============================================================================
@@ -1404,11 +1415,13 @@ async function createWindow(): Promise<void> {
   const iconPath = app.isPackaged
     ? path.join(process.resourcesPath, "icon.ico")
     : path.join(__dirname, "..", "..", "build", "icon.ico");
+  const version = getAppVersion();
   const win = new BrowserWindow({
     width: 1300,
     height: 840,
     resizable: false,
     icon: iconPath,
+    title: `Chess To Me v${version}`,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,

@@ -48,13 +48,13 @@ async function main() {
     process.exit(1);
   }
 
-  // ── build/icon.png — 512×512, used for Linux and as the reference image ──
-  const src512 = await makeIconBuffer(512);
-  fs.writeFileSync(PNG, src512);
-  console.log("✓ build/icon.png  (512×512)");
+  // ── build/icon.png — 1024×1024, used for Linux and as the reference image (2x from 512) ──
+  const src1024 = await makeIconBuffer(1024);
+  fs.writeFileSync(PNG, src1024);
+  console.log("✓ build/icon.png  (1024×1024)");
 
-  // ── build/icon.ico — Windows, multi-size PNG-in-ICO ──
-  const icoSizes = [16, 24, 32, 48, 64, 128, 256];
+  // ── build/icon.ico — Windows, multi-size PNG-in-ICO (2x sizes, max 256 due to ICO format) ──
+  const icoSizes = [32, 48, 64, 96, 128, 256];
   const icoPngs  = await Promise.all(icoSizes.map(s => makeIconBuffer(s)));
 
   const hdr = Buffer.alloc(6);
@@ -80,12 +80,12 @@ async function main() {
   fs.writeFileSync(ICO, Buffer.concat([hdr, dir, ...icoPngs]));
   console.log(`✓ build/icon.ico  (${icoSizes.join(", ")} px)`);
 
-  // ── build/icon.icns — macOS ──
-  const src1024 = await makeIconBuffer(1024);
-  const icns = png2icons.createICNS(src1024, png2icons.BICUBIC, 0);
+  // ── build/icon.icns — macOS (2048x2048, 2x from 1024) ──
+  const src2048 = await makeIconBuffer(2048);
+  const icns = png2icons.createICNS(src2048, png2icons.BICUBIC, 0);
   if (icns) {
     fs.writeFileSync(ICNS, icns);
-    console.log("✓ build/icon.icns");
+    console.log("✓ build/icon.icns (2048×2048)");
   } else {
     console.warn("⚠ icon.icns generation failed — macOS builds may use a placeholder");
   }
