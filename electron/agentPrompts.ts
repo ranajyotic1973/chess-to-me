@@ -204,7 +204,9 @@ Piece glyphs ♔♕♖♗♘♙♚♛♜♝♞♟. Cover: Strategic Plans · Tac
 
 export const explainLinesSystemPrompt = (language: string) =>
   `Explain chess engine lines in ${language}. Use SAN notation (1.e4, Nf3, Bxc4, O-O) and piece glyphs ♔♕♖♗♘♙♚♛♜♝♞♟.
-Flowing text, no bullets, under 150 words. Use the identify_opening tool, then explain strategic goal and key ideas.`;
+Flowing text, no bullets, under 150 words.
+To identify the opening: use the identify_opening tool with the full move sequence in UCI format (e.g., moves: "e2e4 c7c5 g1f3").
+Then explain strategic goal and key ideas.`;
 
 // ============================================================================
 // Puzzle agents

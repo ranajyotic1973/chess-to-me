@@ -2027,13 +2027,14 @@ function getLlmToolDefinitions(): Array<{
     {
       name: "identify_opening",
       description:
-        "Identifies the chess opening name from a FEN position. Returns the opening name and ECO code if recognized, otherwise returns null.",
+        "Identifies the chess opening name from move sequence. Provide starting FEN and moves in UCI format to get the opening name and ECO code.",
       inputSchema: {
         type: "object",
         properties: {
-          fen: { type: "string", description: "Position FEN (required)" }
+          fen: { type: "string", description: "Starting position FEN (default: starting position)" },
+          moves: { type: "string", description: "Space-separated UCI moves (e.g. 'e2e4 c7c5 g1f3') to build the opening progression" }
         },
-        required: ["fen"]
+        required: ["moves"]
       }
     }
   ];
@@ -2092,14 +2093,48 @@ async function executeTool(toolName: string, args: Record<string, any> | string)
       }
       case "identify_opening": {
         try {
-          const fen = parsedArgs.fen;
-          console.log(`[Tool] identify_opening | FEN: ${fen}`);
-          const opening = lookupOpeningByFen(fen);
-          if (opening) {
-            console.log(`[Tool] identify_opening → Found: ${opening.name} (${opening.eco})`);
-            result = { ok: true, name: opening.name, eco: opening.eco };
+          const moves = parsedArgs.moves || "";
+          const startFen = parsedArgs.fen || "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+          if (!moves || moves.trim() === "") {
+            console.log(`[Tool] identify_opening → No moves provided`);
+            result = { ok: true, opening: null };
+            break;
+          }
+
+          console.log(`[Tool] identify_opening | Moves: ${moves} | Start FEN: ${startFen}`);
+
+          // Build FEN progression from UCI moves
+          const chess = new Chess();
+          try {
+            chess.load(startFen);
+          } catch {
+            chess.reset();
+          }
+
+          const moveList = moves.split(/\s+/).filter(m => m.trim());
+          let lastOpening = null;
+
+          // Try to identify opening at each move position
+          for (const uciMove of moveList) {
+            const result = chess.move({ from: uciMove.slice(0, 2), to: uciMove.slice(2, 4), promotion: uciMove[4] as any });
+            if (!result) {
+              console.log(`[Tool] identify_opening → Invalid move: ${uciMove}`);
+              break;
+            }
+
+            const currentFen = chess.fen();
+            const opening = lookupOpeningByFen(currentFen);
+            if (opening) {
+              lastOpening = opening;
+            }
+          }
+
+          if (lastOpening) {
+            console.log(`[Tool] identify_opening → Found: ${lastOpening.name} (${lastOpening.eco})`);
+            result = { ok: true, name: lastOpening.name, eco: lastOpening.eco };
           } else {
-            console.log(`[Tool] identify_opening → No opening found for FEN`);
+            console.log(`[Tool] identify_opening → No opening found for move sequence`);
             result = { ok: true, opening: null };
           }
         } catch (err) {
