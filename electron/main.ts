@@ -2094,7 +2094,7 @@ async function executeTool(toolName: string, args: Record<string, any> | string)
       case "identify_opening": {
         try {
           const moves = parsedArgs.moves || "";
-          const startFen = parsedArgs.fen || "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+          const startFen = parsedArgs.fen;
 
           if (!moves || moves.trim() === "") {
             console.log(`[Tool] identify_opening → No moves provided`);
@@ -2102,39 +2102,18 @@ async function executeTool(toolName: string, args: Record<string, any> | string)
             break;
           }
 
-          console.log(`[Tool] identify_opening | Moves: ${moves} | Start FEN: ${startFen}`);
-
-          // Build FEN progression from UCI moves
-          const chess = new Chess();
-          try {
-            chess.load(startFen);
-          } catch {
-            chess.reset();
-          }
-
           const moveList = moves.split(/\s+/).filter(m => m.trim());
-          let lastOpening = null;
+          console.log(`[Tool] identify_opening | ${moveList.length} moves | Start FEN: ${startFen || "starting position"}`);
 
-          // Try to identify opening at each move position
-          for (const uciMove of moveList) {
-            const result = chess.move({ from: uciMove.slice(0, 2), to: uciMove.slice(2, 4), promotion: uciMove[4] as any });
-            if (!result) {
-              console.log(`[Tool] identify_opening → Invalid move: ${uciMove}`);
-              break;
-            }
+          // Use lookupOpeningByMoves which walks through move progression
+          // and returns the deepest opening found (including interpolated variations)
+          const opening = lookupOpeningByMoves(moveList, startFen);
 
-            const currentFen = chess.fen();
-            const opening = lookupOpeningByFen(currentFen);
-            if (opening) {
-              lastOpening = opening;
-            }
-          }
-
-          if (lastOpening) {
-            console.log(`[Tool] identify_opening → Found: ${lastOpening.name} (${lastOpening.eco})`);
-            result = { ok: true, name: lastOpening.name, eco: lastOpening.eco };
+          if (opening) {
+            console.log(`[Tool] identify_opening → Found: ${opening.name} (${opening.eco})`);
+            result = { ok: true, name: opening.name, eco: opening.eco };
           } else {
-            console.log(`[Tool] identify_opening → No opening found for move sequence`);
+            console.log(`[Tool] identify_opening → No opening found for moves: ${moves}`);
             result = { ok: true, opening: null };
           }
         } catch (err) {
