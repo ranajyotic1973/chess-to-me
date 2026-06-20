@@ -39,6 +39,7 @@ import AppStatusBar from "./components/AppStatusBar";
 import BoardPositionEditor from "./components/BoardPositionEditor";
 import ProfileIcon from "./components/ProfileIcon";
 import EvalBar from "./components/EvalBar";
+import SplashScreen from "./components/SplashScreen";
 import {
   deriveFenSequence,
   parseFenOrPgnInput,
@@ -2317,8 +2318,23 @@ export default function App() {
         <ProfileIcon refreshTrigger={profileRefreshTrigger} />
       </Box>
 
+      {appLoading && (
+        <Box
+          sx={{
+            position: "absolute",
+            width: "100%",
+            height: "100%",
+            zIndex: (theme) => theme.zIndex.drawer + 5,
+            top: 0,
+            left: 0
+          }}
+        >
+          <SplashScreen version="1.0.0" />
+        </Box>
+      )}
+
       <Backdrop
-        open={appLoading || engineWarming || engineAnalyzing}
+        open={!appLoading && (engineWarming || engineAnalyzing)}
         sx={{
           position: "absolute",
           zIndex: (theme) => theme.zIndex.drawer + 5,
