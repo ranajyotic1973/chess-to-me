@@ -2620,11 +2620,13 @@ export default function App() {
                     gap: 1,
                   }}
                 >
-                  <EvalBar
-                    score={analysisLines[0]?.score}
-                    height={boardSize.height}
-                    isLoading={isAnalysisRunning}
-                  />
+                  {!puzzleMode && (
+                    <EvalBar
+                      score={analysisLines[0]?.score}
+                      height={boardSize.height}
+                      isLoading={isAnalysisRunning}
+                    />
+                  )}
                   <AnalysisBoard
                     currentFen={currentFen}
                     setCurrentFen={setCurrentFen}
@@ -2766,7 +2768,7 @@ export default function App() {
                   minHeight: 0,
                   height: isWideLayout ? layoutHeight : "auto",
                   display: "flex",
-                  flexDirection: "column",
+                  flexDirection: "row",
                   gap: 2,
                   overflow: "hidden"
                 }}
