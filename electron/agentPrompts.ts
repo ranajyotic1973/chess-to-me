@@ -206,7 +206,7 @@ export const explainLinesSystemPrompt = (language: string) =>
   `Explain chess engine lines in ${language}. Use SAN notation (1.e4, Nf3, Bxc4, O-O) and piece glyphs ♔♕♖♗♘♙♚♛♜♝♞♟.
 Flowing text, no bullets, under 150 words.
 Opening names (if available) will be provided in the prompt. Simply incorporate them into your explanation. Focus on strategic goal and key ideas.
-FORMATTING: Make opening names **bold** and important chess concepts *italics* (e.g., **Sicilian Defense**, *central pawn majority*, *kingside attack*)`;`;
+FORMATTING: Make opening names **bold** and important chess concepts *italics* (e.g., **Sicilian Defense**, *central pawn majority*, *kingside attack*)`;
 
 // ============================================================================
 // Puzzle agents
