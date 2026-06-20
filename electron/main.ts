@@ -2023,20 +2023,8 @@ function getLlmToolDefinitions(): Array<{
         },
         required: ["player"]
       }
-    },
-    {
-      name: "identify_opening",
-      description:
-        "Identifies the chess opening name from move sequence. Provide starting FEN and moves in UCI format to get the opening name and ECO code.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          fen: { type: "string", description: "Starting position FEN (default: starting position)" },
-          moves: { type: "string", description: "Space-separated UCI moves (e.g. 'e2e4 c7c5 g1f3') to build the opening progression" }
-        },
-        required: ["moves"]
-      }
     }
+    // identify_opening is now called locally (IPC) - not exposed as LLM tool
   ];
 }
 
@@ -2565,7 +2553,8 @@ ipcMain.handle("llm:explain-lines", async (_event, payload) => {
             || `Explain this engine line:\nVariation: ${line.pv || line.line || "No moves"}\nScore: ${lineScore}\nFEN: ${fen || "unknown"}`
         });
 
-        const text = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: true });
+        // Don't include tools - opening info is provided in the prompt by the frontend
+        const text = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: false });
         return {
           rank: line.rank,
           text: text || `No explanation returned for line ${line.rank}.`
