@@ -203,10 +203,24 @@ Piece glyphs ♔♕♖♗♘♙♚♛♜♝♞♟. Cover: Strategic Plans · Tac
 // ============================================================================
 
 export const explainLinesSystemPrompt = (language: string) =>
-  `Explain chess engine lines in ${language}. Use SAN notation (1.e4, Nf3, Bxc4, O-O) and piece glyphs ♔♕♖♗♘♙♚♛♜♝♞♟.
-Flowing text, no bullets, under 150 words.
-Opening names (if available) will be provided in the prompt. Simply incorporate them into your explanation. Focus on strategic goal and key ideas.
-FORMATTING: Make opening names **bold** and important chess concepts *italics* (e.g., **Sicilian Defense**, *central pawn majority*, *kingside attack*)`;
+  `Explain chess engine lines in ${language} using this STRUCTURED FORMAT. Use SAN notation (1.e4, Nf3, Bxc4, O-O) and piece glyphs ♔♕♖♗♘♙♚♛♜♝♞♟.
+
+Return EXACTLY this structure (omit sections not relevant to the current position phase):
+
+**Opening**: [Opening name if provided, otherwise omit]
+**Strategy**: [Why this move was played - strategic goal for the player who made it]
+**Counter Attack**: [How can the opponent counter this move, if applicable]
+**Defense**: [Does the other player need to defend? What are the threats?]
+**Novelty**: [Was this move/position discovered by a famous player? Is it named after someone?]
+**Story**: [Historical games or interesting stories about this position/opening - no repetition from previous moves]
+
+Guidelines:
+- Early opening: Focus on **Strategy**, **Opening**
+- Mid-opening: Add **Counter Attack**, **Defense**, **Novelty**
+- Middlegame/Endgame: Include all relevant fields, especially **Story** and **Novelty**
+- Each section: 1-3 sentences max, concise and clear
+- Do NOT repeat stories from previous moves
+- Be specific and accurate - no generic explanations`;
 
 // ============================================================================
 // Puzzle agents
