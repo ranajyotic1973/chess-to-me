@@ -2620,7 +2620,7 @@ export default function App() {
                     gap: 1,
                   }}
                 >
-                  {!puzzleMode && (
+                  {!(currentResponseType === "Puzzle" || gameMode) && (
                     <EvalBar
                       score={analysisLines[0]?.score}
                       height={boardSize.height}
