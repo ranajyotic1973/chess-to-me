@@ -232,7 +232,12 @@ const determinePreferredModel = (models: string[] | null | undefined): string =>
 export default function App() {
   const [viewMode, setViewMode] = useState<"settings" | "analysis">(() => {
     if (typeof window === "undefined") return "settings";
-    return window.localStorage.getItem(SETTINGS_FLAG) === "true" ? "analysis" : "settings";
+    // Prefer localStorage flag if it exists (user has completed setup before)
+    const flag = window.localStorage.getItem(SETTINGS_FLAG);
+    if (flag === "true") return "analysis";
+    // If flag is not set, still show analysis mode by default - settings will auto-show if needed
+    // This avoids showing settings page unnecessarily when settings are already configured
+    return "analysis";
   });
   const [formState, setFormState] = useState<AppSettings>(DEFAULT_FORM);
   const [llmApiKeyLength, setLlmApiKeyLength] = useState<number>(0);
@@ -527,12 +532,22 @@ export default function App() {
     setQuestionResponse("");
   }, [viewMode]);
 
-  // Auto-switch to analysis if engine is already configured on first load
+  // Auto-switch between settings and analysis based on whether engine is configured
   useEffect(() => {
-    if (settingsLoaded && engineStatus?.configured && viewMode === "settings") {
+    if (!settingsLoaded) return;
+
+    // If engine is configured, show analysis mode
+    if (engineStatus?.configured && viewMode === "settings") {
       setViewMode("analysis");
       if (typeof window !== "undefined") {
         window.localStorage.setItem(SETTINGS_FLAG, "true");
+      }
+    }
+    // If engine is NOT configured, show settings mode to let user set it up
+    else if (!engineStatus?.configured && viewMode === "analysis") {
+      setViewMode("settings");
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(SETTINGS_FLAG);
       }
     }
   }, [settingsLoaded, engineStatus?.configured, viewMode]);
