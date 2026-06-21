@@ -95,14 +95,20 @@
       </div>
     </div>
     <div id="root"></div>
-    <script type="module" src="./src/main.tsx"></script>
     <script>
       window.hideSplashScreen = function() {
+        console.log('[index.html] hideSplashScreen called');
         const splash = document.getElementById('splash-screen');
         if (splash) {
+          console.log('[index.html] Found splash screen, adding hidden class');
           splash.classList.add('hidden');
+          console.log('[index.html] Hidden class added');
+        } else {
+          console.warn('[index.html] Splash screen element not found');
         }
       };
+      console.log('[index.html] Script loaded, hideSplashScreen function defined');
     </script>
+    <script type="module" src="./src/main.tsx"></script>
   </body>
 </html>
