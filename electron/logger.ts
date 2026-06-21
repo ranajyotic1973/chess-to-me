@@ -58,6 +58,19 @@ export function logToFile(level: string, source: string, message: string, meta?:
 export function closeLogger(): void {
   if (flushTimer) clearTimeout(flushTimer);
   flushLogs();
+
+  // Delete log file on graceful shutdown
+  try {
+    if (logFilePath && fs.existsSync(logFilePath)) {
+      fs.unlinkSync(logFilePath);
+      console.log('[Logger] Log file deleted on graceful shutdown');
+    }
+  } catch (err) {
+    console.error('[Logger] Failed to delete log file:', err);
+  }
+
+  logFilePath = null;
+  logBuffer = [];
 }
 
 export function cleanupOldLogs(): void {
