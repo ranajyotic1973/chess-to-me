@@ -1442,7 +1442,8 @@ async function createWindow(): Promise<void> {
 
     win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
       const isDev = process.env.ELECTRON_START_URL !== undefined;
-      const scriptSrc = isDev ? "'self' 'unsafe-inline'" : "'self'";
+      // Need 'unsafe-inline' for inline scripts in index.html (hideSplashScreen, etc)
+      const scriptSrc = "'self' 'unsafe-inline'";
       callback({
         responseHeaders: {
           ...details.responseHeaders,
