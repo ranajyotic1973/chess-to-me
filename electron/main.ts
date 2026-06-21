@@ -1419,7 +1419,7 @@ async function createWindow(): Promise<void> {
       : path.join(__dirname, "..", "..", "build", "icon.ico");
     const version = getAppVersion();
 
-    await logToFile("DEBUG", "createWindow", "Creating BrowserWindow", {
+    logToFile("DEBUG", "createWindow", "Creating BrowserWindow", {
       isPackaged: app.isPackaged,
       version
     });
@@ -1438,7 +1438,7 @@ async function createWindow(): Promise<void> {
       }
     });
 
-    await logToFile("DEBUG", "createWindow", "BrowserWindow created");
+    logToFile("DEBUG", "createWindow", "BrowserWindow created");
 
     win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
       const isDev = process.env.ELECTRON_START_URL !== undefined;
@@ -1453,15 +1453,15 @@ async function createWindow(): Promise<void> {
 
     const devUrl = process.env.ELECTRON_START_URL;
     if (devUrl) {
-      await logToFile("DEBUG", "createWindow", "Loading dev URL", { url: devUrl });
+      logToFile("DEBUG", "createWindow", "Loading dev URL", { url: devUrl });
       await win.loadURL(devUrl);
     } else {
       const indexPath = path.join(__dirname, "..", "..", "dist", "index.html");
-      await logToFile("DEBUG", "createWindow", "Loading file", { path: indexPath });
+      logToFile("DEBUG", "createWindow", "Loading file", { path: indexPath });
       await win.loadFile(indexPath);
     }
 
-    await logToFile("INFO", "createWindow", "Content loaded");
+    logToFile("INFO", "createWindow", "Content loaded");
 
     win.webContents.on("before-input-event", (event, input) => {
       if (input.control && input.shift && input.key.toLowerCase() === "i") {
@@ -1499,7 +1499,7 @@ async function createWindow(): Promise<void> {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    await logToFile("ERROR", "createWindow", "Failed to create window", { error: msg });
+    logToFile("ERROR", "createWindow", "Failed to create window", { error: msg });
     throw err;
   }
 }
@@ -4386,42 +4386,42 @@ async function checkGamesUpdatePrompt(win: BrowserWindow): Promise<void> {
 }
 
 app.whenReady().then(async () => {
-  await logToFile("INFO", "main", "App ready, starting initialization");
+  logToFile("INFO", "main", "App ready, starting initialization");
   cleanupOldLogs();
 
   // Initialize processManager's settings after app is ready
-  await logToFile("DEBUG", "main", "Initializing processManager from settings");
+  logToFile("DEBUG", "main", "Initializing processManager from settings");
   processManager.initializeFromSettings();
 
-  await logToFile("DEBUG", "main", "Loading points");
+  logToFile("DEBUG", "main", "Loading points");
   loadPoints(app.getPath("userData"));
 
-  await logToFile("DEBUG", "main", "Registering IPC handlers");
+  logToFile("DEBUG", "main", "Registering IPC handlers");
   registerIpcHandlers();
 
-  await logToFile("DEBUG", "main", "Setting application menu");
+  logToFile("DEBUG", "main", "Setting application menu");
   Menu.setApplicationMenu(null);
 
-  await logToFile("DEBUG", "main", "Creating window");
+  logToFile("DEBUG", "main", "Creating window");
   await createWindow();
-  await logToFile("INFO", "main", "Window created successfully");
+  logToFile("INFO", "main", "Window created successfully");
 
   // Copy bundled games DB to userData on first run (runs in background after window opens)
   setupBundledGamesDb().catch(err => {
     const msg = err instanceof Error ? err.message : String(err);
-    logToFile("ERROR", "main", "First-run setup error", { error: msg }).catch(console.error);
+    logToFile("ERROR", "main", "First-run setup error", { error: msg });
   });
 
   // Load ECO opening book in the background — non-fatal if unavailable
   initEcoLookup(getBundledEcoDataDir()).catch(err => {
     const msg = err instanceof Error ? err.message : String(err);
-    logToFile("WARN", "main", "ECO lookup startup init failed", { error: msg }).catch(console.error);
+    logToFile("WARN", "main", "ECO lookup startup init failed", { error: msg });
   });
 
   // Show monthly update prompt after the window has fully loaded (30-day throttle)
   if (mainWindow) {
     mainWindow.webContents.once("did-finish-load", () => {
-      logToFile("INFO", "main", "Window did-finish-load").catch(console.error);
+      logToFile("INFO", "main", "Window did-finish-load");
       // Delay 3 s so the user sees the app before any dialogs appear
       setTimeout(() => {
         if (mainWindow) checkGamesUpdatePrompt(mainWindow).catch(console.error);
@@ -4430,12 +4430,12 @@ app.whenReady().then(async () => {
   }
 
   try {
-    await logToFile("DEBUG", "main", "Initializing ProcessManager");
+    logToFile("DEBUG", "main", "Initializing ProcessManager");
     await processManager.init();
-    await logToFile("INFO", "main", "ProcessManager initialized");
+    logToFile("INFO", "main", "ProcessManager initialized");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    await logToFile("ERROR", "main", "ProcessManager init error", { error: msg });
+    logToFile("ERROR", "main", "ProcessManager init error", { error: msg });
   }
 
   app.on("activate", async () => {
@@ -4446,9 +4446,9 @@ app.whenReady().then(async () => {
 });
 
 app.on("before-quit", async () => {
-  await logToFile("INFO", "main", "App closing, shutting down");
+  logToFile("INFO", "main", "App closing, shutting down");
   await processManager.shutdown();
-  await closeLogger();
+  closeLogger();
 });
 
 app.on("window-all-closed", () => {

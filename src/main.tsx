@@ -22,16 +22,10 @@ if (typeof window !== "undefined") {
 
 import App from "./App";
 
-// Log to file via IPC
-async function logToFile(level: string, message: string, meta?: any): Promise<void> {
-  try {
-    // Use the main process logger if available
-    // For now, just log to console which is captured by electron logs
-    const entry = `[${new Date().toISOString()}] [${level}] [renderer] ${message}${meta ? ' ' + JSON.stringify(meta) : ''}`;
-    console.log(entry);
-  } catch (err) {
-    console.error("Failed to log:", err);
-  }
+// Log to console (captured by electron main process)
+function logRenderer(level: string, message: string, meta?: any): void {
+  const entry = `[${new Date().toISOString()}] [${level}] [renderer] ${message}${meta ? ' ' + JSON.stringify(meta) : ''}`;
+  console.log(entry);
 }
 
 // Set up global error handlers
@@ -46,27 +40,27 @@ window.addEventListener("unhandledrejection", (event) => {
 });
 
 // Log initialization start
-logToFile("INFO", "main.tsx loaded").catch(console.error);
+logRenderer("INFO", "main.tsx loaded");
 
 // Hide splash screen immediately when React mounts
 if (typeof window !== "undefined") {
   if ((window as any).hideSplashScreen) {
-    logToFile("DEBUG", "Calling hideSplashScreen").catch(console.error);
+    logRenderer("DEBUG", "Calling hideSplashScreen");
     try {
       (window as any).hideSplashScreen();
-      logToFile("INFO", "Splash screen hidden").catch(console.error);
+      logRenderer("INFO", "Splash screen hidden");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      logToFile("ERROR", "Failed to hide splash screen", { error: msg }).catch(console.error);
+      logRenderer("ERROR", "Failed to hide splash screen", { error: msg });
     }
   } else {
-    logToFile("WARN", "hideSplashScreen not found on window").catch(console.error);
+    logRenderer("WARN", "hideSplashScreen not found on window");
   }
 }
 
 const root = document.getElementById("root");
 if (root) {
-  logToFile("DEBUG", "Creating React root").catch(console.error);
+  logRenderer("DEBUG", "Creating React root");
   createRoot(root).render(
     <React.StrictMode>
       <ThemeProvider theme={theme}>
@@ -75,7 +69,7 @@ if (root) {
       </ThemeProvider>
     </React.StrictMode>
   );
-  logToFile("INFO", "React app rendered").catch(console.error);
+  logRenderer("INFO", "React app rendered");
 } else {
-  logToFile("ERROR", "Root element not found").catch(console.error);
+  logRenderer("ERROR", "Root element not found");
 }
