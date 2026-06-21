@@ -277,6 +277,7 @@ export default function App() {
   const [analysisLogError, setAnalysisLogError] = useState<string>("");
   const [activeLogTab, setActiveLogTab] = useState<number>(0);
   const logContainerRefs = useRef<{ stockfish: HTMLDivElement | null; ollama: HTMLDivElement | null }>({ stockfish: null, ollama: null });
+  const isInitialLoadRef = useRef<boolean>(true);
   const [appLoading, setAppLoading] = useState<boolean>(true);
   const [engineWarming, setEngineWarming] = useState<boolean>(false);
   const [engineAnalyzing, setEngineAnalyzing] = useState<boolean>(false);
@@ -532,25 +533,46 @@ export default function App() {
     setQuestionResponse("");
   }, [viewMode]);
 
-  // Auto-switch between settings and analysis based on whether engine is configured
+  // Auto-switch on initial load based on whether settings file exists
   useEffect(() => {
-    if (!settingsLoaded) return;
+    if (!settingsLoaded || !isInitialLoadRef.current) return;
 
-    // If engine is configured, show analysis mode
-    if (engineStatus?.configured && viewMode === "settings") {
-      setViewMode("analysis");
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(SETTINGS_FLAG, "true");
+    // Only auto-switch once on initial load
+    isInitialLoadRef.current = false;
+
+    // Check if settings file exists on disk
+    if (!electronAPI?.checkSettingsExist) {
+      // If API not available, use engine status as fallback
+      if (engineStatus?.configured) {
+        setViewMode("analysis");
+        window.localStorage?.setItem(SETTINGS_FLAG, "true");
       }
+      return;
     }
-    // If engine is NOT configured, show settings mode to let user set it up
-    else if (!engineStatus?.configured && viewMode === "analysis") {
-      setViewMode("settings");
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem(SETTINGS_FLAG);
+
+    electronAPI.checkSettingsExist().then(({ exists }) => {
+      // If settings file exists, go straight to analysis mode
+      if (exists) {
+        setViewMode("analysis");
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(SETTINGS_FLAG, "true");
+        }
       }
-    }
-  }, [settingsLoaded, engineStatus?.configured, viewMode]);
+      // If settings file doesn't exist, show settings mode
+      else {
+        setViewMode("settings");
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem(SETTINGS_FLAG);
+        }
+      }
+    }).catch(() => {
+      // If check fails, use engine status as fallback
+      if (engineStatus?.configured) {
+        setViewMode("analysis");
+        window.localStorage?.setItem(SETTINGS_FLAG, "true");
+      }
+    });
+  }, [settingsLoaded]);
 
   // Listen for engine warmup start/finish events pushed from the main process
   useEffect(() => {

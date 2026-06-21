@@ -106,6 +106,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("app:open-external", url) as Promise<IpcResponses["openExternalUrl"]>,
   getSystemStatus: () =>
     ipcRenderer.invoke("app:system-check") as Promise<IpcResponses["getSystemStatus"]>,
+  checkSettingsExist: () =>
+    ipcRenderer.invoke("app:check-settings-exist") as Promise<{ exists: boolean }>,
 
   // Database
   dbStatus: () =>

@@ -181,14 +181,14 @@ export default function SettingsPanel({
         subscribeToProgress();
       }
     }).catch(() => {});
-    // Load display name — resolved value (OS username fallback) becomes placeholder
+    // Load display name from settings
     electronAPI?.getDisplayName?.().then((name: string) => {
+      // Set both the placeholder (default) and the current value
+      // The getDisplayName returns either saved value or OS username
       setDisplayNamePlaceholder(name);
-      // Only pre-fill if the user previously set a custom name (not the OS default)
-      const savedName = (formState as any).displayName || "";
-      setDisplayName(savedName);
+      setDisplayName(name);
     }).catch(() => {});
-  }, [formState]);
+  }, []);
 
   useEffect(() => {
     if (!electronAPI?.onDbRefreshStatus) return;

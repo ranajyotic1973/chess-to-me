@@ -1662,6 +1662,13 @@ ipcMain.handle("app:system-check", async () => {
   return result;
 });
 
+ipcMain.handle("app:check-settings-exist", async () => {
+  const settingsPath = path.join(app.getPath("userData"), "chess-to-me", "settings.json");
+  const exists = fs.existsSync(settingsPath);
+  logToFile("DEBUG", "main", "Checking if settings file exists", { path: settingsPath, exists });
+  return { exists };
+});
+
 ipcMain.handle("setEnginePath", async (_event, { engine, path: enginePath }) => {
   const engineName = (engine || "stockfish").toLowerCase();
   const ok = await verifyEnginePath(enginePath, engineName);
