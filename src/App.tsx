@@ -568,6 +568,25 @@ export default function App() {
     });
   }, [settingsLoaded]);
 
+  // Auto-run analysis on start position when entering analysis mode
+  useEffect(() => {
+    if (viewMode === "analysis" && settingsLoaded && !isAnalysisRunning && analysisLines.length === 0 && currentFen === "start") {
+      // Automatically run analysis on the start position to show lines immediately
+      setIsAnalysisRunning(true);
+      runAnalysis("start");
+    }
+  }, [viewMode, settingsLoaded, isAnalysisRunning, analysisLines.length, currentFen, runAnalysis]);
+
+  // Signal when app is fully loaded - splash screen will wait for this and minimum 5 seconds
+  useEffect(() => {
+    if (settingsLoaded && viewMode === "analysis" && analysisLines.length > 0) {
+      // App is ready - signal to main.tsx to allow splash screen to hide
+      if (typeof window !== "undefined" && (window as any).appReady) {
+        (window as any).appReady();
+      }
+    }
+  }, [settingsLoaded, viewMode, analysisLines.length]);
+
   // Listen for engine warmup start/finish events pushed from the main process
   useEffect(() => {
     if (!electronAPI?.onEngineWarmingUp || !electronAPI?.onEngineReady) return;
@@ -1007,11 +1026,42 @@ export default function App() {
   }, []);
 
   const handleResetBoard = useCallback(() => {
+    // Full app reset - clear all state back to initial analysis mode
     setCurrentFen("start");
     setQuestionResponse("");
     setViewMode("analysis");
-    setStatusMessage("Board reset. Ready to analyze.");
-  }, [setStatusMessage]);
+
+    // Clear all puzzle state
+    setPuzzleSolution([]);
+    setPuzzleSolutionSan([]);
+    setPuzzleAttemptMoves([]);
+    setPuzzleStartFen("");
+    setPuzzleNavigationMode(false);
+    setPuzzleIncorrect(false);
+    setShowSolution(false);
+    setPuzzleMeta(null);
+    setCurrentMoveIndex(0);
+    setPuzzleExplainLoading(false);
+
+    // Clear analysis state
+    setAnalysisLines([]);
+    setExplorationStack([]);
+    setSelectedEngineLineIndex(null);
+    setSelectedEngineLineData(null);
+
+    // Clear game state
+    setGameMode(false);
+    setCurrentGameInfo(null);
+    setConversationHistory([]);
+    setCurrentResponseType("Analysis");
+    setCurrentResponseData({});
+
+    // Reset to analysis conversation mode
+    conversationModeRef.current = "analysis";
+    loadConversationHistory("analysis").catch(() => {});
+
+    setStatusMessage("App reset. Ready to analyze.");
+  }, [setStatusMessage, loadConversationHistory]);
 
   const applyPuzzleSolutionMove = useCallback((moveIndex: number) => {
     if (!puzzleStartFen) return;

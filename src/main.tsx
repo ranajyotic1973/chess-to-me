@@ -42,21 +42,46 @@ window.addEventListener("unhandledrejection", (event) => {
 // Log initialization start
 logRenderer("INFO", "main.tsx loaded");
 
-// Hide splash screen immediately when React mounts
+// Track when app signals it's ready and ensure minimum 5 second splash screen display
+let appReadySignal = false;
+const startTime = Date.now();
+const minimumSplashMs = 5000;
+
 if (typeof window !== "undefined") {
-  if ((window as any).hideSplashScreen) {
-    logRenderer("DEBUG", "Calling hideSplashScreen");
-    try {
-      (window as any).hideSplashScreen();
-      logRenderer("INFO", "Splash screen hidden");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      logRenderer("ERROR", "Failed to hide splash screen", { error: msg });
+  // App will call this when it's fully loaded
+  (window as any).appReady = () => {
+    logRenderer("INFO", "App signaled ready");
+    appReadySignal = true;
+    hideSplashWhenReady();
+  };
+}
+
+function hideSplashWhenReady() {
+  const elapsedMs = Date.now() - startTime;
+  if (elapsedMs < minimumSplashMs || !appReadySignal) {
+    // Not ready yet, check again soon
+    setTimeout(hideSplashWhenReady, 100);
+    return;
+  }
+
+  if (typeof window !== "undefined") {
+    if ((window as any).hideSplashScreen) {
+      logRenderer("DEBUG", "Calling hideSplashScreen after minimum delay");
+      try {
+        (window as any).hideSplashScreen();
+        logRenderer("INFO", "Splash screen hidden");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logRenderer("ERROR", "Failed to hide splash screen", { error: msg });
+      }
+    } else {
+      logRenderer("WARN", "hideSplashScreen not found on window");
     }
-  } else {
-    logRenderer("WARN", "hideSplashScreen not found on window");
   }
 }
+
+// Start the hide-splash timer (will wait for both app ready signal and minimum 5 seconds)
+setTimeout(hideSplashWhenReady, 100);
 
 const root = document.getElementById("root");
 if (root) {
