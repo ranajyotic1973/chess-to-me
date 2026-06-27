@@ -14,7 +14,7 @@ import { handleMiddlegameRequest } from "./middlegameAgent";
 import { handleEndgameRequest } from "./endgameAgent";
 import { readOtbTracking, writeOtbTracking, scanOtbFiles, computeOverallPercent } from "./otbImport";
 import { settings } from "./settings";
-import { initPuzzleDb, importPuzzlesFromCsv, searchPuzzles, getPuzzleDbStats, hasPuzzles, normalizeThemeKeyword } from "./puzzleDb";
+import { initPuzzleDb, importPuzzlesFromCsv, searchPuzzles, getPuzzleDbStats, hasPuzzles, normalizeThemeKeyword, extractAndStoreThemes } from "./puzzleDb";
 import { initGamesDb, importPgnFile, searchGames, getGamesDbStats, rebuildFts, setGamesSource } from "./gamesDb";
 import { downloadPuzzleCsv, checkPuzzleUpdate, extract7z, findPgnFiles } from "./downloader";
 import {
@@ -3674,6 +3674,8 @@ ipcMain.handle("db:download-puzzles", async (event) => {
     puzzleDb = initPuzzleDb(puzzleDbPath);
     const count = importPuzzlesFromCsv(puzzleDb, csvText, (pct) => send("importing", pct, `Importing… ${pct}%`));
     console.log(`[DB] Puzzle import complete: ${count} rows`);
+    // Extract and cache available themes for LLM reference
+    extractAndStoreThemes(puzzleDb, path.join(app.getPath("userData"), "puzzle-cache"));
     return { ok: true, count };
   } catch (err) {
     console.error("[DB] Puzzle download/import failed:", err);

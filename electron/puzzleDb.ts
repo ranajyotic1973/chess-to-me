@@ -228,3 +228,38 @@ export function getPuzzleDbStats(dbPath: string): { count: number; sizeBytes: nu
     return null;
   }
 }
+
+export function extractAndStoreThemes(db: Database.Database, cacheDir: string): void {
+  try {
+    // Query all unique themes from the database
+    const rows = db.prepare("SELECT DISTINCT themes FROM puzzles WHERE themes IS NOT NULL").all() as Array<{ themes: string }>;
+    const themeSet = new Set<string>();
+
+    for (const row of rows) {
+      if (row.themes) {
+        // Themes are space-separated in Lichess format
+        const themes = row.themes.split(" ");
+        themes.forEach(t => { if (t.trim()) themeSet.add(t.trim()); });
+      }
+    }
+
+    const uniqueThemes = Array.from(themeSet).sort();
+
+    // Create cache directory if it doesn't exist
+    if (!fs.existsSync(cacheDir)) {
+      fs.mkdirSync(cacheDir, { recursive: true });
+    }
+
+    // Store themes as JSON for LLM reference
+    const themesPath = path.join(cacheDir, "puzzle-themes.json");
+    fs.writeFileSync(themesPath, JSON.stringify({
+      timestamp: new Date().toISOString(),
+      count: uniqueThemes.length,
+      themes: uniqueThemes
+    }, null, 2), "utf-8");
+
+    console.log(`[DB] Extracted and cached ${uniqueThemes.length} unique themes to ${themesPath}`);
+  } catch (err) {
+    console.warn("[DB] Failed to extract themes:", (err as Error).message);
+  }
+}
