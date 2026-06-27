@@ -2196,7 +2196,10 @@ Make it detailed and exciting!`;
           new Chess(parsedResponse.fen); // validate
           setCurrentFen(parsedResponse.fen);
           setPuzzleStartFen(parsedResponse.fen);
-          const sol = Array.isArray(parsedResponse.solution) ? parsedResponse.solution : [];
+          // Normalize solution moves: trim whitespace and ensure valid UCI format (4+ chars)
+          const sol = (Array.isArray(parsedResponse.solution) ? parsedResponse.solution : [])
+            .map((m: string) => (typeof m === 'string' ? m.trim() : ''))
+            .filter((m: string) => m.length >= 4); // UCI moves must be at least 4 chars
           setPuzzleSolution(sol);
           setPuzzleSolutionSan(Array.isArray(parsedResponse.solution_san) ? parsedResponse.solution_san : []);
           setPuzzleAttemptMoves([]);
