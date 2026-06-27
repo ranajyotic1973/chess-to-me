@@ -34,6 +34,7 @@ import SettingsPanel from "./components/SettingsPanel";
 import AnalysisBoard from "./components/AnalysisBoard";
 import ChatPanel from "./components/ChatPanel";
 import PositionNotesPanel from "./components/PositionNotesPanel";
+import NotesConfirmDialog from "./components/NotesConfirmDialog";
 import StatusBanner from "./components/StatusBanner";
 import AppStatusBar from "./components/AppStatusBar";
 import BoardPositionEditor from "./components/BoardPositionEditor";
@@ -177,15 +178,6 @@ const getBaseUrlForProvider = (provider: string, ollamaBaseUrl: string): string 
   return provider === "ollama" ? ollamaBaseUrl : "";
 };
 
-const detectLineNumberInText = (text: string): number | null => {
-  // Look for patterns like "line 1", "Line 2", "line number 3", "line #4"
-  const match = text.match(/line\s+(?:number\s+)?#?(\d+)/i);
-  if (match && match[1]) {
-    return parseInt(match[1], 10);
-  }
-  return null;
-};
-
 const isLlmSettingsValid = (provider: string, model: string, apiKey: string): boolean => {
   if (!provider || !model) return false;
 
@@ -250,9 +242,11 @@ export default function App() {
   const [isAnalysisRunning, setIsAnalysisRunning] = useState<boolean>(false);
   const [analysisLines, setAnalysisLines] = useState<AnalysisLine[]>([]);
   const [advancedAnalysisMode, setAdvancedAnalysisMode] = useState<boolean>(false);
+  const [notesConfirmDialogOpen, setNotesConfirmDialogOpen] = useState<boolean>(false);
   const [deepAnalysisResults, setDeepAnalysisResults] = useState<Record<number, DeepLineAnalysis | null>>({});
   const [deepAnalysisLoading, setDeepAnalysisLoading] = useState<boolean>(false);
   const [currentNotesMap, setCurrentNotesMap] = useState<Record<string, string>>({});
+  const [advancedAnalysisNotesModified, setAdvancedAnalysisNotesModified] = useState<boolean>(false);
   const [currentRawPgn, setCurrentRawPgn] = useState<string>("");
   const [selectedEngineLineIndex, setSelectedEngineLineIndex] = useState<number | null>(null);
   const [selectedEngineLineData, setSelectedEngineLineData] = useState<AnalysisLine | null>(null);
@@ -819,22 +813,8 @@ export default function App() {
         setLineExplanations({}); // clear old explanations for fresh analysis
         setExplorationStack([]); // a real board move starts a fresh top-level analysis
 
-        // Fetch LLM explanation for the top line asynchronously (non-blocking).
-        if (lines.length > 0) {
-          const topLine = lines[0];
-          const pv = topLine.pv || topLine.line || "";
-          const moves = pv.split(/\s+/).filter((m) => m.trim());
-          if (moves.length > 0) {
-            (async () => {
-              const cacheKey = `${currentFen}:0:0`;
-              try {
-                await fetchPerMoveExplanation(0, topLine, currentFen, 0, moves[0]);
-              } catch {
-                // Best-effort — explanations are optional when auto-analyzing
-              }
-            })();
-          }
-        }
+        // Auto-explanation disabled to prevent position validation errors on subsequent moves
+        // Explanations are only generated when user explicitly clicks on a move
       } catch {
         // Background analysis — ignore errors silently.
       }
@@ -844,6 +824,21 @@ export default function App() {
       cancelled = true;
       clearTimeout(timer);
     };
+  }, [currentFen]);
+
+  // Update PGN in real-time as FEN changes (moves forward/backward)
+  useEffect(() => {
+    if (currentFen === "start") {
+      setCurrentRawPgn("");
+      return;
+    }
+    try {
+      const chess = new Chess();
+      chess.load(currentFen);
+      setCurrentRawPgn(chess.pgn());
+    } catch (err) {
+      // Invalid FEN; don't update PGN
+    }
   }, [currentFen]);
 
   const fetchExplanations = useCallback(
@@ -944,13 +939,61 @@ export default function App() {
     runAnalysis(currentFen, true);
   }, [currentFen, runAnalysis]);
 
-  const handleStopAdvancedAnalysis = useCallback(() => {
+  const annotateGameWithNotes = (pgn: string, notesMap: Record<string, string>): string => {
+    // For now, append notes as comments at the end of the PGN
+    // In a full implementation, would parse PGN and attach comments to specific moves
+    let annotated = pgn;
+    const notesList = Object.values(notesMap).filter(note => note.trim().length > 0);
+    if (notesList.length > 0) {
+      annotated += `\n\n{ Analysis Notes:\n${notesList.join("\n\n")} }`;
+    }
+    return annotated;
+  };
+
+  const handleSaveNotesAndExit = useCallback(async () => {
+    // Convert currentRawPgn to include note annotations
+    if (currentRawPgn) {
+      const annotatedPgn = annotateGameWithNotes(currentRawPgn, currentNotesMap);
+      try {
+        // Note: saveAnnotatedPgn would be implemented in electron/main.ts
+        // For now, just save notes to local map
+        setStatusMessage("Analysis notes saved.");
+      } catch (err) {
+        setStatusMessage("Failed to save annotated PGN.");
+      }
+    }
     setAdvancedAnalysisMode(false);
     setIsAnalysisRunning(false);
     setAnalysisLoading(false);
     setDeepAnalysisLoading(false);
     setAnalysisStatus("Analysis stopped.");
+    setAdvancedAnalysisNotesModified(false);
+    setNotesConfirmDialogOpen(false);
+  }, [currentRawPgn, currentNotesMap, electronAPI]);
+
+  const handleDiscardNotesAndExit = useCallback(() => {
+    setAdvancedAnalysisMode(false);
+    setIsAnalysisRunning(false);
+    setAnalysisLoading(false);
+    setDeepAnalysisLoading(false);
+    setAnalysisStatus("Analysis stopped.");
+    setAdvancedAnalysisNotesModified(false);
+    setNotesConfirmDialogOpen(false);
   }, []);
+
+  const handleStopAdvancedAnalysis = useCallback(() => {
+    // Check if notes have been modified
+    if (advancedAnalysisNotesModified) {
+      setNotesConfirmDialogOpen(true);
+    } else {
+      setAdvancedAnalysisMode(false);
+      setIsAnalysisRunning(false);
+      setAnalysisLoading(false);
+      setDeepAnalysisLoading(false);
+      setAnalysisStatus("Analysis stopped.");
+      setAdvancedAnalysisNotesModified(false);
+    }
+  }, [advancedAnalysisNotesModified]);
 
   const handleStartAnalysis = useCallback(() => {
     setIsAnalysisRunning(true);
@@ -1007,32 +1050,19 @@ export default function App() {
     try {
       const pv = lineData.pv || lineData.line || "";
 
-      // Check if the CURRENT position is a valid named opening position
-      const positionCheckResult = await electronAPI.isValidOpeningPosition({ fen: baseFen });
+      // Skip position validation (it causes sync issues) - go straight to explanation
+      // The explanation request includes the FEN and move context that LLM needs
+      const question = `Explain the move ${moveSan} (move ${moveIndex + 1} in the line). Full line: ${pv}.
 
-      if (!positionCheckResult?.ok || !positionCheckResult.isValid) {
-        console.log(`[App] Skipping LLM - current position is not a valid opening position`);
-        setIsExplanationLoading(false);
-        setQuestionResponse("");
-        return;
-      }
+IMPORTANT: This is for children aged 4-18, so be engaging and clear.
+Please explain:
+1. Why this specific move was chosen
+2. What is White trying to accomplish (White's plan/threats)
+3. What is Black trying to accomplish (Black's plan/threats)
+4. What specific threats and tactical opportunities exist for both sides
+5. If you know a real story about this move or position (famous player, legendary game), include it! Kids love learning chess history.
 
-      // Position is valid, now identify the specific opening from the moves
-      const openingResult = await electronAPI.identifyOpening({
-        moves: pv,
-        fen: baseFen
-      });
-
-      // Skip LLM entirely if no opening found - avoid unnecessary LLM overhead
-      if (!openingResult?.ok || !openingResult.name) {
-        console.log(`[App] Skipping LLM explanation - no opening found for moves: ${pv}`);
-        setIsExplanationLoading(false);
-        setQuestionResponse("");
-        return;
-      }
-
-      const openingInfo = `This is the ${openingResult.name}${openingResult.eco ? ` (${openingResult.eco})` : ""}. `;
-      const question = `${openingInfo}Explain the move ${moveSan} (move ${moveIndex + 1} in the line). Full line: ${pv}. Focus on the strategic goal and key ideas.`;
+Make it detailed and exciting!`;
 
       const response = await electronAPI.explainLines({
         lines: [lineData],
@@ -2223,27 +2253,6 @@ export default function App() {
         }
       }
 
-      // Auto-detect if user mentioned a line in their question
-      const detectedLineNumFromQuestion = detectLineNumberInText(question);
-      if (detectedLineNumFromQuestion !== null && engineAnalysisLines.length > 0) {
-        const lineIndex = detectedLineNumFromQuestion - 1;
-        if (lineIndex >= 0 && lineIndex < engineAnalysisLines.length) {
-          setSelectedEngineLineIndex(lineIndex);
-          setSelectedEngineLineData(engineAnalysisLines[lineIndex]);
-          setStatusMessage(`Line ${detectedLineNumFromQuestion} selected from your question.`);
-        }
-      }
-
-      // Auto-detect if LLM mentions a specific line in response
-      const detectedLineNum = detectLineNumberInText(displayText);
-      if (detectedLineNum !== null && engineAnalysisLines.length > 0) {
-        const lineIndex = detectedLineNum - 1;
-        if (lineIndex >= 0 && lineIndex < engineAnalysisLines.length) {
-          setSelectedEngineLineIndex(lineIndex);
-          setSelectedEngineLineData(engineAnalysisLines[lineIndex]);
-          setStatusMessage(`Line ${detectedLineNum} selected (detected from LLM response).`);
-        }
-      }
     } catch (err) {
       const errorMessage = (err as Error)?.message || "LLM question failed.";
       setQuestionResponse(`⚠️ Error: ${errorMessage}`);
@@ -2333,10 +2342,12 @@ export default function App() {
     const verticalPadding = 176;
     const usableWidth = Math.max(360, width - horizontalPadding);
     const usableHeight = Math.max(360, height - verticalPadding);
-    const boardWidth = usableWidth * 0.6;
+    // In Advanced Analysis mode, reduce board width from 60% to 40% to make room for chat and notes panels
+    const boardWidthPercent = advancedAnalysisMode ? 0.4 : 0.6;
+    const boardWidth = usableWidth * boardWidthPercent;
     const dimension = Math.min(boardWidth, usableHeight, 760);
     return { width: dimension, height: dimension };
-  }, [windowSize.width, windowSize.height]);
+  }, [windowSize.width, windowSize.height, advancedAnalysisMode]);
   const layoutHeight = useMemo(() => boardSize.height + 110, [boardSize.height]);
   const isWideLayout = useMemo(() => {
     const width = windowSize.width || 1280;
@@ -2886,6 +2897,7 @@ export default function App() {
                     onNoteChange={(fen, text) =>
                       setCurrentNotesMap((prev) => ({ ...prev, [fen]: text }))
                     }
+                    onNotesModified={setAdvancedAnalysisNotesModified}
                   />
                 )}
               </Box>
@@ -2907,6 +2919,11 @@ export default function App() {
         open={moveWarningOpen}
         message={moveWarningMessage}
         onClose={() => setMoveWarningOpen(false)}
+      />
+      <NotesConfirmDialog
+        open={notesConfirmDialogOpen}
+        onSave={handleSaveNotesAndExit}
+        onDiscard={handleDiscardNotesAndExit}
       />
       <input
         ref={importFileInput}

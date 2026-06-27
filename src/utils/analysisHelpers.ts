@@ -55,6 +55,11 @@ const formatSanLine = (glyphedMoves: string[], startTurn: "w" | "b", startMoveNu
   return parts.join(" ");
 };
 
+const formatUciLine = (uciMoves: string[]): string => {
+  if (!uciMoves.length) return "No moves";
+  return uciMoves.join(" ");
+};
+
 const cleanNoise = (text: string | null | undefined): string => {
   if (!text) {
     return "";
@@ -153,6 +158,7 @@ export const parseStockfishLine = (
 
   const moves: Move[] = [];
   const glyphedMoves: string[] = [];
+  const processedUciMoves: string[] = [];
 
   for (const uci of uciMoves) {
     const from = uci.slice(0, 2);
@@ -164,6 +170,7 @@ export const parseStockfishLine = (
       if (!result) break;
       moves.push({ from, to });
       glyphedMoves.push(sanWithGlyph(result.san, isBlack));
+      processedUciMoves.push(uci);
     } catch {
       break;
     }
@@ -192,6 +199,7 @@ export const parseStockfishLine = (
     moves,
     scoreLabel,
     description: formatSanLine(glyphedMoves, startTurn, startMoveNum),
+    uciDescription: formatUciLine(processedUciMoves),
     llmUserMessage
   };
 };

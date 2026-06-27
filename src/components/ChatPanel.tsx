@@ -214,9 +214,9 @@ export default function ChatPanel({
                   variant="outlined"
                 />
               </Stack>
-              {selectedEngineLineIndex !== null && analysisEntries[selectedEngineLineIndex]?.description && (
+              {selectedEngineLineIndex !== null && (
                 <Typography variant="body2" sx={{ fontFamily: "monospace", fontWeight: 600, mb: 0.5 }}>
-                  {analysisEntries[selectedEngineLineIndex].description}
+                  {analysisEntries[selectedEngineLineIndex]?.description}
                 </Typography>
               )}
 

@@ -6,12 +6,14 @@ interface PositionNotesPanelProps {
   currentFen: string;
   electronAPI: ElectronAPI | null;
   onNoteChange: (fen: string, text: string) => void;
+  onNotesModified?: (modified: boolean) => void;
 }
 
 const DEBOUNCE_MS = 500;
 
-export default function PositionNotesPanel({ currentFen, electronAPI, onNoteChange }: PositionNotesPanelProps) {
+export default function PositionNotesPanel({ currentFen, electronAPI, onNoteChange, onNotesModified }: PositionNotesPanelProps) {
   const [text, setText] = useState<string>("");
+  const [savedText, setSavedText] = useState<string>("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activefen = useRef<string>(currentFen);
 
@@ -19,19 +21,27 @@ export default function PositionNotesPanel({ currentFen, electronAPI, onNoteChan
   useEffect(() => {
     activefen.current = currentFen;
     setText("");
+    setSavedText("");
     if (!electronAPI?.notesGet || !currentFen) return;
     electronAPI.notesGet(currentFen).then((saved) => {
       if (activefen.current === currentFen) {
-        setText(saved ?? "");
+        const loadedText = saved ?? "";
+        setText(loadedText);
+        setSavedText(loadedText);
+        onNotesModified?.(false);
       }
     }).catch(() => {});
-  }, [currentFen, electronAPI]);
+  }, [currentFen, electronAPI, onNotesModified]);
 
   function handleChange(value: string) {
     setText(value);
+    const isModified = value !== savedText;
+    onNotesModified?.(isModified);
+
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       onNoteChange(currentFen, value);
+      setSavedText(value);
       electronAPI?.notesSet(currentFen, value).catch(() => {});
     }, DEBOUNCE_MS);
   }

@@ -39,6 +39,7 @@ Rules:
 - Each "commentary" must be 2–4 encouraging sentences for a child. Introduce technical terms with brief definitions.
 - The "story" should reference real players, years, and tournaments. If unsure, say so rather than inventing details.
 - All language must be child-appropriate — no adult themes, no discouraging words.
+- Do NOT include ECO codes in your response. Leave the eco_code field empty or omit it.
 - Do not include any text outside the JSON object.`;
 
 function parseOpeningResponse(raw: string): {

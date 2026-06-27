@@ -57,8 +57,11 @@ export interface AnalysisEntry {
   moves: Move[];
   scoreLabel: string | null;
   description: string;
+  uciDescription: string;
   llmUserMessage: string;
 }
+
+export type NotationFormat = "san" | "uci";
 
 // ============================================================================
 // Settings & Configuration
@@ -563,6 +566,8 @@ export interface ChatPanelProps {
   onGameSelect?: (index: number) => void;
   onBackToGameList?: () => void;
   trainingMoveLabel?: string;
+  notationFormat?: "san" | "uci";
+  onNotationFormatChange?: (format: "san" | "uci") => void;
   sx?: any;
 }
 
