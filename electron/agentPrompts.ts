@@ -245,6 +245,33 @@ Return a JSON object with these optional fields:
 {"theme":"<fork|pin|skewer|discoveredAttack|mateIn1|mateIn2|mateIn3|mateIn4|mateIn5|backRankMate|smotheredMate|sacrifice|attraction|deflection|clearance|interference|zugzwang|endgame|middlegame|opening|mate|advantage|crushing|veryLong|short|long>","minRating":<int>,"maxRating":<int>,"opening":"<name fragment>"}
 Single rating → minRating=rating-200, maxRating=rating+200. No constraints → {}.`;
 
+export const puzzleDatabaseSearchPrompt = (availableThemes: string[]) =>
+  `You are searching a local database of chess puzzles for children aged 4–18.
+
+AVAILABLE PUZZLE THEMES (use these exactly as shown):
+${availableThemes.map(t => `• ${t}`).join("\n")}
+
+TASK: The user is asking for a specific type of puzzle. Your job is to:
+1. Map their request to the best matching theme from the list above
+2. Return JSON with the theme to search for in the database
+3. DO NOT generate puzzles — only search the database
+4. If their request doesn't clearly map to a theme, suggest a random puzzle
+
+MAPPING EXAMPLES:
+• "Zugzwang puzzle" → theme: "zugzwang"
+• "Checkmate in 1" → theme: "mateIn1"
+• "Back rank mate" → theme: "backRankMate"
+• "A fork puzzle" → theme: "fork"
+• "Anything" → theme: "" (empty = random)
+
+RESPONSE FORMAT (JSON only, no extra text):
+{
+  "theme": "<exact theme name from list, or empty string for random>",
+  "difficulty": "<easy|medium|hard optional>",
+  "minRating": <optional rating minimum>,
+  "maxRating": <optional rating maximum>
+}`;
+
 export const PUZZLE_GENERATION_SYSTEM_PROMPT =
   `You are a chess puzzle generator for children aged 4–18. Generate exactly ONE legal chess puzzle.
 

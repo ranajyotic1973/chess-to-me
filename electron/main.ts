@@ -24,6 +24,7 @@ import {
   explainLinesSystemPrompt,
   PUZZLE_INTENT_SYSTEM_PROMPT,
   PUZZLE_GENERATION_SYSTEM_PROMPT,
+  puzzleDatabaseSearchPrompt,
   buildPuzzlePresentationPrompt,
   buildThemeDescription,
   buildIncorrectAnswerPrompt,
@@ -125,6 +126,18 @@ function getPuzzleDb(): Database.Database | null {
   } catch (err) {
     console.error("[DB] Failed to open puzzle DB:", err);
     return null;
+  }
+}
+
+function getAvailablePuzzleThemes(): string[] {
+  try {
+    const themesPath = path.join(app.getPath("userData"), "puzzle-cache", "puzzle-themes.json");
+    if (!fs.existsSync(themesPath)) return [];
+    const data = JSON.parse(fs.readFileSync(themesPath, "utf-8"));
+    return data.themes || [];
+  } catch (err) {
+    console.warn("[DB] Failed to load puzzle themes:", err);
+    return [];
   }
 }
 
@@ -2942,18 +2955,30 @@ async function handlePuzzleRequest(question: string, payload: any, llmProvider: 
   // ── DB-first puzzle lookup ──────────────────────────────────────────────────
   const db = getPuzzleDb();
   if (db) {
-    // Step 1: Extract search intent from user question
+    // Step 1: Load available themes and extract search intent from user question
     let searchParams: Record<string, any> = {};
     try {
+      const availableThemes = getAvailablePuzzleThemes();
+      const dbSearchPrompt = puzzleDatabaseSearchPrompt(availableThemes);
       const intentMessages = [
-        { role: "system", content: PUZZLE_INTENT_SYSTEM_PROMPT },
+        { role: "system", content: dbSearchPrompt },
         { role: "user", content: question }
       ];
       const intentResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages: intentMessages, includeTools: false });
       const intentJson = intentResponse.match(/\{[\s\S]*\}/)?.[0];
-      if (intentJson) searchParams = JSON.parse(intentJson);
+      if (intentJson) {
+        const parsed = JSON.parse(intentJson);
+        // Map theme and other params from database search response
+        if (parsed.theme) searchParams.theme = parsed.theme;
+        if (parsed.minRating) searchParams.minRating = parsed.minRating;
+        if (parsed.maxRating) searchParams.maxRating = parsed.maxRating;
+        if (parsed.difficulty) {
+          const difficultyMap = { easy: 1000, medium: 1500, hard: 2000 };
+          if (!searchParams.minRating) searchParams.minRating = difficultyMap[parsed.difficulty] || 1200;
+        }
+      }
     } catch {
-      console.warn("[DB] Intent extraction failed, using empty params");
+      console.warn("[DB] Intent extraction failed, using empty params for random puzzle");
     }
     // Apply settings rating range as defaults — user's explicit question overrides them
     if (searchParams.minRating === undefined) searchParams.minRating = puzzleRatingMin;
@@ -3028,19 +3053,79 @@ async function handlePuzzleRequest(question: string, payload: any, llmProvider: 
               console.log(`[DB] Puzzle ready — FEN: ${puzzleFen} | Moves: ${validUci.join(" ")}`);
               return { ok: true, answer: response };
             }
-            console.warn("[DB] Solution validation failed, falling back to LLM generation");
+            console.warn("[DB] Solution validation failed, trying random puzzle");
           }
         }
       } else {
-        console.log("[DB] No matching puzzle found in DB, falling back to LLM generation");
+        console.log("[DB] No puzzle found for specific theme, trying random puzzle");
+        // Try to get ANY puzzle from database as fallback
+        try {
+          const randomResults = searchPuzzles(db, { minRating: puzzleRatingMin, maxRating: puzzleRatingMax, limit: 1 });
+          if (randomResults.length > 0) {
+            console.log("[DB] Found random puzzle from database, returning that instead");
+            const randomPuzzle = randomResults[0];
+            // Reuse the puzzle processing logic above
+            const allMoves = randomPuzzle.moves.split(" ").filter(Boolean);
+            if (allMoves.length >= 2) {
+              const setupBoard = new Chess();
+              try { setupBoard.load(randomPuzzle.fen); } catch { }
+              const setupUci = allMoves[0];
+              const setupResult = setupBoard.move({
+                from: setupUci.slice(0, 2), to: setupUci.slice(2, 4),
+                promotion: setupUci[4] as "q" | "r" | "b" | "n" | undefined
+              });
+              if (setupResult) {
+                const puzzleFen = setupBoard.fen();
+                const solutionMoves = allMoves.slice(1);
+                const solutionBoard = new Chess();
+                solutionBoard.load(puzzleFen);
+                const validUci: string[] = [];
+                const validSan: string[] = [];
+                for (const uci of solutionMoves) {
+                  try {
+                    const r = solutionBoard.move({
+                      from: uci.slice(0, 2), to: uci.slice(2, 4),
+                      promotion: uci[4] as "q" | "r" | "b" | "n" | undefined
+                    });
+                    if (!r) break;
+                    validUci.push(r.from + r.to + (r.promotion ?? ""));
+                    validSan.push(r.san);
+                  } catch { break; }
+                }
+                if (validUci.length > 0) {
+                  const difficulty = randomPuzzle.rating < 1200 ? "easy" : randomPuzzle.rating < 1800 ? "medium" : "hard";
+                  const themeDesc = buildThemeDescription(randomPuzzle.themes || "");
+                  const response = JSON.stringify({
+                    response_type: "Puzzle",
+                    fen: puzzleFen,
+                    setup_move: setupUci,
+                    setup_move_san: setupResult.san,
+                    solution: validUci,
+                    solution_san: validSan,
+                    difficulty,
+                    explanation: `${themeDesc} (Random puzzle) Type your moves to solve!`,
+                    hidden_solution: true,
+                    side_to_move: setupBoard.turn() === "w" ? "White" : "Black",
+                    puzzle_id: randomPuzzle.puzzle_id,
+                    themes: randomPuzzle.themes || "",
+                    rating: randomPuzzle.rating
+                  });
+                  return { ok: true, answer: response };
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.warn("[DB] Random puzzle fallback failed:", (err as Error).message);
+        }
       }
     } catch (err) {
       console.warn("[DB] Puzzle DB query failed:", (err as Error).message);
     }
   }
 
-  // LLM generation fallback (when DB miss or DB absent)
-  console.log(`[LLM] PASS 2: PUZZLE - Generating chess puzzle via LLM`);
+  // Only use LLM generation if database is completely empty
+  console.warn(`[LLM] PASS 2: PUZZLE - Database empty, generating puzzle via LLM (Note: LLM-generated puzzles may have accuracy issues)`);
   const ratingContext = `Target puzzle difficulty: ELO rating ${puzzleRatingMin}–${puzzleRatingMax}. `;
   const messages: Array<{ role: string; content: string }> = [
     { role: "system", content: PUZZLE_GENERATION_SYSTEM_PROMPT },
