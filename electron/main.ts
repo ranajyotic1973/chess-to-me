@@ -3124,51 +3124,13 @@ async function handlePuzzleRequest(question: string, payload: any, llmProvider: 
     }
   }
 
-  // Only use LLM generation if database is completely empty
-  console.warn(`[LLM] PASS 2: PUZZLE - Database empty, generating puzzle via LLM (Note: LLM-generated puzzles may have accuracy issues)`);
-  const ratingContext = `Target puzzle difficulty: ELO rating ${puzzleRatingMin}–${puzzleRatingMax}. `;
-  const messages: Array<{ role: string; content: string }> = [
-    { role: "system", content: PUZZLE_GENERATION_SYSTEM_PROMPT },
-    { role: "user", content: ratingContext + question }
-  ];
-
-  const puzzleFormat = getStructuredOutputFormat(llmProvider, model, PUZZLE_RESPONSE_FORMAT);
-
-  try {
-    const firstResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: false, responseFormat: puzzleFormat });
-    const firstParsed = tryParseAndValidate(firstResponse);
-    if (firstParsed) return { ok: true, answer: firstParsed };
-
-    const mateRetryHint = expectedMateDepth !== null
-      ? ` This is a mate-in-${expectedMateDepth} puzzle — the solution MUST have exactly ${expectedMoveCount} moves and the final position MUST be checkmate. Replay every move in your head before responding.`
-      : ``;
-    console.warn(`[LLM] PASS 2: PUZZLE - First attempt invalid, retrying with stricter instruction`);
-    messages.push({ role: "assistant", content: firstResponse });
-    messages.push({
-      role: "user",
-      content: `Your previous puzzle was rejected because the solution was incorrect or the final position was not checkmate.${mateRetryHint} ` +
-        `Choose a SIMPLER, well-known pattern (back-rank mate, smothered mate, etc.) that you can verify with certainty. ` +
-        `Respond with ONLY the JSON object — no prose, no markdown fences. ` +
-        `Keys: "response_type"="Puzzle", "fen" (valid FEN), ` +
-        `"solution" (UCI array like ["d5e4","d7e7"]), ` +
-        `"difficulty", "explanation" (story + move walkthrough), "hidden_solution"=true.`
-    });
-
-    const retryResponse = await runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, includeTools: false, responseFormat: puzzleFormat });
-    const retryParsed = tryParseAndValidate(retryResponse);
-    if (retryParsed) {
-      console.log(`[LLM] PASS 2: PUZZLE ✓ Retry succeeded`);
-      return { ok: true, answer: retryParsed };
-    }
-
-    // Last resort: return raw retry text so the user at least sees the content
-    console.warn(`[LLM] PASS 2: PUZZLE - Both attempts failed to produce valid JSON`);
-    return { ok: true, answer: retryResponse };
-  } catch (err) {
-    const errorMsg = (err as Error)?.message || "Puzzle generation failed.";
-    console.error(`[LLM] PASS 2: PUZZLE failed: ${errorMsg}`);
-    return { ok: false, error: errorMsg };
-  }
+  // Database-only mode: do NOT fall back to LLM generation
+  // LLM-generated puzzles have accuracy issues (incorrect solutions)
+  console.error(`[PUZZLE] No database puzzle found and LLM fallback is disabled. Database must be installed.`);
+  return {
+    ok: false,
+    error: "No puzzles available. Please download the puzzle database from the app settings."
+  };
 }
 
 async function handlePositionRequest(question: string, payload: any, llmProvider: string, llmApiKey: string, model: string, baseUrl: string): Promise<{ ok: boolean; answer?: string; error?: string }> {
