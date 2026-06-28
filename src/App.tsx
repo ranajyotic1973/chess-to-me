@@ -403,11 +403,15 @@ export default function App() {
   }, []);
 
   const loadEngineStatus = useCallback(async (): Promise<void> => {
+    console.log("[App] loadEngineStatus called");
     if (!electronAPI?.getEngineStatus) {
+      console.warn("[App] electronAPI.getEngineStatus not available");
       return;
     }
     try {
+      console.log("[App] Fetching engine status...");
       const status = await electronAPI.getEngineStatus();
+      console.log("[App] Engine status loaded:", status);
       setEngineStatus(status);
       setLlmApiKeyLength(status.settings?.llmApiKeyLength || 0);
       setFormState((prev) => {
@@ -434,6 +438,7 @@ export default function App() {
       setSettingsLoaded(true);
     } catch (err) {
       setStatusMessage("Unable to read saved engine settings.");
+      setSettingsLoaded(true);
     }
   }, []);
 
@@ -491,9 +496,19 @@ export default function App() {
     const bootstrap = async () => {
       setAppLoading(true);
       try {
+        console.log("[App] Bootstrap starting");
         // Load engine status from settings (including saved engine paths)
-        await loadEngineStatus();
+        // Add a timeout so we don't wait indefinitely
+        const timeoutPromise = new Promise<void>((resolve) => {
+          setTimeout(() => {
+            console.warn("[App] Engine status load timed out");
+            resolve();
+          }, 15000); // 15 second timeout
+        });
+        await Promise.race([loadEngineStatus(), timeoutPromise]);
+        console.log("[App] Bootstrap engine status loaded");
       } catch (err) {
+        console.error("[App] Bootstrap error:", err);
         setStatusMessage("Unable to initialize the platform.");
       } finally {
         if (!cancelled) {
@@ -570,7 +585,9 @@ export default function App() {
 
   // Signal when app is fully loaded - splash screen will wait for this and minimum 5 seconds
   useEffect(() => {
+    console.log(`[App] Splash screen readiness check: settingsLoaded=${settingsLoaded}, viewMode=${viewMode}`);
     if (settingsLoaded && viewMode === "analysis") {
+      console.log("[App] App ready - calling appReady()");
       // App is ready - signal to main.tsx to allow splash screen to hide
       if (typeof window !== "undefined" && (window as any).appReady) {
         (window as any).appReady();

@@ -1693,11 +1693,15 @@ ipcMain.handle("setEnginePath", async (_event, { engine, path: enginePath }) => 
 });
 
 ipcMain.handle("getEngineStatus", async () => {
+  console.log("[getEngineStatus] Handler called");
   const selectedEngine = settings.get("selectedEngine") || "lc0";
   const stockfishPath = settings.get("stockfishPath") || "";
   const lc0Path = settings.get("lc0Path") || "";
+  console.log("[getEngineStatus] Verifying engine paths:", { stockfishPath, lc0Path });
   const stockfishValid = stockfishPath ? await verifyEnginePath(stockfishPath, "stockfish") : false;
+  console.log("[getEngineStatus] Stockfish valid:", stockfishValid);
   const lc0Valid = lc0Path ? await verifyEnginePath(lc0Path, "lc0") : false;
+  console.log("[getEngineStatus] LC0 valid:", lc0Valid);
   const llmApiKey = settings.get("llmApiKey") || "";
   const llmProvider = settings.get("llmProvider") || "ollama";
 
