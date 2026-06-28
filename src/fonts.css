@@ -1,0 +1,9 @@
+/* Great Vibes font - loaded early for splash screen */
+@font-face {
+  font-family: 'Great Vibes';
+  src: url('@fontsource/great-vibes/files/great-vibes-latin-400-normal.woff2') format('woff2'),
+       url('@fontsource/great-vibes/files/great-vibes-latin-400-normal.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}

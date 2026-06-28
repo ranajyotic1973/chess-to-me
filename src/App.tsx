@@ -2789,16 +2789,31 @@ Make it detailed and exciting!`;
                       </IconButton>
                     </Tooltip>
                     {!gameMode && (
-                      <Tooltip title={isAnalysisRunning ? "Stop Analysis" : "Advanced Analysis"} disableInteractive={false}>
-                        <IconButton
-                          size="small"
-                          onClick={isAnalysisRunning ? handleStopAdvancedAnalysis : handleStartAdvancedAnalysis}
-                          color={isAnalysisRunning ? "error" : "success"}
-                          aria-label={isAnalysisRunning ? "stop analysis" : "advanced analysis"}
-                        >
-                          {isAnalysisRunning ? <StopIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
-                        </IconButton>
-                      </Tooltip>
+                      <>
+                        {isAnalysisRunning && (
+                          <Tooltip title="Stop Analysis" disableInteractive={false}>
+                            <IconButton
+                              size="small"
+                              onClick={handleStopAnalysis}
+                              color="error"
+                              aria-label="stop analysis"
+                            >
+                              <StopIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        <Tooltip title="Advanced Analysis (Notes & Deep)" disableInteractive={false}>
+                          <IconButton
+                            size="small"
+                            onClick={handleStartAdvancedAnalysis}
+                            color="success"
+                            disabled={analysisLines.length === 0}
+                            aria-label="advanced analysis"
+                          >
+                            <PlayArrowIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </>
                     )}
                     {advancedAnalysisMode && (
                       <Tooltip title="Save this analysis" disableInteractive={false}>
