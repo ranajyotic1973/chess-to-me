@@ -498,14 +498,7 @@ export default function App() {
       try {
         console.log("[App] Bootstrap starting");
         // Load engine status from settings (including saved engine paths)
-        // Add a timeout so we don't wait indefinitely
-        const timeoutPromise = new Promise<void>((resolve) => {
-          setTimeout(() => {
-            console.warn("[App] Engine status load timed out");
-            resolve();
-          }, 15000); // 15 second timeout
-        });
-        await Promise.race([loadEngineStatus(), timeoutPromise]);
+        await loadEngineStatus();
         console.log("[App] Bootstrap engine status loaded");
       } catch (err) {
         console.error("[App] Bootstrap error:", err);
