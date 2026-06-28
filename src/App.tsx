@@ -100,17 +100,7 @@ interface GamePlayerInfo {
   black: string;
   whiteElo?: number;
   blackElo?: number;
-  whiteChesscomRating?: number;
-  blackChesscomRating?: number;
 }
-
-/**
- * Try to fetch a player's current rating from the chess.com public API.
- * The DB stores names as "LastName, FirstName"; we derive several username
- * candidates and try each until one returns data.
- * Returns the FIDE rating if linked, otherwise rapid, otherwise blitz.
- * Returns null on any failure (network error, player not found, etc.).
- */
 function PlayerBar({ name, elo, pieceColor }: { name: string; elo?: number; pieceColor: "white" | "black" }) {
   const pawn = pieceColor === "white" ? "♙" : "♟";
   const eloLabel = elo && elo > 0 ? ` (${elo})` : "";
@@ -126,34 +116,6 @@ function PlayerBar({ name, elo, pieceColor }: { name: string; elo?: number; piec
   );
 }
 
-async function fetchChesscomRating(playerName: string): Promise<number | null> {
-  const parts = playerName.split(",").map(p => p.trim());
-  const lastName = parts[0] ?? "";
-  const firstName = parts[1] ?? "";
-
-  const candidates: string[] = [];
-  if (firstName) candidates.push(firstName);                         // "Hikaru"
-  if (firstName && lastName) candidates.push(`${firstName}${lastName}`); // "MagnusCarlsen"
-  if (lastName) candidates.push(lastName);                           // "Nakamura"
-
-  for (const username of candidates) {
-    try {
-      const res = await fetch(
-        `https://api.chess.com/pub/player/${encodeURIComponent(username)}/stats`
-      );
-      if (!res.ok) continue;
-      const data = await res.json() as Record<string, any>;
-      if (typeof data.fide === "number" && data.fide > 0) return data.fide;
-      const rapid = data.chess_rapid?.last?.rating;
-      if (typeof rapid === "number" && rapid > 0) return rapid;
-      const blitz = data.chess_blitz?.last?.rating;
-      if (typeof blitz === "number" && blitz > 0) return blitz;
-    } catch {
-      // try next candidate
-    }
-  }
-  return null;
-}
 
 const normalizeModelName = (value: string | null | undefined): string => String(value || "").trim();
 
@@ -1411,24 +1373,6 @@ Make it detailed and exciting!`;
     };
   }, [selectedEngineLineIndex, puzzleNavigationMode, gameMode, handleKeyboardNavigation, currentResponseType, trainingMoves]);
 
-  // When a game loads, attempt to fetch the players' current ratings from
-  // chess.com to supplement (or replace) the historical ELO stored in the DB.
-  // Fires whenever the white/black names change (i.e. a different game is loaded).
-  const chesscomWhite = gameMode ? (currentGameInfo?.white ?? null) : null;
-  const chesscomBlack = gameMode ? (currentGameInfo?.black ?? null) : null;
-  useEffect(() => {
-    if (!chesscomWhite || !chesscomBlack) return;
-    let cancelled = false;
-    Promise.all([fetchChesscomRating(chesscomWhite), fetchChesscomRating(chesscomBlack)])
-      .then(([wRating, bRating]) => {
-        if (cancelled) return;
-        setCurrentGameInfo(prev =>
-          prev ? { ...prev, whiteChesscomRating: wRating ?? undefined, blackChesscomRating: bRating ?? undefined } : null
-        );
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [chesscomWhite, chesscomBlack]);
 
   const applyLineMove = useCallback((moveIndex: number) => {
     if (!selectedEngineLineData) {
@@ -2717,7 +2661,7 @@ Make it detailed and exciting!`;
                 {gameMode && currentGameInfo && (
                   <PlayerBar
                     name={currentGameInfo.black}
-                    elo={currentGameInfo.blackChesscomRating ?? currentGameInfo.blackElo}
+                    elo={currentGameInfo.blackElo}
                     pieceColor="black"
                   />
                 )}
@@ -2756,7 +2700,7 @@ Make it detailed and exciting!`;
                 {gameMode && currentGameInfo && (
                   <PlayerBar
                     name={currentGameInfo.white}
-                    elo={currentGameInfo.whiteChesscomRating ?? currentGameInfo.whiteElo}
+                    elo={currentGameInfo.whiteElo}
                     pieceColor="white"
                   />
                 )}
