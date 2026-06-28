@@ -10,10 +10,11 @@ Chess To Me is now configured as a fully offline desktop application. All assets
 
 ## Network Call Audit
 
-### ✅ Removed Network Calls
-- **Chess.com API** - Removed `fetchChesscomRating()` function that fetched player ratings from `https://api.chess.com/pub/player/...`
-  - Reason: Non-essential enhancement; historical ELO data already available locally
-  - Impact: None; UI uses database ratings instead
+### ✅ FIDE Ratings API (Optional Enhancement)
+- **FIDE Ratings** - Fetches current FIDE ratings from `https://api.chesstools.org/ratings/player/...`
+  - Usage: Only when user loads a game in game mode
+  - Status: Optional enhancement; falls back to historical ELO from database if unavailable
+  - Impact: Enriches player information with current FIDE ratings when available
 
 ### ⚠️ Optional Network Calls (User-Initiated)
 - **Lichess Puzzle Database** (in `electron/downloader.ts`)
@@ -139,11 +140,13 @@ All sensitive configurations stored locally:
 ✅ **Chess To Me is fully offline-capable.** 
 
 - Core functionality: 100% offline
-- Optional features: Puzzle download (user-initiated)
+- Optional features: 
+  - Puzzle download (user-initiated)
+  - FIDE ratings enrichment (when game is loaded, with ELO fallback)
 - User choice: LLM provider configuration (local Ollama supported)
 - All resources: Bundled in ASAR or stored locally
 
-The application requires **zero external network calls** for its primary use case.
+The application requires **zero external network calls** for core functionality. Optional enhancements (FIDE ratings, puzzle download) gracefully fall back to offline data if network is unavailable.
 
 ---
 **Last Updated:** 2026-06-28  
