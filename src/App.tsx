@@ -100,7 +100,36 @@ interface GamePlayerInfo {
   black: string;
   whiteElo?: number;
   blackElo?: number;
+  whiteFideRating?: number;
+  blackFideRating?: number;
 }
+
+async function fetchFideRating(playerName: string): Promise<number | null> {
+  const parts = playerName.split(",").map(p => p.trim());
+  const lastName = parts[0] ?? "";
+  const firstName = parts[1] ?? "";
+
+  const candidates: string[] = [];
+  if (firstName) candidates.push(firstName);
+  if (firstName && lastName) candidates.push(`${firstName}${lastName}`);
+  if (lastName) candidates.push(lastName);
+
+  for (const name of candidates) {
+    try {
+      const res = await fetch(
+        `https://api.chesstools.org/ratings/player/${encodeURIComponent(name)}`
+      );
+      if (!res.ok) continue;
+      const data = await res.json() as Record<string, any>;
+      const rating = data.rating || data.fide_rating || data.classical_rating;
+      if (typeof rating === "number" && rating > 0) return rating;
+    } catch {
+      // try next candidate
+    }
+  }
+  return null;
+}
+
 function PlayerBar({ name, elo, pieceColor }: { name: string; elo?: number; pieceColor: "white" | "black" }) {
   const pawn = pieceColor === "white" ? "♙" : "♟";
   const eloLabel = elo && elo > 0 ? ` (${elo})` : "";
@@ -1373,6 +1402,20 @@ Make it detailed and exciting!`;
     };
   }, [selectedEngineLineIndex, puzzleNavigationMode, gameMode, handleKeyboardNavigation, currentResponseType, trainingMoves]);
 
+  // Fetch FIDE ratings when a game loads
+  useEffect(() => {
+    if (!gameMode || !currentGameInfo) return;
+    let cancelled = false;
+    Promise.all([fetchFideRating(currentGameInfo.white), fetchFideRating(currentGameInfo.black)])
+      .then(([whiteRating, blackRating]) => {
+        if (cancelled) return;
+        setCurrentGameInfo(prev =>
+          prev ? { ...prev, whiteFideRating: whiteRating ?? undefined, blackFideRating: blackRating ?? undefined } : null
+        );
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [gameMode, currentGameInfo?.white, currentGameInfo?.black]);
 
   const applyLineMove = useCallback((moveIndex: number) => {
     if (!selectedEngineLineData) {
@@ -2661,7 +2704,7 @@ Make it detailed and exciting!`;
                 {gameMode && currentGameInfo && (
                   <PlayerBar
                     name={currentGameInfo.black}
-                    elo={currentGameInfo.blackElo}
+                    elo={currentGameInfo.blackFideRating ?? currentGameInfo.blackElo}
                     pieceColor="black"
                   />
                 )}
@@ -2700,7 +2743,7 @@ Make it detailed and exciting!`;
                 {gameMode && currentGameInfo && (
                   <PlayerBar
                     name={currentGameInfo.white}
-                    elo={currentGameInfo.whiteElo}
+                    elo={currentGameInfo.whiteFideRating ?? currentGameInfo.whiteElo}
                     pieceColor="white"
                   />
                 )}
