@@ -567,15 +567,6 @@ export default function App() {
     });
   }, [settingsLoaded]);
 
-  // Auto-run analysis on start position when entering analysis mode
-  useEffect(() => {
-    if (viewMode === "analysis" && settingsLoaded && !isAnalysisRunning && analysisLines.length === 0 && currentFen === "start") {
-      // Automatically run analysis on the start position to show lines immediately
-      setIsAnalysisRunning(true);
-      runAnalysis("start");
-    }
-  }, [viewMode, settingsLoaded, isAnalysisRunning, analysisLines.length, currentFen, runAnalysis]);
-
   // Signal when app is fully loaded - splash screen will wait for this and minimum 5 seconds
   useEffect(() => {
     console.log(`[App] Splash screen readiness check: settingsLoaded=${settingsLoaded}, viewMode=${viewMode}`);
@@ -958,6 +949,15 @@ export default function App() {
     setDeepAnalysisResults({});
     runAnalysis(currentFen, true);
   }, [currentFen, runAnalysis]);
+
+  // Auto-run analysis on start position when entering analysis mode
+  useEffect(() => {
+    if (viewMode === "analysis" && settingsLoaded && !isAnalysisRunning && analysisLines.length === 0 && currentFen === "start") {
+      // Automatically run analysis on the start position to show lines immediately
+      setIsAnalysisRunning(true);
+      runAnalysis("start");
+    }
+  }, [viewMode, settingsLoaded, isAnalysisRunning, analysisLines.length, currentFen, runAnalysis]);
 
   const annotateGameWithNotes = (pgn: string, notesMap: Record<string, string>): string => {
     // For now, append notes as comments at the end of the PGN
