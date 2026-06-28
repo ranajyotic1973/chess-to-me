@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "@fontsource-variable/manrope";
 import "@fontsource/sora/500.css";
 import "@fontsource/sora/700.css";
+import "@fontsource/great-vibes/400.css";
 import $ from "jquery";
 import "./styles.css";
 import { CssBaseline, ThemeProvider } from "@mui/material";

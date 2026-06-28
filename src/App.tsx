@@ -579,13 +579,13 @@ export default function App() {
 
   // Signal when app is fully loaded - splash screen will wait for this and minimum 5 seconds
   useEffect(() => {
-    if (settingsLoaded && viewMode === "analysis" && analysisLines.length > 0) {
+    if (settingsLoaded && viewMode === "analysis") {
       // App is ready - signal to main.tsx to allow splash screen to hide
       if (typeof window !== "undefined" && (window as any).appReady) {
         (window as any).appReady();
       }
     }
-  }, [settingsLoaded, viewMode, analysisLines.length]);
+  }, [settingsLoaded, viewMode]);
 
   // Listen for engine warmup start/finish events pushed from the main process
   useEffect(() => {

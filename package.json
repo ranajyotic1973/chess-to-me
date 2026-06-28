@@ -33,14 +33,15 @@
     "build:icons": "node scripts/build-icons.js"
   },
   "dependencies": {
-    "7zip-bin": "^5.2.0",
     "@chess-openings/eco.json": "^2.0.4",
     "@emotion/react": "^11.13.1",
     "@emotion/styled": "^11.13.0",
     "@fontsource-variable/manrope": "^5.2.8",
+    "@fontsource/great-vibes": "^5.2.8",
     "@fontsource/sora": "^5.2.8",
     "@mui/icons-material": "^6.5.0",
     "@mui/material": "^6.5.0",
+    "7zip-bin": "^5.2.0",
     "adm-zip": "^0.5.16",
     "better-sqlite3": "^11.10.0",
     "chess.js": "^1.4.0",
