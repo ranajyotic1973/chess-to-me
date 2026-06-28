@@ -4447,6 +4447,28 @@ async function checkGamesUpdatePrompt(win: BrowserWindow): Promise<void> {
   win.webContents.send("db:refresh-status");
 }
 
+// Window control handlers for custom title bar
+ipcMain.handle("minimizeWindow", () => {
+  const window = BrowserWindow.getFocusedWindow();
+  if (window) window.minimize();
+});
+
+ipcMain.handle("maximizeWindow", () => {
+  const window = BrowserWindow.getFocusedWindow();
+  if (window) {
+    if (window.isMaximized()) {
+      window.unmaximize();
+    } else {
+      window.maximize();
+    }
+  }
+});
+
+ipcMain.handle("closeWindow", () => {
+  const window = BrowserWindow.getFocusedWindow();
+  if (window) window.close();
+});
+
 app.whenReady().then(async () => {
   logToFile("INFO", "main", "App ready, starting initialization");
   cleanupOldLogs();

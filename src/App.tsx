@@ -40,6 +40,7 @@ import AppStatusBar from "./components/AppStatusBar";
 import BoardPositionEditor from "./components/BoardPositionEditor";
 import ProfileIcon from "./components/ProfileIcon";
 import EvalBar from "./components/EvalBar";
+import TitleBar from "./components/TitleBar";
 import {
   deriveFenSequence,
   parseFenOrPgnInput,
@@ -2416,14 +2417,24 @@ Make it detailed and exciting!`;
         display: "flex",
         flexDirection: "column",
         background: "linear-gradient(160deg, #e4e8f4 0%, #f3f3f1 45%, #f2ede4 100%)",
-        px: { xs: 2, md: 4 },
-        pt: { xs: 2, md: 3 },
         overflow: "hidden"
       }}
     >
-      <Box sx={{ position: "absolute", top: 12, right: 16, zIndex: (theme) => theme.zIndex.drawer + 3 }}>
-        <ProfileIcon refreshTrigger={profileRefreshTrigger} />
-      </Box>
+      <TitleBar />
+      <Box
+        sx={{
+          position: "relative",
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          px: { xs: 2, md: 4 },
+          pt: { xs: 2, md: 3 },
+          overflow: "hidden"
+        }}
+      >
+        <Box sx={{ position: "absolute", top: 12, right: 16, zIndex: (theme) => theme.zIndex.drawer + 3 }}>
+          <ProfileIcon refreshTrigger={profileRefreshTrigger} />
+        </Box>
 
       <Backdrop
         open={!appLoading && (engineWarming || engineAnalyzing)}
@@ -3094,6 +3105,7 @@ Make it detailed and exciting!`;
         isEngineRunning={isAnalysisRunning}
         llmProvider={formState.llmProvider}
       />
+      </Box>
     </Box>
   );
 }
