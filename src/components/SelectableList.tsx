@@ -106,7 +106,15 @@ export default function SelectableList({
         >
           <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 600,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap"
+                }}
+              >
                 {item.label}
               </Typography>
               {item.sublabel && (
