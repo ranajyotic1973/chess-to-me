@@ -1441,6 +1441,7 @@ async function createWindow(): Promise<void> {
       width: 1300,
       height: 840,
       resizable: false,
+      frame: false,
       icon: iconPath,
       title: `Chess To Me v${version}`,
       webPreferences: {
