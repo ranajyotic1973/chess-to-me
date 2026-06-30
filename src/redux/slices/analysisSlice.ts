@@ -1,5 +1,11 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import type { AnalysisLine, AnalysisEntry } from "../../types";
+import {
+  analyzePosition,
+  fetchExplanations,
+  fetchPerMoveExplanation,
+  deepAnalyzeLine,
+} from "../thunks/analysisThunks";
 
 interface DeepAnalysisResult {
   [key: string]: Record<string, string>;
@@ -29,6 +35,9 @@ const analysisSlice = createSlice({
   name: "analysis",
   initialState,
   reducers: {
+    setAnalysisLoading: (state, action: PayloadAction<boolean>) => {
+      state.deepAnalysisLoading = action.payload;
+    },
     setAnalysisLines: (state, action: PayloadAction<AnalysisLine[]>) => {
       state.analysisLines = action.payload;
     },
@@ -79,6 +88,33 @@ const analysisSlice = createSlice({
       state.deepAnalysisLoading = false;
       state.selectedAnalysisLineId = null;
     },
+  },
+  extraReducers: (builder) => {
+    // analyzePosition thunk
+    builder
+      .addCase(analyzePosition.fulfilled, (state, action) => {
+        state.analysisLines = action.payload.lines;
+        state.analysisEntries = action.payload.entries;
+      })
+      .addCase(analyzePosition.rejected, (state) => {
+        state.analysisLines = [];
+        state.analysisEntries = [];
+      });
+
+    // fetchPerMoveExplanation thunk
+    builder.addCase(fetchPerMoveExplanation.fulfilled, (state, action) => {
+      const { lineIndex, explanation } = action.payload;
+      if (state.analysisEntries[lineIndex]) {
+        state.analysisEntries[lineIndex].explanation = explanation;
+      }
+    });
+
+    // deepAnalyzeLine thunk
+    builder.addCase(deepAnalyzeLine.fulfilled, (state, action) => {
+      const { lineIndex, results } = action.payload;
+      state.deepAnalysisResults[lineIndex] = results;
+      state.deepAnalysisLoading = false;
+    });
   },
 });
 

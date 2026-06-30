@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import { analyzePosition } from "../thunks/analysisThunks";
 
 interface UIState {
   analysisLoading: boolean;
@@ -35,6 +36,22 @@ const uiSlice = createSlice({
     setViewMode: (state, action: PayloadAction<"analysis" | "puzzle">) => {
       state.viewMode = action.payload;
     },
+  },
+  extraReducers: (builder) => {
+    builder
+      .addCase(analyzePosition.pending, (state) => {
+        state.analysisLoading = true;
+        state.analysisStatus = "";
+      })
+      .addCase(analyzePosition.fulfilled, (state) => {
+        state.analysisLoading = false;
+        state.analysisStatus = "";
+      })
+      .addCase(analyzePosition.rejected, (state, action) => {
+        state.analysisLoading = false;
+        state.analysisStatus =
+          (action.payload as string) || "Analysis failed";
+      });
   },
 });
 

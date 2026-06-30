@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import { handleBoardMove } from "../thunks/boardThunks";
 
 interface BoardState {
   currentFen: string;
@@ -33,6 +34,14 @@ const boardSlice = createSlice({
       state.moveHistory = [];
       state.selectedSquare = null;
     },
+  },
+  extraReducers: (builder) => {
+    builder.addCase(handleBoardMove.fulfilled, (state, action) => {
+      state.currentFen = action.payload.fen;
+      if (action.payload.fen !== "start") {
+        state.moveHistory.push(action.payload.fen);
+      }
+    });
   },
 });
 
