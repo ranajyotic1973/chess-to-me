@@ -1165,8 +1165,6 @@ Make it detailed and exciting!`;
   }, [formState.explainLanguage, formState.ollamaModel, formState.ollamaBaseUrl, formState.llmProvider, formState.llmApiKey, formState.llmModel]);
 
   const handleSelectEngineLine = useCallback(async (lineIndex: number, line: AnalysisLine) => {
-    console.log(`[handleSelectEngineLine] Starting - lineIndex: ${lineIndex}, currentFen: "${currentFen}"`);
-
     setSelectedEngineLineIndex(lineIndex);
     setSelectedEngineLineData(line);
     setCurrentMoveIndex(0);
@@ -1178,12 +1176,7 @@ Make it detailed and exciting!`;
     const pv = line.pv || line.line || "";
     const moves = pv.split(/\s+/).filter((m) => m.trim());
 
-    console.log(`[handleSelectEngineLine] PV: "${pv}", moves: ${JSON.stringify(moves)}`);
-
-    if (moves.length === 0) {
-      console.log(`[handleSelectEngineLine] No moves in line`);
-      return;
-    }
+    if (moves.length === 0) return;
 
     const myRequestId = ++drillRequestIdRef.current;
     const chess = new Chess();
@@ -1196,23 +1189,15 @@ Make it detailed and exciting!`;
         chess.load(currentFen);
       }
 
-      console.log(`[handleSelectEngineLine] Before move - turn: ${chess.turn()}, fen: "${chess.fen()}"`);
-
       const moveResult = chess.move({ from: moves[0].slice(0, 2), to: moves[0].slice(2, 4), promotion: moves[0][4] as any });
-      if (!moveResult) {
-        console.log(`[handleSelectEngineLine] Move failed: ${moves[0]}`);
-        return;
-      }
+      if (!moveResult) return;
 
       resultingFen = chess.fen();
-      console.log(`[handleSelectEngineLine] After move - resultingFen: "${resultingFen}"`);
 
       // Play the first move on the board automatically
       suppressNextAutoEvalRef.current = true;
-      console.log(`[handleSelectEngineLine] Calling setCurrentFen with: "${resultingFen}"`);
       setCurrentFen(resultingFen);
-    } catch (e) {
-      console.log(`[handleSelectEngineLine] Exception: ${e}`);
+    } catch {
       return;
     }
 
@@ -1233,8 +1218,6 @@ Make it detailed and exciting!`;
         multiPv: multiPvLines,
       });
 
-      console.log(`[handleSelectEngineLine] Engine analysis complete, got ${response?.ok ? (response as any).analysis?.lines?.length || 0 : 0} lines`);
-
       if (drillRequestIdRef.current !== myRequestId) return; // stale request
 
       if (response?.ok) {
@@ -1252,11 +1235,9 @@ Make it detailed and exciting!`;
       }
 
       // NOW fetch LLM explanation for the first move (AFTER engine analysis completes)
-      console.log(`[handleSelectEngineLine] Starting LLM explanation after engine analysis`);
       await fetchPerMoveExplanation(lineIndex, line, currentFen, 0, moves[0]);
     } catch {
       // Analysis failed — still explain the move
-      console.log(`[handleSelectEngineLine] Engine analysis failed, still explaining move`);
       await fetchPerMoveExplanation(lineIndex, line, currentFen, 0, moves[0]);
     }
   }, [currentFen, fetchPerMoveExplanation, fetchExplanations]);
