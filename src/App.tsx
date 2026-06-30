@@ -308,6 +308,7 @@ export default function App() {
   const engineStatusRef = useRef(engineStatus);
   const currentResponseTypeRef = useRef(currentResponseType);
   const selectedEngineLineIndexRef = useRef<number | null>(selectedEngineLineIndex);
+  const advancedAnalysisModeRef = useRef(advancedAnalysisMode);
   // Incremented on every drill-in attempt and on "back" — lets an in-flight drill
   // analysis detect that the user has navigated away and discard its stale result.
   const drillRequestIdRef = useRef(0);
@@ -754,6 +755,7 @@ export default function App() {
   engineStatusRef.current = engineStatus;
   currentResponseTypeRef.current = currentResponseType;
   selectedEngineLineIndexRef.current = selectedEngineLineIndex;
+  advancedAnalysisModeRef.current = advancedAnalysisMode;
 
   // Reset puzzle conversation every time a new puzzle is presented
   useEffect(() => {
@@ -926,11 +928,13 @@ export default function App() {
       setAnalysisStatus("");
       const engineName = formState.selectedEngine?.toUpperCase() || "ENGINE";
       try {
+        // Show more lines in advanced/deep analysis mode (20 lines) vs regular analysis (4 lines)
+        const multiPvLines = advancedAnalysisMode || deepMode ? 20 : 4;
         const response = await electronAPI.analyzePosition({
           engine: formState.selectedEngine,
           fen,
           depth: formState.analysisDepth,
-          multiPv: 4
+          multiPv: multiPvLines
         });
         if (!response?.ok) {
           setAnalysisStatus((response as any)?.error || `${engineName} analysis failed.`);
@@ -1200,11 +1204,13 @@ Make it detailed and exciting!`;
     if (!engineStatusRef.current?.configured || !electronAPI?.analyzePosition) return;
 
     try {
+      // Show more lines in advanced/deep analysis mode (20 lines) vs regular analysis (4 lines)
+      const multiPvLines = advancedAnalysisModeRef.current ? 20 : 4;
       const response = await electronAPI.analyzePosition({
         engine: formStateRef.current.selectedEngine,
         fen: resultingFen,
         depth: 5,
-        multiPv: 4,
+        multiPv: multiPvLines,
       });
 
       if (drillRequestIdRef.current !== myRequestId) return; // stale request
@@ -1581,7 +1587,12 @@ Make it detailed and exciting!`;
     const chess = new Chess();
     let moveUci: string | null = null;
     try {
-      chess.load(baseFen);
+      // Handle "start" literal vs full FEN string
+      if (baseFen === "start") {
+        chess.reset();
+      } else {
+        chess.load(baseFen);
+      }
       const moves = chess.moves({ verbose: true });
       for (const m of moves) {
         chess.move(m);
@@ -2888,7 +2899,7 @@ Make it detailed and exciting!`;
                         </Tooltip>
                       </>
                     )}
-                    {advancedAnalysisMode && (
+                    {!gameMode && (
                       <Tooltip title="Save this analysis" disableInteractive={false}>
                         <span>
                           <IconButton
@@ -3028,7 +3039,7 @@ Make it detailed and exciting!`;
                   deepAnalysisLoading={deepAnalysisLoading}
                   sx={{ flex: 1, minHeight: 0 }}
                 />
-                {advancedAnalysisMode && (
+                {!gameMode && (
                   <PositionNotesPanel
                     currentFen={currentFen}
                     electronAPI={electronAPI}
