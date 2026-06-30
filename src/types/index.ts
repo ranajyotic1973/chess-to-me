@@ -27,7 +27,7 @@ export interface NormalizedEvaluation {
 // ============================================================================
 
 export interface AnalysisLine {
-  rank?: number;
+  rank?: number; // Engine's multipv ranking (1 = best, 2 = 2nd best, etc.)
   score: Score | null;
   pv?: string;
   line?: string;

@@ -296,10 +296,20 @@ const scoreToComparable = (score: AnalysisLine["score"]): number => {
 };
 
 /**
- * Sorts analysis lines by their engine score (best first).
+ * Sorts analysis lines by their engine multipv ranking (from "rank" field).
+ * The engine's multipv number (1 = best, 2 = 2nd best, etc.) is stored in rank.
  */
 export const sortLinesByScore = (lines: AnalysisLine[]): AnalysisLine[] => {
   return [...lines].sort((a, b) => {
+    // Sort by rank (multipv ranking) - lower rank = better evaluation
+    const rankA = a.rank ?? Infinity;
+    const rankB = b.rank ?? Infinity;
+
+    if (rankA !== rankB) {
+      return rankA - rankB; // Ascending order by rank (1 < 2 < 3 < 4)
+    }
+
+    // Fallback: sort by score if ranks are equal
     const scoreA = scoreToComparable(a.score);
     const scoreB = scoreToComparable(b.score);
     return scoreB - scoreA; // Descending order (best first)
