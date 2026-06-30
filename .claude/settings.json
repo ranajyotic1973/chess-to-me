@@ -55,7 +55,8 @@
       "Bash(node \"/c/Program Files/nodejs/node_modules/npm/bin/npm-cli.js\" install)",
       "Bash(node -e \"const fs=require\\('fs'\\); const pkg=JSON.parse\\(fs.readFileSync\\('package-lock.json','utf8'\\)\\); const names=['electron-builder-squirrel-windows','electron-winstaller','@electron/windows-sign','temp','cross-dirname','postject','mkdirp','rimraf']; for \\(const n of names\\) { const matches = Object.keys\\(pkg.packages\\).filter\\(k => k.endsWith\\('node_modules/'+n\\)\\); console.log\\(n, '=>', matches.length ? matches.map\\(m=>pkg.packages[m].version\\) : 'MISSING'\\); }\")",
       "Bash(node \"/c/Program Files/nodejs/node_modules/npm/bin/npm-cli.js\" ci)",
-      "Bash(git commit -m 'docs: add comprehensive integration testing guide *)"
+      "Bash(git commit -m 'docs: add comprehensive integration testing guide *)",
+      "Bash(npx playwright *)"
     ]
   }
 }

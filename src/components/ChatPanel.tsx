@@ -130,6 +130,7 @@ export default function ChatPanel({
         },
         ...paperSx
       ]}
+      data-testid="chat-panel"
     >
       <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
         {/* Header */}
@@ -372,7 +373,7 @@ export default function ChatPanel({
 
                 {/* Side-to-move badge for puzzles */}
                 {responseType === "Puzzle" && responseData?.side_to_move && (
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }} data-testid="puzzle-rating">
                     <Chip
                       label={`${responseData.side_to_move} to move`}
                       size="small"
@@ -391,13 +392,14 @@ export default function ChatPanel({
 
                 {/* Incorrect attempt: retry + reveal buttons */}
                 {responseType === "Puzzle" && puzzleIncorrect && (
-                  <Box sx={{ display: "flex", gap: 1, alignItems: "center", py: 1 }}>
+                  <Box sx={{ display: "flex", gap: 1, alignItems: "center", py: 1 }} data-testid="puzzle-feedback">
                     <Tooltip title="Retry puzzle from the start">
                       <IconButton
                         size="small"
                         color="warning"
                         onClick={onRetryPuzzle}
                         aria-label="retry puzzle"
+                        data-testid="try-again"
                       >
                         <ReplayIcon fontSize="small" />
                       </IconButton>
@@ -409,6 +411,7 @@ export default function ChatPanel({
                         color="primary"
                         onClick={onShowSolution}
                         sx={{ textTransform: "none" }}
+                        data-testid="reveal-solution"
                       >
                         Reveal Solution
                       </Button>
@@ -424,6 +427,7 @@ export default function ChatPanel({
                       color="primary"
                       onClick={onShowSolution}
                       sx={{ textTransform: "none" }}
+                      data-testid="reveal-solution"
                     >
                       Reveal Solution
                     </Button>
@@ -432,7 +436,7 @@ export default function ChatPanel({
 
                 {/* SAN solution move list (shown after reveal) */}
                 {responseType === "Puzzle" && showSolution && Array.isArray(responseData?.solution_san) && responseData.solution_san.length > 0 && (
-                  <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", alignItems: "center", mb: 1 }}>
+                  <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", alignItems: "center", mb: 1 }} data-testid="solution-moves">
                     <Typography variant="caption" sx={{ fontWeight: 600, color: "text.secondary" }}>
                       Solution:
                     </Typography>

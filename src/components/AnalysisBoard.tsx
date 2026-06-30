@@ -168,6 +168,7 @@ export default function AnalysisBoard({
     <>
       <Box
         ref={boardRef}
+        data-testid="puzzle-board"
         sx={{
           width: dimension,
           height: dimension,

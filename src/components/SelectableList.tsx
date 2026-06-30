@@ -94,6 +94,7 @@ export default function SelectableList({
       {items.map((item, idx) => (
         <Box
           key={item.id}
+          data-testid="analysis-line"
           onClick={() => onSelect(item.id, idx)}
           sx={{
             p: 1.5,

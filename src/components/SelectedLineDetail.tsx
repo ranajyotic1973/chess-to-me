@@ -67,9 +67,11 @@ export default function SelectedLineDetail({
       </Stack>
 
       {/* Display the selected line's moves with the current move highlighted in bold + yellow square */}
-      <Typography variant="body2" sx={{ fontFamily: "monospace", mb: 1 }}>
-        {formatHighlightedMoveNotation(entry.description || "", currentMoveIndex)}
-      </Typography>
+      <Box data-testid="line-explanation">
+        <Typography variant="body2" sx={{ fontFamily: "monospace", mb: 1 }}>
+          {formatHighlightedMoveNotation(entry.description || "", currentMoveIndex)}
+        </Typography>
+      </Box>
 
       {/* Deep analysis fields (shown only in advanced analysis mode) */}
       {advancedAnalysisMode && selectedEngineLineIndex !== null && (
