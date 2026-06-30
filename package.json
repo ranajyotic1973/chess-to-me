@@ -42,6 +42,7 @@
     "@fontsource/sora": "^5.2.8",
     "@mui/icons-material": "^6.5.0",
     "@mui/material": "^6.5.0",
+    "@reduxjs/toolkit": "^2.12.0",
     "adm-zip": "^0.5.16",
     "better-sqlite3": "^12.11.1",
     "chess.js": "^1.4.0",
@@ -51,7 +52,8 @@
     "node-7z": "^3.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-markdown": "^10.1.0"
+    "react-markdown": "^10.1.0",
+    "react-redux": "^9.3.0"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.23.0",
