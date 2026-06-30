@@ -264,6 +264,48 @@ const parsePgn = (input: string): string[] | null => {
   return positions;
 };
 
+/**
+ * Converts a score to a comparable numeric value for sorting.
+ * Higher values = better for white.
+ * Used to sort engine analysis lines by quality.
+ */
+const scoreToComparable = (score: AnalysisLine["score"]): number => {
+  if (!score) return -Infinity;
+
+  // Centipawn score
+  if ("value" in score && score.type === "cp") {
+    return score.value;
+  }
+
+  // Mate score - convert to large value (mate in 1 is best)
+  if ("value" in score && score.type === "mate") {
+    const mateValue = score.value;
+    // Positive = white mates, negative = black mates
+    // Mate in 1 for white = 100000 points
+    // Mate in 10 for white = 99000 points
+    // etc.
+    return mateValue > 0 ? 100000 - (mateValue * 100) : -100000 + (Math.abs(mateValue) * 100);
+  }
+
+  // Win probability score
+  if ("winProb" in score) {
+    return score.winProb * 10000;
+  }
+
+  return 0;
+};
+
+/**
+ * Sorts analysis lines by their engine score (best first).
+ */
+export const sortLinesByScore = (lines: AnalysisLine[]): AnalysisLine[] => {
+  return [...lines].sort((a, b) => {
+    const scoreA = scoreToComparable(a.score);
+    const scoreB = scoreToComparable(b.score);
+    return scoreB - scoreA; // Descending order (best first)
+  });
+};
+
 export const parseFenOrPgnInput = (
   input: string
 ): { positions: string[] } | { error: string } => {

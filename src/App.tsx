@@ -45,7 +45,8 @@ import {
   deriveFenSequence,
   parseFenOrPgnInput,
   parseStockfishLine,
-  sanWithGlyph
+  sanWithGlyph,
+  sortLinesByScore
 } from "./utils/analysisHelpers";
 import {
   parseLLMResponse,
@@ -895,17 +896,19 @@ export default function App() {
   const handleAnalysisSuccess = useCallback(
     (lines: AnalysisLine[], fen: string): void => {
       if (!lines?.length) return; // keep previous eval on the bar when result is empty
-      setAnalysisLines(lines);
+      // Sort lines by score (best first)
+      const sortedLines = sortLinesByScore(lines);
+      setAnalysisLines(sortedLines);
       setSelectedEngineLineIndex(null);
       setSelectedEngineLineData(null);
       setDeepAnalysisResults({});
       setExplorationStack([]); // a fresh manual analysis starts a new top-level list
-      const entries = (lines || []).map((line, index) =>
-        parseStockfishLine(line, index + 1, currentFen)
+      const entries = (sortedLines || []).map((line, index) =>
+        parseStockfishLine(line, index + 1, fen)
       );
       setAnalysisEntries(entries);
       setAnalysisStatus("");
-      fetchExplanations(fen, lines);
+      fetchExplanations(fen, sortedLines);
     },
     [fetchExplanations, currentFen]
   );
@@ -1237,12 +1240,14 @@ Make it detailed and exciting!`;
       if (response?.ok) {
         const newLines: AnalysisLine[] = (response as any).analysis?.lines ?? [];
         if (newLines.length > 0) {
-          setAnalysisLines(newLines);
-          setAnalysisEntries(newLines.map((l, i) => parseStockfishLine(l, i + 1, resultingFen)));
+          // Sort lines by score (best first)
+          const sortedNewLines = sortLinesByScore(newLines);
+          setAnalysisLines(sortedNewLines);
+          setAnalysisEntries(sortedNewLines.map((l, i) => parseStockfishLine(l, i + 1, resultingFen)));
           // Keep the line selected, don't clear it
           setCurrentMoveIndex(0);
           // Fetch LLM explanations for the new candidate lines AFTER engine analysis
-          fetchExplanations(resultingFen, newLines);
+          fetchExplanations(resultingFen, sortedNewLines);
         }
       }
 
