@@ -3039,7 +3039,7 @@ Make it detailed and exciting!`;
                   deepAnalysisLoading={deepAnalysisLoading}
                   sx={{ flex: 1, minHeight: 0 }}
                 />
-                {!gameMode && (
+                {advancedAnalysisMode && (
                   <PositionNotesPanel
                     currentFen={currentFen}
                     electronAPI={electronAPI}
