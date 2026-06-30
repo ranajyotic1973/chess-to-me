@@ -1162,6 +1162,8 @@ Make it detailed and exciting!`;
   }, [formState.explainLanguage, formState.ollamaModel, formState.ollamaBaseUrl, formState.llmProvider, formState.llmApiKey, formState.llmModel]);
 
   const handleSelectEngineLine = useCallback(async (lineIndex: number, line: AnalysisLine) => {
+    console.log(`[handleSelectEngineLine] Starting - lineIndex: ${lineIndex}, currentFen: "${currentFen}"`);
+
     setSelectedEngineLineIndex(lineIndex);
     setSelectedEngineLineData(line);
     setCurrentMoveIndex(0);
@@ -1173,7 +1175,12 @@ Make it detailed and exciting!`;
     const pv = line.pv || line.line || "";
     const moves = pv.split(/\s+/).filter((m) => m.trim());
 
-    if (moves.length === 0) return;
+    console.log(`[handleSelectEngineLine] PV: "${pv}", moves: ${JSON.stringify(moves)}`);
+
+    if (moves.length === 0) {
+      console.log(`[handleSelectEngineLine] No moves in line`);
+      return;
+    }
 
     const myRequestId = ++drillRequestIdRef.current;
     const chess = new Chess();
@@ -1186,22 +1193,32 @@ Make it detailed and exciting!`;
         chess.load(currentFen);
       }
 
+      console.log(`[handleSelectEngineLine] Before move - turn: ${chess.turn()}, fen: "${chess.fen()}"`);
+
       const moveResult = chess.move({ from: moves[0].slice(0, 2), to: moves[0].slice(2, 4), promotion: moves[0][4] as any });
-      if (!moveResult) return;
+      if (!moveResult) {
+        console.log(`[handleSelectEngineLine] Move failed: ${moves[0]}`);
+        return;
+      }
+
       resultingFen = chess.fen();
+      console.log(`[handleSelectEngineLine] After move - resultingFen: "${resultingFen}"`);
 
       // Play the first move on the board automatically
       suppressNextAutoEvalRef.current = true;
+      console.log(`[handleSelectEngineLine] Calling setCurrentFen with: "${resultingFen}"`);
       setCurrentFen(resultingFen);
-    } catch {
+    } catch (e) {
+      console.log(`[handleSelectEngineLine] Exception: ${e}`);
       return;
     }
 
-    // Fetch LLM explanation for the first move
-    await fetchPerMoveExplanation(lineIndex, line, currentFen, 0, moves[0]);
-
-    // Analyze the position after the first move to show candidate lines
-    if (!engineStatusRef.current?.configured || !electronAPI?.analyzePosition) return;
+    // Analyze the position after the first move to show candidate lines (BEFORE LLM explanation)
+    if (!engineStatusRef.current?.configured || !electronAPI?.analyzePosition) {
+      // If engine not available, just explain the move and return
+      await fetchPerMoveExplanation(lineIndex, line, currentFen, 0, moves[0]);
+      return;
+    }
 
     try {
       // Show more lines in advanced/deep analysis mode (20 lines) vs regular analysis (4 lines)
@@ -1213,6 +1230,8 @@ Make it detailed and exciting!`;
         multiPv: multiPvLines,
       });
 
+      console.log(`[handleSelectEngineLine] Engine analysis complete, got ${response?.ok ? (response as any).analysis?.lines?.length || 0 : 0} lines`);
+
       if (drillRequestIdRef.current !== myRequestId) return; // stale request
 
       if (response?.ok) {
@@ -1222,12 +1241,18 @@ Make it detailed and exciting!`;
           setAnalysisEntries(newLines.map((l, i) => parseStockfishLine(l, i + 1, resultingFen)));
           // Keep the line selected, don't clear it
           setCurrentMoveIndex(0);
-          // Fetch LLM explanations for the new candidate lines
+          // Fetch LLM explanations for the new candidate lines AFTER engine analysis
           fetchExplanations(resultingFen, newLines);
         }
       }
+
+      // NOW fetch LLM explanation for the first move (AFTER engine analysis completes)
+      console.log(`[handleSelectEngineLine] Starting LLM explanation after engine analysis`);
+      await fetchPerMoveExplanation(lineIndex, line, currentFen, 0, moves[0]);
     } catch {
-      // Analysis is best-effort — continue showing the move explanation on failure
+      // Analysis failed — still explain the move
+      console.log(`[handleSelectEngineLine] Engine analysis failed, still explaining move`);
+      await fetchPerMoveExplanation(lineIndex, line, currentFen, 0, moves[0]);
     }
   }, [currentFen, fetchPerMoveExplanation, fetchExplanations]);
 

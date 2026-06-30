@@ -82,8 +82,16 @@ export default function AnalysisBoard({
         // Piece names: 'wP', 'wR', … for white; 'bP', 'bR', … for black.
         // Returning false prevents the piece lifting at all (better UX than snap-back on drop).
         const turn = chess.current.turn(); // 'w' | 'b'
-        if (turn === 'w' && piece.startsWith('b')) return false;
-        if (turn === 'b' && piece.startsWith('w')) return false;
+        console.log(`[AnalysisBoard] Drag start - piece: ${piece}, turn: ${turn}, fen: ${chess.current.fen()}`);
+        if (turn === 'w' && piece.startsWith('b')) {
+          console.log(`[AnalysisBoard] Drag blocked: it's white's turn but trying to move black piece`);
+          return false;
+        }
+        if (turn === 'b' && piece.startsWith('w')) {
+          console.log(`[AnalysisBoard] Drag blocked: it's black's turn but trying to move white piece`);
+          return false;
+        }
+        console.log(`[AnalysisBoard] Drag allowed`);
         return true;
       },
       onDrop: (source: string, target: string) => {
