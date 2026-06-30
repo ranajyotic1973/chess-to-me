@@ -301,7 +301,6 @@ export default function App() {
   const [lineAnalysisText, setLineAnalysisText] = useState<string>("");
   const [lineAnalysisLoading, setLineAnalysisLoading] = useState<boolean>(false);
   const [lineAnalysisError, setLineAnalysisError] = useState<string>("");
-  const [currentFen, setCurrentFen] = useState<string>("start");
   const [questionText, setQuestionText] = useState<string>("");
   const [questionResponse, setQuestionResponse] = useState<string>("");
   const [questionLoading, setQuestionLoading] = useState<boolean>(false);
@@ -649,9 +648,9 @@ export default function App() {
 
   useEffect(() => {
     if (!analysisStatus) return;
-    const t = setTimeout(() => setAnalysisStatus(""), 2000);
+    const t = setTimeout(() => dispatch(setAnalysisStatus("")), 2000);
     return () => clearTimeout(t);
-  }, [analysisStatus]);
+  }, [analysisStatus, dispatch]);
 
   // Stop the engine and clear opening label when the app mode changes
   const prevResponseTypeRef = useRef<import("./types").ResponseType | null>(null);
