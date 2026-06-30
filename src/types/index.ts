@@ -657,6 +657,8 @@ export interface ElectronAPI {
   onEngineReady(callback: (data: { engine: string; ok: boolean }) => void): () => void;
   onEngineAnalysisStart(callback: (data: { engine: string }) => void): () => void;
   onEngineAnalysisDone(callback: (data: { engine: string }) => void): () => void;
+  onLlmGenerationStart(callback: (data: { provider: string }) => void): () => void;
+  onLlmGenerationDone(callback: (data: { provider: string; error?: boolean }) => void): () => void;
   setOllamaModel(model: string): Promise<{ ok: true; activeModel: string } | { ok: false; error: string }>;
 
   // LLM Model Management
@@ -723,6 +725,11 @@ export interface ElectronAPI {
   // PGN save / load
   saveAnalysisPgn(payload: { pgn: string; notes: Record<string, string> }): Promise<{ ok: boolean; path?: string; error?: string }>;
   loadAnalysisPgn(): Promise<{ ok: boolean; pgn?: string; notes?: Record<string, string>; cancelled?: boolean; error?: string }>;
+
+  // Window controls
+  minimizeWindow(): Promise<void>;
+  maximizeWindow(): Promise<void>;
+  closeWindow(): Promise<void>;
 }
 
 declare global {

@@ -571,14 +571,16 @@ export default function App() {
   // Signal when app is fully loaded - splash screen will wait for this and minimum 5 seconds
   useEffect(() => {
     console.log(`[App] Splash screen readiness check: settingsLoaded=${settingsLoaded}, viewMode=${viewMode}`);
-    if (settingsLoaded && viewMode === "analysis") {
+    // In browser dev mode without Electron, skip splash screen immediately
+    const isDevMode = !electronAPI;
+    if ((settingsLoaded && viewMode === "analysis") || isDevMode) {
       console.log("[App] App ready - calling appReady()");
       // App is ready - signal to main.tsx to allow splash screen to hide
       if (typeof window !== "undefined" && (window as any).appReady) {
         (window as any).appReady();
       }
     }
-  }, [settingsLoaded, viewMode]);
+  }, [settingsLoaded, viewMode, electronAPI]);
 
   // Listen for engine warmup start/finish events pushed from the main process
   useEffect(() => {
@@ -846,7 +848,11 @@ export default function App() {
     }
     try {
       const chess = new Chess();
-      chess.load(currentFen);
+      if (currentFen === "start") {
+        chess.reset();
+      } else {
+        chess.load(currentFen);
+      }
       setCurrentRawPgn(chess.pgn());
     } catch (err) {
       // Invalid FEN; don't update PGN
@@ -859,7 +865,7 @@ export default function App() {
         return;
       }
       try {
-        await electronAPI.explainLines({
+        const response = await electronAPI.explainLines({
           fen,
           lines,
           language: formState.explainLanguage,
@@ -868,6 +874,15 @@ export default function App() {
           llmProvider: formState.llmProvider,
           llmApiKey: formState.llmApiKey
         });
+
+        // Store LLM explanations by line index
+        if (response?.ok && Array.isArray(response.explanations)) {
+          const explanationMap: Record<number, string> = {};
+          response.explanations.forEach((exp, idx) => {
+            explanationMap[idx] = exp.text;
+          });
+          setLineExplanations(explanationMap);
+        }
       } catch (err) {
         // Handle error silently
       }
@@ -1143,15 +1158,6 @@ Make it detailed and exciting!`;
   }, [formState.explainLanguage, formState.ollamaModel, formState.ollamaBaseUrl, formState.llmProvider, formState.llmApiKey, formState.llmModel]);
 
   const handleSelectEngineLine = useCallback(async (lineIndex: number, line: AnalysisLine) => {
-    // Snapshot this level before drilling in, so "back" can restore it without a fresh call.
-    const parentFrame = {
-      fen: currentFen,
-      lines: analysisLines,
-      entries: analysisEntries,
-      listResponse: lastListResponseRef.current
-    };
-    setExplorationStack((stack) => [...stack, parentFrame]);
-
     setSelectedEngineLineIndex(lineIndex);
     setSelectedEngineLineData(line);
     setCurrentMoveIndex(0);
@@ -1159,33 +1165,40 @@ Make it detailed and exciting!`;
     const lineNum = line.rank || lineIndex + 1;
     setStatusMessage(`Line ${lineNum} selected.`);
 
+    // Get the first move from the line and play it on the board
     const pv = line.pv || line.line || "";
     const moves = pv.split(/\s+/).filter((m) => m.trim());
+
     if (moves.length === 0) return;
 
     const myRequestId = ++drillRequestIdRef.current;
-    await fetchPerMoveExplanation(lineIndex, line, currentFen, 0, moves[0]);
-    if (drillRequestIdRef.current !== myRequestId) return; // user navigated away while this was in flight
-
-    // Drill in: run a fresh analysis of the position after this move, and present
-    // its top candidates as a new list — lets the user keep exploring deeper.
-    const cacheKey = `${currentFen}:${lineIndex}:0`;
-    const explanationText = explanationCache.current.get(cacheKey);
-    if (!explanationText) return; // explanation failed — nothing useful to drill into
-
     const chess = new Chess();
     let resultingFen: string;
     try {
-      chess.load(currentFen);
+      // Handle "start" literal vs full FEN string
+      if (currentFen === "start") {
+        chess.reset();
+      } else {
+        chess.load(currentFen);
+      }
+
       const moveResult = chess.move({ from: moves[0].slice(0, 2), to: moves[0].slice(2, 4), promotion: moves[0][4] as any });
       if (!moveResult) return;
       resultingFen = chess.fen();
+
+      // Play the first move on the board automatically
+      suppressNextAutoEvalRef.current = true;
+      setCurrentFen(resultingFen);
     } catch {
       return;
     }
 
+    // Fetch LLM explanation for the first move
+    await fetchPerMoveExplanation(lineIndex, line, currentFen, 0, moves[0]);
+
+    // Analyze the position after the first move to show candidate lines
     if (!engineStatusRef.current?.configured || !electronAPI?.analyzePosition) return;
-    setIsDrillLoading(true);
+
     try {
       const response = await electronAPI.analyzePosition({
         engine: formStateRef.current.selectedEngine,
@@ -1193,26 +1206,24 @@ Make it detailed and exciting!`;
         depth: 5,
         multiPv: 4,
       });
-      if (drillRequestIdRef.current !== myRequestId) return; // stale — user already navigated away
+
+      if (drillRequestIdRef.current !== myRequestId) return; // stale request
+
       if (response?.ok) {
         const newLines: AnalysisLine[] = (response as any).analysis?.lines ?? [];
         if (newLines.length > 0) {
           setAnalysisLines(newLines);
           setAnalysisEntries(newLines.map((l, i) => parseStockfishLine(l, i + 1, resultingFen)));
-          suppressNextAutoEvalRef.current = true;
-          setCurrentFen(resultingFen);
-          setSelectedEngineLineIndex(null);
-          setSelectedEngineLineData(null);
+          // Keep the line selected, don't clear it
           setCurrentMoveIndex(0);
-          lastListResponseRef.current = explanationText;
+          // Fetch LLM explanations for the new candidate lines
+          fetchExplanations(resultingFen, newLines);
         }
       }
     } catch {
-      // Drill-down analysis is best-effort — keep showing the move explanation on failure.
-    } finally {
-      if (drillRequestIdRef.current === myRequestId) setIsDrillLoading(false);
+      // Analysis is best-effort — continue showing the move explanation on failure
     }
-  }, [currentFen, analysisLines, analysisEntries, fetchPerMoveExplanation]);
+  }, [currentFen, fetchPerMoveExplanation, fetchExplanations]);
 
   // Pops one level of the exploration stack (or just clears the current selection at
   // the top level), restoring the prior list and its response without a fresh call.
@@ -1560,6 +1571,52 @@ Make it detailed and exciting!`;
       setProfileRefreshTrigger((n) => n + 1);
     }).catch(() => {});
   }, [puzzleStartFen, currentResponseData, puzzleMeta]);
+
+  const handleBoardMove = useCallback((newFen: string) => {
+    // Extract the move by comparing the current FEN with the new FEN
+    const baseFen = selectedLineBaseFen || currentFen;
+    if (!baseFen || !newFen) return;
+
+    // Try to find the move that was made
+    const chess = new Chess();
+    let moveUci: string | null = null;
+    try {
+      chess.load(baseFen);
+      const moves = chess.moves({ verbose: true });
+      for (const m of moves) {
+        chess.move(m);
+        if (chess.fen() === newFen) {
+          moveUci = `${m.from}${m.to}${m.promotion || ""}`.toLowerCase();
+          break;
+        }
+        chess.undo();
+      }
+    } catch {
+      return; // Invalid FEN, skip move matching
+    }
+
+    if (!moveUci) return; // Unable to determine move
+
+    // Try to match move against engine lines
+    let matchedIndex = -1;
+    for (let i = 0; i < analysisLines.length; i++) {
+      const line = analysisLines[i];
+      const pv = line.pv || line.line || "";
+      const firstMove = pv.split(/\s+/)[0] || "";
+      if (firstMove.toLowerCase() === moveUci) {
+        matchedIndex = i;
+        break;
+      }
+    }
+
+    if (matchedIndex >= 0) {
+      // Match found: auto-select the line
+      handleSelectEngineLine(matchedIndex, analysisLines[matchedIndex]);
+    } else {
+      // No match: analyze the new position
+      runAnalysis(newFen);
+    }
+  }, [currentFen, selectedLineBaseFen, analysisLines, handleSelectEngineLine, runAnalysis]);
 
   const applyPositions = useCallback(
     (positions: string[], message?: string): void => {
@@ -2429,7 +2486,8 @@ Make it detailed and exciting!`;
           flexDirection: "column",
           px: { xs: 2, md: 4 },
           pt: { xs: 2, md: 3 },
-          overflow: "hidden"
+          overflow: "hidden",
+          backgroundColor: "transparent"
         }}
       >
         <Box sx={{ position: "absolute", top: 12, right: 16, zIndex: (theme) => theme.zIndex.drawer + 3 }}>
@@ -2464,7 +2522,7 @@ Make it detailed and exciting!`;
           <Typography variant="h6">Generating explanation…</Typography>
         </Stack>
       </Backdrop>
-      {viewMode === "settings" || !engineStatus?.configured ? (
+      {(viewMode === "settings" || !engineStatus?.configured) && electronAPI ? (
         <Box
           sx={{
             flex: 1,
@@ -2707,7 +2765,8 @@ Make it detailed and exciting!`;
                 gridTemplateColumns,
                 gap: 3,
                 alignItems: "stretch",
-                overflow: "hidden"
+                overflow: "hidden",
+                backgroundColor: "transparent"
               }}
             >
               <Box
@@ -2718,7 +2777,9 @@ Make it detailed and exciting!`;
                   display: "flex",
                   flexDirection: "column",
                   padding: "5px",
-                  boxSizing: "border-box"
+                  boxSizing: "border-box",
+                  backgroundColor: "transparent",
+                  borderRadius: 0
                 }}
               >
                 {/* Black player bar — shown above the board when a DB game is loaded */}
@@ -2731,15 +2792,15 @@ Make it detailed and exciting!`;
                 )}
                 <Box
                   sx={{
-                    flex: 1,
-                    minHeight: 0,
+                    flex: "0 0 auto",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "flex-start",
                     gap: 1,
+                    backgroundColor: "transparent"
                   }}
                 >
-                  {!(currentResponseType === "Puzzle" || gameMode) && (
+                  {currentResponseType !== "Puzzle" && (
                     <EvalBar
                       score={analysisLines[0]?.score}
                       height={boardSize.height}
@@ -2755,6 +2816,7 @@ Make it detailed and exciting!`;
                     onStartAnalysis={handleStartAnalysis}
                     onStopAnalysis={handleStopAnalysis}
                     isAnalysisRunning={isAnalysisRunning}
+                    onBoardMove={handleBoardMove}
                     onMoveAttempt={handleMoveAttempt}
                     puzzleMode={currentResponseType === "Puzzle" || gameMode}
                     onReset={handleResetBoard}
@@ -2777,7 +2839,7 @@ Make it detailed and exciting!`;
                     {gameEcoLabel}
                   </Typography>
                 )}
-                <Box sx={{ display: "flex", justifyContent: "space-between", pt: 1 }}>
+                <Box sx={{ display: "flex", justifyContent: "space-between", pt: 0.5 }}>
                   <Stack direction="row" spacing={1}>
                     <Tooltip title="Import position">
                       <IconButton
@@ -3099,13 +3161,13 @@ Make it detailed and exciting!`;
         onPositionConfirm={handlePositionConfirm}
         initialFen={currentFen}
       />
+      </Box>
       <AppStatusBar
         currentResponseType={currentResponseType}
         selectedEngine={formState.selectedEngine}
         isEngineRunning={isAnalysisRunning}
         llmProvider={formState.llmProvider}
       />
-      </Box>
     </Box>
   );
 }

@@ -98,6 +98,18 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return () => ipcRenderer.removeListener("engine:analysis-done", handler);
   },
 
+  onLlmGenerationStart: (callback: (data: { provider: string }) => void) => {
+    const handler = (_event: any, data: { provider: string }) => callback(data);
+    ipcRenderer.on("llm:generation-start", handler);
+    return () => ipcRenderer.removeListener("llm:generation-start", handler);
+  },
+
+  onLlmGenerationDone: (callback: (data: { provider: string; error?: boolean }) => void) => {
+    const handler = (_event: any, data: { provider: string; error?: boolean }) => callback(data);
+    ipcRenderer.on("llm:generation-done", handler);
+    return () => ipcRenderer.removeListener("llm:generation-done", handler);
+  },
+
   setOllamaModel: (model: string) =>
     ipcRenderer.invoke("process:set-model", model) as Promise<IpcResponses["setOllamaModel"]>,
 
@@ -202,5 +214,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on("db:otb-dir-complete", handler);
     return () => ipcRenderer.removeListener("db:otb-dir-complete", handler);
-  }
+  },
+
+  // Window controls
+  minimizeWindow: () =>
+    ipcRenderer.invoke("app:minimize-window") as Promise<void>,
+  maximizeWindow: () =>
+    ipcRenderer.invoke("app:maximize-window") as Promise<void>,
+  closeWindow: () =>
+    ipcRenderer.invoke("app:close-window") as Promise<void>,
 } as ElectronAPI);

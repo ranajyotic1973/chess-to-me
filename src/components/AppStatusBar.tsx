@@ -224,6 +224,43 @@ export default function AppStatusBar({
       }));
     }
 
+    if (electronAPI?.onEngineAnalysisStart) {
+      unsubs.push(electronAPI.onEngineAnalysisStart((data: any) => {
+        const eng = data?.engine === "lc0" ? "LC0" : "Stockfish";
+        setSlot("engine-analysis", { priority: 15, text: `${eng} analyzing…`, color: "#2563eb" });
+      }));
+    }
+
+    if (electronAPI?.onEngineAnalysisDone) {
+      unsubs.push(electronAPI.onEngineAnalysisDone((data: any) => {
+        const eng = data?.engine === "lc0" ? "LC0" : "Stockfish";
+        setSlot("engine-analysis", { priority: 15, text: `${eng} analysis complete`, color: "#16a34a" });
+        clearSlot("engine-analysis", 1500);
+      }));
+    }
+
+    // ── LLM events ──────────────────────────────────────────────────────
+    if (electronAPI?.onLlmGenerationStart) {
+      unsubs.push(electronAPI.onLlmGenerationStart((data: any) => {
+        const llmName = data?.provider === "anthropic" ? "Claude" :
+                       data?.provider === "openai" ? "OpenAI" :
+                       data?.provider === "gemini" ? "Gemini" :
+                       data?.provider === "grok" ? "Grok" : "LLM";
+        setSlot("llm", { priority: 12, text: `${llmName} generating explanation…`, color: "#7c3aed" });
+      }));
+    }
+
+    if (electronAPI?.onLlmGenerationDone) {
+      unsubs.push(electronAPI.onLlmGenerationDone((data: any) => {
+        const llmName = data?.provider === "anthropic" ? "Claude" :
+                       data?.provider === "openai" ? "OpenAI" :
+                       data?.provider === "gemini" ? "Gemini" :
+                       data?.provider === "grok" ? "Grok" : "LLM";
+        setSlot("llm", { priority: 12, text: `${llmName} ready`, color: "#16a34a" });
+        clearSlot("llm", 1500);
+      }));
+    }
+
     if (electronAPI?.onDbRefreshStatus) unsubs.push(electronAPI.onDbRefreshStatus(refresh));
 
     return () => {

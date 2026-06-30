@@ -221,12 +221,15 @@ Return this structure for EVERY explanation:
 
 **What Both Sides Must Watch**: [Important tactical points both players need to be aware of]
 
+**Opening Name** (AFTER MOVE 3 ONLY): [If this is move 3 or beyond, identify and name the chess opening (e.g., "This is the Sicilian Defense, Najdorf Variation"). Only include this section if the opening is clear enough to identify.]
+
 **Historical Story**: [A real story about this move/position — named after a famous player, used in a legendary game, or an interesting fact. Keep it exciting for kids! Only include if you know a genuine story.]
 
 Guidelines:
 - MANDATORY: Always explain plans for BOTH WHITE and BLACK separately
 - MANDATORY: Include specific threats and opportunities (not generic statements)
 - MANDATORY: Show what each side should be worried about
+- IMPORTANT: After move 3, identify the opening by name if it's recognizable
 - Early opening: Focus on piece development, control of center, castling preparation
 - Middlegame: Emphasize tactical shots, king safety, material balance, pawn structure weaknesses
 - Endgame: Explain promotion threats, opposition, key squares, pawn races

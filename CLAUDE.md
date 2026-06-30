@@ -6,6 +6,12 @@ This application is a chess training tool for kids aged 4–18. Every feature, U
 
 ## Code Rules
 
+### UI wrapper
+For any component in UI
+- Do not add unnecessary wrapper unless user asks
+- Keep the UI as lean as possible so loading and rendering is quick
+- All buttons should be considered icon buttons unless user explicitly says otherwise or appropriate icon is not found from fontawesome
+
 ### Unit Tests Required
 All files containing logic must have a corresponding test file. This applies to:
 - Utility functions (`src/utils/`)

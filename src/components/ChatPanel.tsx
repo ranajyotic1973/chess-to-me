@@ -4,11 +4,9 @@ import {
   CircularProgress,
   IconButton,
   Paper,
-  Skeleton,
   Stack,
   TextField,
   Typography,
-  Chip,
   Tooltip
 } from "@mui/material";
 import SettingsIcon from "@mui/icons-material/Settings";
@@ -22,6 +20,7 @@ import type { ChatPanelProps, DeepLineAnalysis } from "../types";
 import SelectableList from "./SelectableList";
 import type { SelectableListItem } from "./SelectableList";
 import { formatFieldLabel } from "../utils/formatLabel";
+import SelectedLineDetail from "./SelectedLineDetail";
 
 interface DetectedMove {
   from: string;
@@ -40,16 +39,6 @@ const detectMovesInResponse = (response: string): DetectedMove[] => {
   }
   return moves;
 };
-
-const DEEP_ANALYSIS_FIELDS: Array<{ key: keyof DeepLineAnalysis; label: string }> = [
-  { key: "strategy",       label: "Strategy" },
-  { key: "proscons",       label: "Pros & Cons" },
-  { key: "counterattack",  label: "Counter-attack" },
-  { key: "sacrifice",      label: "Sacrifice" },
-  { key: "novelty",        label: "Novelty" },
-  { key: "endgameChances", label: "Endgame chances" },
-  { key: "alternatives",   label: "Alternatives" }
-];
 
 export default function ChatPanel({
   questionText,
@@ -118,11 +107,10 @@ export default function ChatPanel({
     ? analysisLines.map((line, idx) => {
         const entry = analysisEntries[idx];
         const moveSequence = entry?.description || line.pv || line.line || "(no moves)";
-        const explanation = lineExplanations[idx];
         return {
           id: `line-${idx}`,
           label: moveSequence,
-          sublabel: explanation || "",
+          sublabel: "",
         };
       })
     : [];
@@ -161,6 +149,18 @@ export default function ChatPanel({
           </Typography>
         )}
 
+        {/* Line Navigation Help Text - shown when line is selected */}
+        {selectedEngineLineIndex !== null && (
+          <Typography variant="caption" sx={{ color: "info.main", fontStyle: "italic", mb: 1.5, flexShrink: 0 }}>
+            Line {selectedLineNum} selected. Use → to advance moves, ← to go back.
+            {" "}Move {currentMoveIndex + 1} of{" "}
+            {selectedEngineLineIndex !== null
+              ? (analysisEntries[selectedEngineLineIndex]?.moves?.length ??
+                  (selectedLine?.pv || "").split(/\s+/).filter(Boolean).length)
+              : "?"}
+          </Typography>
+        )}
+
         {/* Conversation Area - Scrollable */}
         <Box
           sx={{
@@ -184,74 +184,27 @@ export default function ChatPanel({
             "& .MuiTypography-subtitle2": { fontSize: "0.85rem" }
           }}
         >
-          {/* Analysis lines — list or detail view via SelectableList */}
+          {/* Analysis lines — list always visible */}
           {showAnalysisLines && (
             <SelectableList
               items={analysisListItems}
               title="Engine Analysis (Top Lines)"
               hint={`Click a line, type its number (1–${analysisLines.length}) or make a move to select`}
-              selectedId={analysisSelectedId}
               onSelect={(_id, idx) => onSelectEngineLine?.(idx, analysisLines[idx])}
-              onBack={() => onDeselectLine?.()}
-              showBackInList={canGoBackToParentLines}
-              detailHeaderText={
-                <Typography variant="caption" sx={{ color: "info.main", fontStyle: "italic", flex: 1 }}>
-                  Line {selectedLineNum} selected. Use → to advance moves, ← to go back.
-                  {" "}Move {currentMoveIndex + 1} of{" "}
-                  {selectedEngineLineIndex !== null
-                    ? (analysisEntries[selectedEngineLineIndex]?.moves?.length ??
-                        (selectedLine?.pv || "").split(/\s+/).filter(Boolean).length)
-                    : "?"}
-                </Typography>
-              }
-            >
-              {/* Detail content: shown when a line is selected */}
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-                <Chip
-                  label={`Line ${selectedLineNum} selected`}
-                  size="small"
-                  color="primary"
-                  variant="outlined"
-                />
-              </Stack>
-              {selectedEngineLineIndex !== null && (
-                <Typography variant="body2" sx={{ fontFamily: "monospace", fontWeight: 600, mb: 0.5 }}>
-                  {analysisEntries[selectedEngineLineIndex]?.description}
-                </Typography>
-              )}
-
-              {/* Deep analysis fields */}
-              {advancedAnalysisMode && selectedEngineLineIndex !== null && (
-                deepAnalysisLoading && deepAnalysisResults[selectedEngineLineIndex] === undefined
-                  ? (
-                    <Box sx={{ mt: 1.5, display: "flex", flexDirection: "column", gap: 0.75 }}>
-                      {DEEP_ANALYSIS_FIELDS.map((f) => (
-                        <Box key={f.key}>
-                          <Skeleton variant="text" width="30%" sx={{ mb: 0.25 }} />
-                          <Skeleton variant="rectangular" height={40} />
-                        </Box>
-                      ))}
-                    </Box>
-                  )
-                  : deepAnalysisResults[selectedEngineLineIndex]
-                    ? (
-                      <Box sx={{ mt: 1.5, display: "flex", flexDirection: "column", gap: 1.25 }}>
-                        {DEEP_ANALYSIS_FIELDS.map((f) => (
-                          <Box key={f.key}>
-                            <Typography variant="caption" sx={{ fontWeight: 700, color: "primary.main", display: "block" }}>
-                              {f.label}
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                              {deepAnalysisResults[selectedEngineLineIndex]![f.key]}
-                            </Typography>
-                          </Box>
-                        ))}
-                      </Box>
-                    )
-                    : null
-              )}
-            </SelectableList>
+            />
           )}
+
+          {/* Selected line detail — component shows line moves, deselect button, and advanced analysis */}
+          <SelectedLineDetail
+            selectedLineNum={selectedLineNum}
+            selectedEngineLineIndex={selectedEngineLineIndex}
+            analysisEntries={analysisEntries}
+            currentMoveIndex={currentMoveIndex}
+            onDeselectLine={onDeselectLine}
+            advancedAnalysisMode={advancedAnalysisMode}
+            deepAnalysisLoading={deepAnalysisLoading}
+            deepAnalysisResults={deepAnalysisResults}
+          />
 
           {/* Puzzle navigation instruction */}
           {puzzleNavigationMode && (

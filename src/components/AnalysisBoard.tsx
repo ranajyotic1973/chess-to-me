@@ -29,6 +29,7 @@ export default function AnalysisBoard({
   const boardInstance = useRef<any>(null);
   const chess = useRef<Chess>(new Chess());
   const [ctor, setCtor] = useState(() => detectChessboardConstructor());
+  const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const dimension =
     typeof size?.width === "number" && typeof size?.height === "number"
       ? Math.min(size.width, size.height)
@@ -71,7 +72,13 @@ export default function AnalysisBoard({
       draggable: !puzzleMode,
       pieceTheme: pieceThemePath,
       position: currentFen,
-      onDragStart: (_source: string, piece: string) => {
+      onSquareClick: (square: string) => {
+        // Toggle selection: clicking same square deselects, clicking different piece selects new one
+        setSelectedSquare((prev) => (prev === square ? null : square));
+      },
+      onDragStart: (source: string, piece: string) => {
+        // Clear selection when starting drag
+        setSelectedSquare(null);
         // Piece names: 'wP', 'wR', … for white; 'bP', 'bR', … for black.
         // Returning false prevents the piece lifting at all (better UX than snap-back on drop).
         const turn = chess.current.turn(); // 'w' | 'b'
@@ -82,8 +89,11 @@ export default function AnalysisBoard({
       onDrop: (source: string, target: string) => {
         const move = chess.current.move({ from: source, to: target, promotion: "q" });
         if (!move) {
+          // Illegal move: snap piece back to original square
           return "snapback";
         }
+        // Legal move: clear selection and update position
+        setSelectedSquare(null);
         const nextFen = chess.current.fen();
         setCurrentFen(nextFen);
         if (isAnalysisRunning) {
@@ -116,6 +126,8 @@ export default function AnalysisBoard({
     if (!boardInstance.current) {
       return;
     }
+    // Clear selection when position changes
+    setSelectedSquare(null);
     if (currentFen === "start") {
       chess.current.reset();
       boardInstance.current.position("start");
@@ -134,26 +146,32 @@ export default function AnalysisBoard({
     }
   }, [currentFen, setStatusMessage]);
 
+  // Update square highlighting when selection changes
+  useEffect(() => {
+    if (!boardRef.current) return;
+
+    // Remove highlight from all squares
+    boardRef.current.querySelectorAll(".square-highlight").forEach((sq) => {
+      sq.classList.remove("square-highlight");
+    });
+
+    // Add highlight to selected square
+    if (selectedSquare) {
+      const squareEl = boardRef.current.querySelector(`.square-${selectedSquare}`);
+      if (squareEl) {
+        squareEl.classList.add("square-highlight");
+      }
+    }
+  }, [selectedSquare]);
+
   return (
-    <Box
-      sx={{
-        width: dimension,
-        maxWidth: "100%",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-        alignItems: "center",
-        gap: 1
-      }}
-    >
+    <>
       <Box
         ref={boardRef}
         sx={{
           width: dimension,
           height: dimension,
-          borderRadius: 3,
-          backgroundColor: "background.paper",
-          boxShadow: 12
+          maxWidth: "100%"
         }}
       />
       <Tooltip title="Reset board, clear chat, and return to analysis mode">
@@ -162,6 +180,7 @@ export default function AnalysisBoard({
           size="medium"
           sx={{
             color: "primary.main",
+            mt: 0.5,
             "&:hover": {
               backgroundColor: "action.hover"
             }
@@ -170,6 +189,6 @@ export default function AnalysisBoard({
           <RestartAlt />
         </IconButton>
       </Tooltip>
-    </Box>
+    </>
   );
 }

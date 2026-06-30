@@ -68,6 +68,8 @@ export default function SelectableList({
     );
   }
 
+  const isSingleItem = items.length === 1;
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
       {showBackInList && (
@@ -112,7 +114,7 @@ export default function SelectableList({
                   fontWeight: 600,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
-                  whiteSpace: "nowrap"
+                  whiteSpace: isSingleItem ? "normal" : "nowrap"
                 }}
               >
                 {item.label}
@@ -126,7 +128,7 @@ export default function SelectableList({
                     mt: 0.25,
                     overflow: "hidden",
                     textOverflow: "ellipsis",
-                    whiteSpace: "nowrap"
+                    whiteSpace: isSingleItem ? "normal" : "nowrap"
                   }}
                 >
                   {item.sublabel}

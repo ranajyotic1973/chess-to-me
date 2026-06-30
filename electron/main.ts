@@ -1683,6 +1683,32 @@ ipcMain.handle("app:check-settings-exist", async () => {
   return { exists };
 });
 
+// Window control handlers
+ipcMain.handle("app:minimize-window", async () => {
+  const window = BrowserWindow.getFocusedWindow();
+  if (window) {
+    window.minimize();
+  }
+});
+
+ipcMain.handle("app:maximize-window", async () => {
+  const window = BrowserWindow.getFocusedWindow();
+  if (window) {
+    if (window.isMaximized()) {
+      window.unmaximize();
+    } else {
+      window.maximize();
+    }
+  }
+});
+
+ipcMain.handle("app:close-window", async () => {
+  const window = BrowserWindow.getFocusedWindow();
+  if (window) {
+    window.close();
+  }
+});
+
 ipcMain.handle("setEnginePath", async (_event, { engine, path: enginePath }) => {
   const engineName = (engine || "stockfish").toLowerCase();
   const ok = await verifyEnginePath(enginePath, engineName);
@@ -2584,6 +2610,11 @@ ipcMain.handle("llm:explain-lines", async (_event, payload) => {
 
   console.log(`[LLM] Explaining ${lines.length} lines | Provider: ${llmProvider} | Model: ${model} | Language: ${language}`);
 
+  // Emit LLM generation start event
+  if (mainWindow) {
+    mainWindow.webContents.send("llm:generation-start", { provider: llmProvider });
+  }
+
   try {
     const explanations = await Promise.all(
       lines.map(async (line: any) => {
@@ -2621,10 +2652,22 @@ ipcMain.handle("llm:explain-lines", async (_event, payload) => {
       })
     );
     console.log(`[LLM] ✓ Explained ${explanations.length} lines successfully`);
+
+    // Emit LLM generation done event
+    if (mainWindow) {
+      mainWindow.webContents.send("llm:generation-done", { provider: llmProvider });
+    }
+
     return { ok: true, explanations };
   } catch (err) {
     const errorMsg = (err as Error)?.message || "LLM explanation failed.";
     console.error(`[LLM] ✗ Explanation failed: ${errorMsg}`);
+
+    // Emit LLM generation done event (error case)
+    if (mainWindow) {
+      mainWindow.webContents.send("llm:generation-done", { provider: llmProvider, error: true });
+    }
+
     return { ok: false, error: errorMsg };
   }
 });
@@ -3517,6 +3560,11 @@ ipcMain.handle("llm:ask-question", async (_event, payload) => {
 
   const baseUrl = (payload?.baseUrl || (llmProvider === "ollama" ? settings.get("ollamaBaseUrl") : null) || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
 
+  // Emit LLM generation start event
+  if (mainWindow) {
+    mainWindow.webContents.send("llm:generation-start", { provider: llmProvider });
+  }
+
   try {
     // PASS 1: Classify the request (LLM decides intent — no keyword pre-screening)
     console.log(`[LLM] PASS 1: Classification - Starting | Provider: ${llmProvider} | Model: ${model} | Question: "${question.substring(0, 60)}..."`);
@@ -3620,14 +3668,26 @@ ipcMain.handle("llm:ask-question", async (_event, payload) => {
 
     if (result.ok) {
       console.log(`[LLM] ✓ Complete (Type: ${requestType}) | Provider: ${llmProvider}`);
+      // Emit LLM generation done event
+      if (mainWindow) {
+        mainWindow.webContents.send("llm:generation-done", { provider: llmProvider });
+      }
     } else {
       console.error(`[LLM] ✗ Failed (Type: ${requestType}) | Error: ${result.error}`);
+      // Emit LLM generation done event (error case)
+      if (mainWindow) {
+        mainWindow.webContents.send("llm:generation-done", { provider: llmProvider, error: true });
+      }
     }
 
     return result;
   } catch (err) {
     const errorMsg = (err as Error)?.message || "Question processing failed.";
     console.error(`[LLM] ✗ Two-pass processing failed: ${errorMsg}`);
+    // Emit LLM generation done event (error case)
+    if (mainWindow) {
+      mainWindow.webContents.send("llm:generation-done", { provider: llmProvider, error: true });
+    }
     return { ok: false, error: errorMsg };
   }
 });
