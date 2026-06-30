@@ -933,10 +933,12 @@ export default function App() {
       try {
         // Show more lines in advanced/deep analysis mode (20 lines) vs regular analysis (4 lines)
         const multiPvLines = advancedAnalysisMode || deepMode ? 20 : 4;
+        // Use fixed depth 10 for Analysis mode, app settings depth for Advanced mode
+        const analysisDepth = advancedAnalysisMode ? formState.analysisDepth : 10;
         const response = await electronAPI.analyzePosition({
           engine: formState.selectedEngine,
           fen,
-          depth: formState.analysisDepth,
+          depth: analysisDepth,
           multiPv: multiPvLines
         });
         if (!response?.ok) {
@@ -1632,8 +1634,9 @@ Make it detailed and exciting!`;
     }
 
     if (matchedIndex >= 0) {
-      // Match found: auto-select the line
-      handleSelectEngineLine(matchedIndex, analysisLines[matchedIndex]);
+      // Match found: the move is in the selected line, advance the highlight
+      // The line is already selected, just increment the move index
+      setCurrentMoveIndex((prev) => prev + 1);
     } else {
       // No match: analyze the new position
       runAnalysis(newFen);
