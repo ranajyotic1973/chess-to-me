@@ -683,7 +683,10 @@ class EngineRunner {
         this.send("ucinewgame");
         const multiPvValue = Math.max(1, Math.min(4, Number(multiPv) || 1));
         this.send(`setoption name MultiPV value ${multiPvValue}`);
-        this.send(`position fen ${fen}`);
+        // Normalize FEN: convert legacy "start" string to actual starting position FEN
+        const STARTING_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+        const actualFen = fen === "start" ? STARTING_FEN : fen;
+        this.send(`position fen ${actualFen}`);
         this.send(`go depth ${depth}`);
       } catch (err) {
         fail(err as Error);

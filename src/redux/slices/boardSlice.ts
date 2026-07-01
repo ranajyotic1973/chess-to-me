@@ -1,5 +1,6 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { handleBoardMove } from "../thunks/boardThunks";
+import { CHESS_STARTING_POSITION_KEY } from "../../constants/chess";
 
 interface BoardState {
   currentFen: string;
@@ -8,7 +9,7 @@ interface BoardState {
 }
 
 const initialState: BoardState = {
-  currentFen: "start",
+  currentFen: CHESS_STARTING_POSITION_KEY,
   moveHistory: [],
   selectedSquare: null,
 };
@@ -30,7 +31,7 @@ const boardSlice = createSlice({
       state.selectedSquare = action.payload;
     },
     resetBoard: (state) => {
-      state.currentFen = "start";
+      state.currentFen = CHESS_STARTING_POSITION_KEY;
       state.moveHistory = [];
       state.selectedSquare = null;
     },

@@ -3,6 +3,7 @@ import { Box, IconButton, Tooltip } from "@mui/material";
 import { RestartAlt } from "@mui/icons-material";
 import { Chess } from "chess.js";
 import type { AnalysisBoardProps } from "../types";
+import { CHESS_STARTING_POSITION_KEY } from "../constants/chess";
 
 const detectChessboardConstructor = () => {
   if (typeof window === "undefined") {
@@ -128,7 +129,7 @@ export default function AnalysisBoard({
     }
     // Clear selection when position changes
     setSelectedSquare(null);
-    if (currentFen === "start") {
+    if (currentFen === CHESS_STARTING_POSITION_KEY) {
       chess.current.reset();
       boardInstance.current.position("start");
       return;
