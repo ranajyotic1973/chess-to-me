@@ -345,44 +345,83 @@ class EngineRunner {
     }
     await this.stop();
     const isLC0 = this.engineName.toLowerCase() === "lc0";
-    const savedBackend = isLC0 ? (settings.get("lc0Backend") as string | undefined) : undefined;
 
     mainWindow?.webContents.send("engine:warming-up", { engine: this.engineName });
-    try {
-      await this.start(enginePath, savedBackend);
-    } catch (err) {
-      if (isLC0 && this.isGPUInitializationError(err as Error)) {
-        console.log(`[lc0] GPU acceleration not available on ${process.platform} — offering CPU fallback`);
 
-        const recommendedBackends = this.getRecommendedBackends();
-        const currentAttempt = savedBackend || recommendedBackends[0];
-        const cpuBackend = "onnx-cpu";
-
-        // Show dialog to user about GPU issue
-        const result = await dialog.showMessageBox(mainWindow!, {
-          type: "warning",
-          title: "GPU Acceleration Unavailable",
-          message: `Could not initialize GPU acceleration for LC0 on ${this.getPlatformName()}.`,
-          detail: `The app will fall back to CPU-only analysis, which will be slower.\n\nAnalysis may take 90+ seconds per position on CPU.\n\nDo you want to continue with CPU-only mode?`,
-          buttons: ["Continue with CPU", "Cancel"],
-          defaultId: 0,
-        });
-
-        if (result.response === 1) {
-          // User clicked Cancel
-          mainWindow?.webContents.send("engine:ready", { engine: this.engineName, ok: false });
-          throw new Error("User cancelled engine initialization without GPU");
-        }
-
-        console.log(`[lc0] User confirmed CPU-only mode on ${process.platform}`);
-        settings.set("lc0Backend", cpuBackend);
-        await this.start(enginePath, cpuBackend);
-      } else {
+    if (!isLC0) {
+      // Stockfish doesn't need backend management
+      try {
+        await this.start(enginePath);
+      } catch (err) {
         mainWindow?.webContents.send("engine:ready", { engine: this.engineName, ok: false });
         throw err;
       }
+      mainWindow?.webContents.send("engine:ready", { engine: this.engineName, ok: true });
+      return;
     }
-    mainWindow?.webContents.send("engine:ready", { engine: this.engineName, ok: true });
+
+    // LC0 GPU backend management: always try GPU first, then CPU
+    const recommendedBackends = this.getRecommendedBackends();
+    const backendsToTry = [...recommendedBackends]; // Try recommended backends in order
+
+    let lastError: Error | null = null;
+
+    for (let i = 0; i < backendsToTry.length; i++) {
+      const backend = backendsToTry[i];
+      console.log(`[lc0] Attempting backend: ${backend}`);
+
+      try {
+        await this.start(enginePath, backend);
+        console.log(`[lc0] ✓ Backend "${backend}" initialized successfully`);
+        settings.set("lc0Backend", backend); // Save successful backend
+        mainWindow?.webContents.send("engine:ready", { engine: this.engineName, ok: true });
+        return;
+      } catch (err) {
+        lastError = err as Error;
+        console.log(`[lc0] Backend "${backend}" failed: ${lastError.message}`);
+
+        // If this is a GPU error and we have more backends to try, continue
+        if (this.isGPUInitializationError(lastError) && i < backendsToTry.length - 1) {
+          console.log(`[lc0] GPU error, will try next backend...`);
+          continue;
+        }
+
+        // Last backend or non-GPU error: show dialog
+        if (i === backendsToTry.length - 1) {
+          // All backends failed, show dialog
+          const result = await dialog.showMessageBox(mainWindow!, {
+            type: "warning",
+            title: "GPU Acceleration Unavailable",
+            message: `Could not initialize GPU acceleration for LC0 on ${this.getPlatformName()}.`,
+            detail: `The app will fall back to CPU-only analysis, which will be slower.\n\nAnalysis may take 90+ seconds per position on CPU.\n\nDo you want to continue with CPU-only mode?`,
+            buttons: ["Continue with CPU", "Cancel"],
+            defaultId: 0,
+          });
+
+          if (result.response === 1) {
+            // User clicked Cancel
+            mainWindow?.webContents.send("engine:ready", { engine: this.engineName, ok: false });
+            throw new Error("User cancelled engine initialization without GPU");
+          }
+
+          console.log(`[lc0] User confirmed CPU-only mode on ${process.platform}`);
+          // Fall through to CPU backend
+          break;
+        }
+      }
+    }
+
+    // Fallback to CPU if all else fails
+    const cpuBackend = "onnx-cpu";
+    console.log(`[lc0] Falling back to CPU backend: ${cpuBackend}`);
+    try {
+      await this.start(enginePath, cpuBackend);
+      settings.set("lc0Backend", cpuBackend);
+      mainWindow?.webContents.send("engine:ready", { engine: this.engineName, ok: true });
+    } catch (err) {
+      mainWindow?.webContents.send("engine:ready", { engine: this.engineName, ok: false });
+      throw err;
+    }
   }
 
   private isGPUInitializationError(err: Error): boolean {
