@@ -935,9 +935,10 @@ export default function App() {
       );
       dispatch(setAnalysisEntries(entries));
       dispatch(setAnalysisStatus(""));
-      fetchExplanations(fen, sortedLines);
+      // NOTE: Do NOT call fetchExplanations here. LLM only engages after user selects a line.
+      // This prevents wasting tokens on unexplained lines at startup.
     },
-    [dispatch, fetchExplanations, currentFen]
+    [dispatch, currentFen]
   );
 
   const handleSelectAnalysisLine = useCallback((entry: AnalysisEntry): void => {
@@ -1198,6 +1199,11 @@ Make it detailed and exciting!`;
     setSelectedLineBaseFen(currentFen);
     const lineNum = line.rank || lineIndex + 1;
     setStatusMessage(`Line ${lineNum} selected.`);
+
+    // Fetch LLM explanation for this selected line only (not all lines)
+    if (electronAPI?.explainLines) {
+      await fetchExplanations(currentFen, [line]);
+    }
 
     // Get the first move from the line and play it on the board
     const pv = line.pv || line.line || "";
