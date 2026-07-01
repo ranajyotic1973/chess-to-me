@@ -902,6 +902,7 @@ export default function App() {
         return;
       }
       try {
+        console.log(`[fetchExplanations] Fetching explanations for ${lines.length} lines`);
         const response = await electronAPI.explainLines({
           fen,
           lines,
@@ -912,16 +913,22 @@ export default function App() {
           llmApiKey: formState.llmApiKey
         });
 
+        console.log(`[fetchExplanations] Response received:`, { ok: response?.ok, explanationsCount: response?.explanations?.length });
+
         // Store LLM explanations by line index
         if (response?.ok && Array.isArray(response.explanations)) {
           const explanationMap: Record<number, string> = {};
           response.explanations.forEach((exp, idx) => {
             explanationMap[idx] = exp.text;
+            console.log(`[fetchExplanations] Line ${idx}: ${exp.text?.substring(0, 50)}...`);
           });
+          console.log(`[fetchExplanations] Setting lineExplanations for ${Object.keys(explanationMap).length} lines`);
           setLineExplanations(explanationMap);
+        } else {
+          console.warn(`[fetchExplanations] Unexpected response format:`, response);
         }
       } catch (err) {
-        // Handle error silently
+        console.error(`[fetchExplanations] Error:`, err);
       }
     },
     [formState.explainLanguage, formState.ollamaModel, formState.ollamaBaseUrl, formState.llmProvider, formState.llmApiKey]
