@@ -1632,19 +1632,26 @@ Make it detailed and exciting!`;
   }, [dispatch, puzzleStartFen, currentResponseData, puzzleMeta]);
 
   const handleBoardMove = useCallback((newFen: string) => {
-    dispatch(handleBoardMoveThunk({
-      newFen,
-      currentFen,
-      selectedEngineLineIndex,
-      analysisLines,
-      analysisEntries,
-      currentMoveIndex,
-      electronAPI,
-      formState: formStateRef.current,
-      advancedAnalysisMode,
-      llmProvider: formState.llmProvider,
-    }));
-  }, [dispatch, currentFen, selectedEngineLineIndex, analysisLines, analysisEntries, currentMoveIndex, advancedAnalysisMode, formState, electronAPI]);
+    (async () => {
+      const result = await dispatch(handleBoardMoveThunk({
+        newFen,
+        currentFen,
+        selectedEngineLineIndex,
+        analysisLines,
+        analysisEntries,
+        currentMoveIndex,
+        electronAPI,
+        formState: formStateRef.current,
+        advancedAnalysisMode,
+        llmProvider: formState.llmProvider,
+      }));
+
+      // If the move doesn't match the selected line, trigger analysis
+      if (result.payload?.shouldAnalyze) {
+        runAnalysis(newFen);
+      }
+    })();
+  }, [dispatch, currentFen, selectedEngineLineIndex, analysisLines, analysisEntries, currentMoveIndex, advancedAnalysisMode, formState, electronAPI, runAnalysis]);
 
   const applyPositions = useCallback(
     (positions: string[], message?: string): void => {
