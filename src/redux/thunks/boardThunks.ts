@@ -202,22 +202,11 @@ export const selectEngineLine = createAsyncThunk(
 
       const resultingFen = chess.fen();
 
-      // Trigger analysis on resulting position
-      const analyzePayload = {
-        fen: resultingFen,
-        deepMode: false,
-        electronAPI,
-        formState,
-        advancedAnalysisMode,
-      };
-
-      // Dispatch analysis separately - return what we know now
+      // Simply return the selection info (no auto-analysis)
       return {
         selectedIndex: lineIndex,
         fen: resultingFen,
         moveIndex: 0,
-        triggerAnalysis: true,
-        analysisPayload: analyzePayload,
       };
     } catch {
       return {
