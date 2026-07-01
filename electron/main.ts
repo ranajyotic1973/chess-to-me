@@ -333,7 +333,25 @@ class EngineRunner {
       await this.start(enginePath, savedBackend);
     } catch (err) {
       if (isLC0 && (err as Error)?.message?.startsWith("LC0_DML_UNSUPPORTED")) {
-        console.log("[lc0] DirectML not supported on this GPU — retrying with onnx-cpu backend");
+        console.log("[lc0] GPU acceleration (DirectML) not available — showing user option");
+
+        // Show dialog to user about GPU issue
+        const result = await dialog.showMessageBox(mainWindow!, {
+          type: "warning",
+          title: "GPU Acceleration Unavailable",
+          message: "Could not initialize GPU acceleration (DirectML) for LC0.",
+          detail: "The app will fall back to CPU-only analysis, which will be slower. Analysis may take 90+ seconds per position.\n\nDo you want to continue with CPU-only mode?",
+          buttons: ["Continue with CPU", "Cancel"],
+          defaultId: 0,
+        });
+
+        if (result.response === 1) {
+          // User clicked Cancel
+          mainWindow?.webContents.send("engine:ready", { engine: this.engineName, ok: false });
+          throw new Error("User cancelled engine initialization without GPU");
+        }
+
+        console.log("[lc0] User confirmed CPU-only mode");
         settings.set("lc0Backend", "onnx-cpu");
         await this.start(enginePath, "onnx-cpu");
       } else {
