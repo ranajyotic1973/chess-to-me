@@ -320,6 +320,25 @@ class EngineRunner {
     }
   }
 
+  private getRecommendedBackends(): string[] {
+    // Return GPU backends in order of preference based on platform and detected hardware
+    const platform = process.platform;
+
+    if (platform === "win32") {
+      // Windows: try DirectML first (supports Intel, NVIDIA, AMD), fallback to CPU
+      return ["onnx-dml", "onnx-cpu"];
+    } else if (platform === "darwin") {
+      // macOS: Metal is the native GPU backend, fallback to CPU
+      // Note: Metal backend may need to be explicitly enabled in LC0 config
+      return ["onnx-cpu"]; // Metal support varies by LC0 version
+    } else if (platform === "linux") {
+      // Linux: CUDA for NVIDIA, CPU fallback (ROCm for AMD requires separate setup)
+      return ["onnx-cuda", "onnx-cpu"];
+    }
+
+    return ["onnx-cpu"]; // Default to CPU for unknown platforms
+  }
+
   async ensureRunning(enginePath: string): Promise<void> {
     if (this.proc && this.path === enginePath && !this.proc.killed) {
       return;
@@ -332,15 +351,19 @@ class EngineRunner {
     try {
       await this.start(enginePath, savedBackend);
     } catch (err) {
-      if (isLC0 && (err as Error)?.message?.startsWith("LC0_DML_UNSUPPORTED")) {
-        console.log("[lc0] GPU acceleration (DirectML) not available — showing user option");
+      if (isLC0 && this.isGPUInitializationError(err as Error)) {
+        console.log(`[lc0] GPU acceleration not available on ${process.platform} — offering CPU fallback`);
+
+        const recommendedBackends = this.getRecommendedBackends();
+        const currentAttempt = savedBackend || recommendedBackends[0];
+        const cpuBackend = "onnx-cpu";
 
         // Show dialog to user about GPU issue
         const result = await dialog.showMessageBox(mainWindow!, {
           type: "warning",
           title: "GPU Acceleration Unavailable",
-          message: "Could not initialize GPU acceleration (DirectML) for LC0.",
-          detail: "The app will fall back to CPU-only analysis, which will be slower. Analysis may take 90+ seconds per position.\n\nDo you want to continue with CPU-only mode?",
+          message: `Could not initialize GPU acceleration for LC0 on ${this.getPlatformName()}.`,
+          detail: `The app will fall back to CPU-only analysis, which will be slower.\n\nAnalysis may take 90+ seconds per position on CPU.\n\nDo you want to continue with CPU-only mode?`,
           buttons: ["Continue with CPU", "Cancel"],
           defaultId: 0,
         });
@@ -351,15 +374,41 @@ class EngineRunner {
           throw new Error("User cancelled engine initialization without GPU");
         }
 
-        console.log("[lc0] User confirmed CPU-only mode");
-        settings.set("lc0Backend", "onnx-cpu");
-        await this.start(enginePath, "onnx-cpu");
+        console.log(`[lc0] User confirmed CPU-only mode on ${process.platform}`);
+        settings.set("lc0Backend", cpuBackend);
+        await this.start(enginePath, cpuBackend);
       } else {
         mainWindow?.webContents.send("engine:ready", { engine: this.engineName, ok: false });
         throw err;
       }
     }
     mainWindow?.webContents.send("engine:ready", { engine: this.engineName, ok: true });
+  }
+
+  private isGPUInitializationError(err: Error): boolean {
+    const message = err.message || "";
+    const platform = process.platform;
+
+    if (platform === "win32") {
+      // Windows DirectML errors
+      return message.includes("LC0_DML_UNSUPPORTED") || message.includes("887A0004") || message.includes("dml_provider");
+    } else if (platform === "darwin") {
+      // macOS specific GPU errors
+      return message.includes("Metal") || message.includes("GPU");
+    } else if (platform === "linux") {
+      // Linux CUDA/GPU errors
+      return message.includes("CUDA") || message.includes("cuda") || message.includes("GPU");
+    }
+
+    return false;
+  }
+
+  private getPlatformName(): string {
+    const platform = process.platform;
+    if (platform === "win32") return "Windows";
+    if (platform === "darwin") return "macOS";
+    if (platform === "linux") return "Linux";
+    return platform;
   }
 
   start(enginePath: string, backendOverride?: string): Promise<void> {
