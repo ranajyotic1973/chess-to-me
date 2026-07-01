@@ -518,9 +518,12 @@ class EngineRunner {
       let bestMove = "";
       const linesByRank = new Map<number, any>();
       let done = false;
+      let maxDepthSeen = 0;
+      const MIN_DEPTH_FOR_STABILITY = 10;
 
       const cleanup = () => {
         clearTimeout(timer);
+        clearTimeout(depthCheckTimer);
         this.proc?.stdout?.off("data", onData);
       };
 
@@ -558,7 +561,10 @@ class EngineRunner {
       const parseInfo = (line: string) => {
         // Extract depth (provided by both Stockfish and LC0)
         const depthMatch = line.match(/\bdepth\s(\d+)/);
-        const depth = depthMatch ? Number(depthMatch[1]) : undefined;
+        const currentDepth = depthMatch ? Number(depthMatch[1]) : undefined;
+        if (currentDepth) {
+          maxDepthSeen = Math.max(maxDepthSeen, currentDepth);
+        }
 
         // Score parsing: engines are mutually exclusive
         // Stockfish outputs: "score cp <value>" or "score mate <value>"
@@ -573,20 +579,20 @@ class EngineRunner {
         const existing = linesByRank.get(rank) || { score: null, pv: "" };
 
         // Log parsing details to console
-        console.log(`[${this.engineName}] Parsing info line | depth: ${depth}, rank: ${rank}`);
+        console.log(`[${this.engineName}] Parsing info line | depth: ${currentDepth}, rank: ${rank}`);
 
         // Set score based on engine type.
         // Scores are converted to white-positive: negate when black is to move.
         if (scoreCp) {
           const raw = Number(scoreCp[1]);
           const value = blackToMove ? -raw : raw;
-          existing.score = { type: "cp", value, depth };
-          console.log(`[${this.engineName}] ✓ Parsed CP score: ${raw} cp → ${value} (white-positive, depth ${depth})`);
+          existing.score = { type: "cp", value, depth: currentDepth };
+          console.log(`[${this.engineName}] ✓ Parsed CP score: ${raw} cp → ${value} (white-positive, depth ${currentDepth})`);
         } else if (scoreMate) {
           const raw = Number(scoreMate[1]);
           const value = blackToMove ? -raw : raw;
-          existing.score = { type: "mate", value, depth };
-          console.log(`[${this.engineName}] ✓ Parsed MATE score: mate in ${raw} → ${value} (white-positive, depth ${depth})`);
+          existing.score = { type: "mate", value, depth: currentDepth };
+          console.log(`[${this.engineName}] ✓ Parsed MATE score: mate in ${raw} → ${value} (white-positive, depth ${currentDepth})`);
         } else if (scoreWdl) {
           // WDL: wins/draws/losses from side-to-move's perspective.
           // White win probability = wins when white moves, losses when black moves.
@@ -595,8 +601,8 @@ class EngineRunner {
           const losses = Number(scoreWdl[3]);
           const total = wins + draws + losses;
           const winProb = total > 0 ? (blackToMove ? losses / total : wins / total) : 0;
-          existing.score = { winProb, depth };
-          console.log(`[${this.engineName}] ✓ Parsed WDL score: ${wins}/${draws}/${losses} → ${(winProb * 100).toFixed(1)}% white win prob (depth ${depth})`);
+          existing.score = { winProb, depth: currentDepth };
+          console.log(`[${this.engineName}] ✓ Parsed WDL score: ${wins}/${draws}/${losses} → ${(winProb * 100).toFixed(1)}% white win prob (depth ${currentDepth})`);
         } else {
           console.log(`[${this.engineName}] ⚠ No score found in line`);
         }
@@ -606,6 +612,16 @@ class EngineRunner {
           console.log(`[${this.engineName}] ✓ Parsed PV: ${pv[1]}`);
         }
         linesByRank.set(rank, existing);
+      };
+
+      const stopAnalysis = (reason: string) => {
+        if (done) return;
+        console.log(`[${this.engineName}] ${reason} - stopping analysis`);
+        try {
+          this.proc?.stdin?.write("stop\n");
+        } catch (err) {
+          console.error(`[${this.engineName}] Failed to send stop command:`, err);
+        }
       };
 
       const onData = (chunk: Buffer) => {
@@ -644,38 +660,24 @@ class EngineRunner {
       const fallbackTimeoutMs = this.engineName.toLowerCase() === "lc0" ? LC0_ANALYZE_TIMEOUT_MS : ANALYZE_TIMEOUT_MS;
       const timeoutMs = configuredTimeoutMs ? Number(configuredTimeoutMs) : fallbackTimeoutMs;
 
+      let depthCheckTimer: NodeJS.Timeout;
+      const depthCheckInterval = 500; // Check every 500ms if we've reached min depth
+
+      const checkDepth = () => {
+        if (done || maxDepthSeen < MIN_DEPTH_FOR_STABILITY) {
+          depthCheckTimer = setTimeout(checkDepth, depthCheckInterval);
+          return;
+        }
+        stopAnalysis(`Minimum depth (${MIN_DEPTH_FOR_STABILITY}) reached after ${maxDepthSeen} plies`);
+      };
+
       const timeoutAction = () => {
         if (done) return;
-
-        console.log(`[${this.engineName}] Timeout reached (${timeoutMs}ms) - sending stop command`);
-
-        // Send graceful stop command
-        try {
-          this.proc?.stdin?.write("stop\n");
-        } catch (err) {
-          console.error(`[${this.engineName}] Failed to send stop command:`, err);
-        }
-
-        // Snapshot whatever lines we have collected so far
-        const snapshotLines = [...linesByRank.entries()]
-          .sort((a, b) => a[0] - b[0])
-          .slice(0, 4)
-          .map(([rank, value]) => ({
-            rank,
-            score: value.score || null,
-            pv: value.pv || ""
-          }));
-
-        if (snapshotLines.length > 0) {
-          console.log(`[${this.engineName}] Resolving with partial snapshot (${snapshotLines.length} lines)`);
-          finish();
-        } else {
-          console.log(`[${this.engineName}] No lines collected - rejecting`);
-          fail(new Error(`${this.engineName} analysis timeout with no results`));
-        }
+        stopAnalysis(`Hard timeout reached (${timeoutMs}ms)`);
       };
 
       const timer = setTimeout(timeoutAction, timeoutMs);
+      depthCheckTimer = setTimeout(checkDepth, depthCheckInterval);
 
       try {
         this.send("ucinewgame");
