@@ -1197,8 +1197,9 @@ Make it detailed and exciting!`;
     }
   }, [formState.explainLanguage, formState.ollamaModel, formState.ollamaBaseUrl, formState.llmProvider, formState.llmApiKey, formState.llmModel]);
 
-  const handleSelectEngineLine = useCallback(async (lineIndex: number, line: AnalysisLine) => {
-    // Dispatch the selectEngineLine thunk with full payload
+  const handleSelectEngineLine = useCallback((lineIndex: number, line: AnalysisLine) => {
+    // Simply select the line and show its details
+    // Don't automatically play the first move - let the user play it
     dispatch(selectEngineLineThunk({
       lineIndex,
       analysisEntries,
@@ -1211,78 +1212,10 @@ Make it detailed and exciting!`;
     setSelectedEngineLineData(line);
     setSelectedLineAnalysisEntry(analysisEntries[lineIndex] || null);
     setSelectedLineBaseFen(currentFen);
+    dispatch(setCurrentMoveIndex(0)); // Start from the first move in the line
     const lineNum = line.rank || lineIndex + 1;
-    setStatusMessage(`Line ${lineNum} selected.`);
-
-    // Get the first move from the line and play it on the board
-    const pv = line.pv || line.line || "";
-    const moves = pv.split(/\s+/).filter((m) => m.trim());
-
-    if (moves.length === 0) return;
-
-    const myRequestId = ++drillRequestIdRef.current;
-    const chess = new Chess();
-    let resultingFen: string;
-    try {
-      // Handle "start" literal vs full FEN string
-      if (currentFen === "start") {
-        chess.reset();
-      } else {
-        chess.load(currentFen);
-      }
-
-      const moveResult = chess.move({ from: moves[0].slice(0, 2), to: moves[0].slice(2, 4), promotion: moves[0][4] as any });
-      if (!moveResult) return;
-
-      resultingFen = chess.fen();
-
-      // Play the first move on the board automatically
-      suppressNextAutoEvalRef.current = true;
-      dispatch(setCurrentFen(resultingFen));
-    } catch {
-      return;
-    }
-
-    // Analyze the position after the first move to show candidate lines (BEFORE LLM explanation)
-    if (!engineStatusRef.current?.configured || !electronAPI?.analyzePosition) {
-      // If engine not available, just explain the move and return
-      await fetchPerMoveExplanation(lineIndex, line, currentFen, 0, moves[0]);
-      return;
-    }
-
-    try {
-      // Show more lines in advanced/deep analysis mode (20 lines) vs regular analysis (4 lines)
-      const multiPvLines = advancedAnalysisModeRef.current ? 20 : 4;
-      const response = await electronAPI.analyzePosition({
-        engine: formStateRef.current.selectedEngine,
-        fen: resultingFen,
-        depth: 5,
-        multiPv: multiPvLines,
-      });
-
-      if (drillRequestIdRef.current !== myRequestId) return; // stale request
-
-      if (response?.ok) {
-        const newLines: AnalysisLine[] = (response as any).analysis?.lines ?? [];
-        if (newLines.length > 0) {
-          // Sort lines by score (best first)
-          const sortedNewLines = sortLinesByScore(newLines);
-          dispatch(setAnalysisLines(sortedNewLines));
-          dispatch(setAnalysisEntries(sortedNewLines.map((l, i) => parseStockfishLine(l, i + 1, resultingFen))));
-          // Keep the line selected, don't clear it
-          dispatch(setCurrentMoveIndex(0));
-          // Fetch LLM explanations for the new candidate lines AFTER engine analysis
-          fetchExplanations(resultingFen, sortedNewLines);
-        }
-      }
-
-      // NOW fetch LLM explanation for the first move (AFTER engine analysis completes)
-      await fetchPerMoveExplanation(lineIndex, line, currentFen, 0, moves[0]);
-    } catch {
-      // Analysis failed — still explain the move
-      await fetchPerMoveExplanation(lineIndex, line, currentFen, 0, moves[0]);
-    }
-  }, [dispatch, currentFen, fetchPerMoveExplanation, fetchExplanations]);
+    setStatusMessage(`Line ${lineNum} selected. Make the first move to follow this line.`);
+  }, [dispatch, currentFen, analysisEntries]);
 
   // Pops one level of the exploration stack (or just clears the current selection at
   // the top level), restoring the prior list and its response without a fresh call.
@@ -1646,7 +1579,8 @@ Make it detailed and exciting!`;
         llmProvider: formState.llmProvider,
       }));
 
-      // If the move doesn't match the selected line, trigger analysis
+      // If the move doesn't match the selected line, trigger analysis with LLM
+      // (The extraReducer handles updating currentMoveIndex when move matches the line)
       if (result.payload?.shouldAnalyze) {
         runAnalysis(newFen);
       }
