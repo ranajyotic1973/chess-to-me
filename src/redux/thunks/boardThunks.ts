@@ -32,14 +32,22 @@ function matchMoveAgainstLine(
   currentMoveIndex: number
 ): MoveMatchResult {
   if (selectedLineIndex === null || !analysisEntries[selectedLineIndex]) {
+    console.log(`[matchMoveAgainstLine] No selected line or entry`, { selectedLineIndex, hasEntry: selectedLineIndex !== null && analysisEntries[selectedLineIndex] });
     return { matched: false, shouldRunAnalysis: true };
   }
 
   const line = analysisEntries[selectedLineIndex];
   const moves: Move[] = line.moves || [];
 
+  console.log(`[matchMoveAgainstLine] Checking line ${selectedLineIndex}`, {
+    movesCount: moves.length,
+    currentMoveIndex,
+    exhaustedLine: currentMoveIndex >= moves.length,
+  });
+
   if (currentMoveIndex >= moves.length) {
     // We've exhausted this line, analyze the new position
+    console.log(`[matchMoveAgainstLine] Line exhausted`);
     return { matched: false, shouldRunAnalysis: true };
   }
 
@@ -61,13 +69,21 @@ function matchMoveAgainstLine(
     }
 
     const expectedFen = chess.fen();
+    const matched = expectedFen === userFen;
+    console.log(`[matchMoveAgainstLine] Move check`, {
+      expectedFen,
+      userFen,
+      matched,
+    });
+
     return {
-      matched: expectedFen === userFen,
+      matched,
       matchedLineIndex: selectedLineIndex,
-      shouldRunAnalysis: expectedFen !== userFen,
+      shouldRunAnalysis: !matched,
       newMoveIndex: currentMoveIndex + 1,
     };
-  } catch {
+  } catch (err) {
+    console.error(`[matchMoveAgainstLine] Error during matching:`, err);
     return { matched: false, shouldRunAnalysis: true };
   }
 }
@@ -87,12 +103,23 @@ export const handleBoardMove = createAsyncThunk(
 
     currentFen = payload.currentFen;
 
+    console.log(`[handleBoardMove thunk] Checking move match`, {
+      selectedEngineLineIndex,
+      newFen,
+      currentFen: payload.currentFen,
+      currentMoveIndex,
+      analysisEntriesCount: analysisEntries.length,
+      hasSelectedEntry: selectedEngineLineIndex !== null && analysisEntries[selectedEngineLineIndex],
+    });
+
     const matchResult = matchMoveAgainstLine(
       newFen,
       selectedEngineLineIndex,
       analysisEntries,
       currentMoveIndex
     );
+
+    console.log(`[handleBoardMove thunk] Match result:`, matchResult);
 
     return {
       fen: newFen,

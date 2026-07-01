@@ -1200,6 +1200,7 @@ Make it detailed and exciting!`;
   const handleSelectEngineLine = useCallback((lineIndex: number, line: AnalysisLine) => {
     // Simply select the line and show its details
     // Don't automatically play the first move - let the user play it
+    console.log(`[handleSelectEngineLine] Selected line ${lineIndex}`, { lineIndex, currentFen, analysisEntries: analysisEntries.length });
     dispatch(selectEngineLineThunk({
       lineIndex,
       analysisEntries,
@@ -1565,24 +1566,45 @@ Make it detailed and exciting!`;
   }, [dispatch, puzzleStartFen, currentResponseData, puzzleMeta]);
 
   const handleBoardMove = useCallback((newFen: string) => {
+    console.log(`[handleBoardMove] Move detected`, {
+      newFen,
+      currentFen,
+      selectedEngineLineIndex,
+      hasSelectedLine: selectedEngineLineIndex !== null,
+      analysisEntriesCount: analysisEntries.length,
+      currentMoveIndex
+    });
     (async () => {
-      const result = await dispatch(handleBoardMoveThunk({
-        newFen,
-        currentFen,
-        selectedEngineLineIndex,
-        analysisLines,
-        analysisEntries,
-        currentMoveIndex,
-        electronAPI,
-        formState: formStateRef.current,
-        advancedAnalysisMode,
-        llmProvider: formState.llmProvider,
-      }));
+      try {
+        const result = await dispatch(handleBoardMoveThunk({
+          newFen,
+          currentFen,
+          selectedEngineLineIndex,
+          analysisLines,
+          analysisEntries,
+          currentMoveIndex,
+          electronAPI,
+          formState: formStateRef.current,
+          advancedAnalysisMode,
+          llmProvider: formState.llmProvider,
+        }));
 
-      // If the move doesn't match the selected line, trigger analysis with LLM
-      // (The extraReducer handles updating currentMoveIndex when move matches the line)
-      if (result.payload?.shouldAnalyze) {
-        runAnalysis(newFen);
+        console.log(`[handleBoardMove] Thunk result:`, {
+          moveMatched: result.payload?.moveMatched,
+          shouldAnalyze: result.payload?.shouldAnalyze,
+          newMoveIndex: result.payload?.newMoveIndex,
+        });
+
+        // If the move doesn't match the selected line, trigger analysis with LLM
+        // (The extraReducer handles updating currentMoveIndex when move matches the line)
+        if (result.payload?.shouldAnalyze) {
+          console.log(`[handleBoardMove] Triggering analysis for new position`);
+          runAnalysis(newFen);
+        } else if (result.payload?.moveMatched) {
+          console.log(`[handleBoardMove] Move matched line, moving to index ${result.payload.newMoveIndex}`);
+        }
+      } catch (err) {
+        console.error(`[handleBoardMove] Error dispatching thunk:`, err);
       }
     })();
   }, [dispatch, currentFen, selectedEngineLineIndex, analysisLines, analysisEntries, currentMoveIndex, advancedAnalysisMode, formState, electronAPI, runAnalysis]);
