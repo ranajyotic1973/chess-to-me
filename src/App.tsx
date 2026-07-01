@@ -41,6 +41,10 @@ import {
   setAnalysisStatus,
   setAdvancedAnalysisMode
 } from "./redux/slices/uiSlice";
+import {
+  handleBoardMove as handleBoardMoveThunk,
+  selectEngineLine as selectEngineLineThunk
+} from "./redux/thunks/boardThunks";
 import MoveWarningDialog from "./components/MoveWarningDialog";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -1193,17 +1197,20 @@ Make it detailed and exciting!`;
   }, [formState.explainLanguage, formState.ollamaModel, formState.ollamaBaseUrl, formState.llmProvider, formState.llmApiKey, formState.llmModel]);
 
   const handleSelectEngineLine = useCallback(async (lineIndex: number, line: AnalysisLine) => {
-    dispatch(selectEngineLine({ index: lineIndex }));
+    // Dispatch the selectEngineLine thunk with full payload
+    dispatch(selectEngineLineThunk({
+      lineIndex,
+      analysisEntries,
+      currentFen,
+      electronAPI,
+      formState: formStateRef.current,
+      advancedAnalysisMode,
+      llmProvider: formState.llmProvider,
+    }));
     setSelectedEngineLineData(line);
-    dispatch(setCurrentMoveIndex(0));
     setSelectedLineBaseFen(currentFen);
     const lineNum = line.rank || lineIndex + 1;
     setStatusMessage(`Line ${lineNum} selected.`);
-
-    // Fetch LLM explanation for this selected line only (not all lines)
-    if (electronAPI?.explainLines) {
-      await fetchExplanations(currentFen, [line]);
-    }
 
     // Get the first move from the line and play it on the board
     const pv = line.pv || line.line || "";
@@ -1622,56 +1629,19 @@ Make it detailed and exciting!`;
   }, [dispatch, puzzleStartFen, currentResponseData, puzzleMeta]);
 
   const handleBoardMove = useCallback((newFen: string) => {
-    // Extract the move by comparing the current FEN with the new FEN
-    const baseFen = selectedLineBaseFen || currentFen;
-    if (!baseFen || !newFen) return;
-
-    // Try to find the move that was made
-    const chess = new Chess();
-    let moveUci: string | null = null;
-    try {
-      // Handle "start" literal vs full FEN string
-      if (baseFen === "start") {
-        chess.reset();
-      } else {
-        chess.load(baseFen);
-      }
-      const moves = chess.moves({ verbose: true });
-      for (const m of moves) {
-        chess.move(m);
-        if (chess.fen() === newFen) {
-          moveUci = `${m.from}${m.to}${m.promotion || ""}`.toLowerCase();
-          break;
-        }
-        chess.undo();
-      }
-    } catch {
-      return; // Invalid FEN, skip move matching
-    }
-
-    if (!moveUci) return; // Unable to determine move
-
-    // Try to match move against engine lines
-    let matchedIndex = -1;
-    for (let i = 0; i < analysisLines.length; i++) {
-      const line = analysisLines[i];
-      const pv = line.pv || line.line || "";
-      const firstMove = pv.split(/\s+/)[0] || "";
-      if (firstMove.toLowerCase() === moveUci) {
-        matchedIndex = i;
-        break;
-      }
-    }
-
-    if (matchedIndex >= 0) {
-      // Match found: the move is in the selected line, advance the highlight
-      // The line is already selected, just increment the move index
-      dispatch(setCurrentMoveIndex(currentMoveIndex + 1));
-    } else {
-      // No match: analyze the new position
-      runAnalysis(newFen);
-    }
-  }, [dispatch, currentFen, selectedLineBaseFen, analysisLines, currentMoveIndex, runAnalysis]);
+    dispatch(handleBoardMoveThunk({
+      newFen,
+      currentFen,
+      selectedEngineLineIndex,
+      analysisLines,
+      analysisEntries,
+      currentMoveIndex,
+      electronAPI,
+      formState: formStateRef.current,
+      advancedAnalysisMode,
+      llmProvider: formState.llmProvider,
+    }));
+  }, [dispatch, currentFen, selectedEngineLineIndex, analysisLines, analysisEntries, currentMoveIndex, advancedAnalysisMode, formState, electronAPI]);
 
   const applyPositions = useCallback(
     (positions: string[], message?: string): void => {

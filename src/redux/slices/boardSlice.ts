@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { handleBoardMove } from "../thunks/boardThunks";
+import { handleBoardMove as handleBoardMoveThunk } from "../thunks/boardThunks";
 import { CHESS_STARTING_POSITION_KEY } from "../../constants/chess";
 
 interface BoardState {
@@ -37,7 +37,7 @@ const boardSlice = createSlice({
     },
   },
   extraReducers: (builder) => {
-    builder.addCase(handleBoardMove.fulfilled, (state, action) => {
+    builder.addCase(handleBoardMoveThunk.fulfilled, (state, action) => {
       state.currentFen = action.payload.fen;
       if (action.payload.fen !== "start") {
         state.moveHistory.push(action.payload.fen);

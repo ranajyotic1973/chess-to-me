@@ -6,6 +6,10 @@ import {
   fetchPerMoveExplanation,
   deepAnalyzeLine,
 } from "../thunks/analysisThunks";
+import {
+  handleBoardMove,
+  selectEngineLine as selectEngineLineThunk,
+} from "../thunks/boardThunks";
 
 interface DeepAnalysisResult {
   [key: string]: Record<string, string>;
@@ -114,6 +118,19 @@ const analysisSlice = createSlice({
       const { lineIndex, results } = action.payload;
       state.deepAnalysisResults[lineIndex] = results;
       state.deepAnalysisLoading = false;
+    });
+
+    // selectEngineLine thunk
+    builder.addCase(selectEngineLineThunk.fulfilled, (state, action) => {
+      state.selectedEngineLineIndex = action.payload.selectedIndex;
+      state.currentMoveIndex = action.payload.moveIndex || 0;
+    });
+
+    // handleBoardMove thunk
+    builder.addCase(handleBoardMove.fulfilled, (state, action) => {
+      if (action.payload.moveMatched) {
+        state.currentMoveIndex = action.payload.newMoveIndex || 0;
+      }
     });
   },
 });
