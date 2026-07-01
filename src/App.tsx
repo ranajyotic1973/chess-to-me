@@ -1626,9 +1626,12 @@ Make it detailed and exciting!`;
     if (lastAnalyzedFenRef.current && analysisLines.length > 0 && selectedEngineLineIndex === null) {
       console.log(`[useEffect] Fetching LLM explanations for position after move`);
       fetchExplanations(lastAnalyzedFenRef.current, analysisLines);
+      // Auto-select first line so its explanation is visible
+      dispatch(selectEngineLine({ index: 0 }));
+      console.log(`[useEffect] Auto-selected first line to show explanation`);
       lastAnalyzedFenRef.current = ""; // Clear it so we don't fetch twice
     }
-  }, [analysisLines, fetchExplanations, selectedEngineLineIndex]);
+  }, [analysisLines, fetchExplanations, selectedEngineLineIndex, dispatch]);
 
   const applyPositions = useCallback(
     (positions: string[], message?: string): void => {
