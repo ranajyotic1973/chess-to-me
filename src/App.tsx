@@ -347,6 +347,8 @@ export default function App() {
   // auto-eval effect (keyed on currentFen) would otherwise immediately re-run for that
   // same position, duplicating the analysis we just did AND wiping explorationStack.
   const suppressNextAutoEvalRef = useRef(false);
+  // Track the FEN being analyzed when user makes a move so we can fetch LLM for it
+  const lastAnalyzedFenRef = useRef<string>("");
   // Training agent state (Opening / Endgame)
   const [trainingMoves, setTrainingMoves] = useState<Array<{ uci: string; san: string; commentary: string }>>([]);
   const [trainingMoveIndex, setTrainingMoveIndex] = useState<number>(-1);
@@ -1599,6 +1601,9 @@ Make it detailed and exciting!`;
         // (The extraReducer handles updating currentMoveIndex when move matches the line)
         if (result.payload?.shouldAnalyze) {
           console.log(`[handleBoardMove] Triggering analysis for new position`);
+          // Store the FEN we're analyzing for LLM later
+          lastAnalyzedFenRef.current = newFen;
+          // Run engine analysis (this will update Redux state with new lines)
           runAnalysis(newFen);
         } else if (result.payload?.moveMatched) {
           console.log(`[handleBoardMove] Move matched line, moving to index ${result.payload.newMoveIndex}`);
@@ -1608,6 +1613,15 @@ Make it detailed and exciting!`;
       }
     })();
   }, [dispatch, currentFen, selectedEngineLineIndex, analysisLines, analysisEntries, currentMoveIndex, advancedAnalysisMode, formState, electronAPI, runAnalysis]);
+
+  // Fetch LLM explanations when new analysisLines arrive after a move
+  useEffect(() => {
+    if (lastAnalyzedFenRef.current && analysisLines.length > 0 && selectedEngineLineIndex === null) {
+      console.log(`[useEffect] Fetching LLM explanations for position after move`);
+      fetchExplanations(lastAnalyzedFenRef.current, analysisLines);
+      lastAnalyzedFenRef.current = ""; // Clear it so we don't fetch twice
+    }
+  }, [analysisLines, fetchExplanations, selectedEngineLineIndex]);
 
   const applyPositions = useCallback(
     (positions: string[], message?: string): void => {
