@@ -210,8 +210,8 @@ function isModelRelevantForProvider(provider: string, model: string): boolean {
 
 
 const ENGINE_VERIFY_TIMEOUT_MS = 5000;
-const ANALYZE_TIMEOUT_MS = 60000; // 60 seconds for Stockfish
-const LC0_ANALYZE_TIMEOUT_MS = 120000; // 120 seconds for LC0 (slower neural network)
+const ANALYZE_TIMEOUT_MS = 90000; // 90 seconds for Stockfish
+const LC0_ANALYZE_TIMEOUT_MS = 90000; // 90 seconds for LC0 (allows reaching deeper depths)
 const PROCESS_LOG_LIMIT = 400;
 const OLLAMA_SERVE_RESTART_MS = 2500;
 
