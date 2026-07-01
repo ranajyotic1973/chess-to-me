@@ -378,11 +378,18 @@ class EngineRunner {
         return;
       } catch (err) {
         lastError = err as Error;
-        console.log(`[lc0] Backend "${backend}" failed: ${lastError.message}`);
+        const isGpuError = this.isGPUInitializationError(lastError);
+
+        // Log GPU errors more gracefully (they're expected on unsupported hardware)
+        if (isGpuError) {
+          console.log(`[lc0] Backend "${backend}" not supported on this hardware (this is normal and expected on unsupported GPUs)`);
+        } else {
+          console.log(`[lc0] Backend "${backend}" failed: ${lastError.message}`);
+        }
 
         // If this is a GPU error and we have more backends to try, continue
-        if (this.isGPUInitializationError(lastError) && i < backendsToTry.length - 1) {
-          console.log(`[lc0] GPU error, will try next backend...`);
+        if (isGpuError && i < backendsToTry.length - 1) {
+          console.log(`[lc0] Attempting next backend...`);
           continue;
         }
 
@@ -490,8 +497,9 @@ class EngineRunner {
       const onExit = () => {
         if (!settled) {
           if (dmlErrorSeen) {
-            // Sentinel picked up by ensureRunning to retry with onnx-cpu
-            fail(new Error("LC0_DML_UNSUPPORTED: DirectML backend not supported on this GPU."));
+            // GPU initialization failed; this will trigger fallback to CPU backend in ensureRunning
+            console.log(`[${this.engineName}] DirectML backend not supported, initiating CPU fallback...`);
+            fail(new Error("LC0_DML_UNSUPPORTED: DirectML backend not supported on this GPU (will retry with CPU)."));
           } else {
             const msg = isLC0
               ? `${this.engineName} process exited before initialization. Ensure LC0 weights file is installed.`
@@ -502,11 +510,15 @@ class EngineRunner {
       };
       const onStderr = (chunk: Buffer) => {
         const text = chunk?.toString?.() || "";
-        console.log(`[${this.engineName}] STDERR: ${text}`);
-        this.emitLog({ text, stream: "stderr", context: "uci-init" });
         // 887A0004 = DXGI_ERROR_UNSUPPORTED — DirectML feature level not supported on this GPU
+        // This is expected on unsupported hardware and will be handled gracefully with fallback to CPU
         if (isLC0 && (text.includes("887A0004") || text.includes("dml_provider_factory"))) {
           dmlErrorSeen = true;
+          console.log(`[${this.engineName}] ⚠ DirectML initialization error detected, will fall back to CPU backend`);
+          this.emitLog({ text: "DirectML unsupported on this GPU, falling back to CPU", stream: "stderr", context: "uci-init" });
+        } else {
+          console.log(`[${this.engineName}] STDERR: ${text}`);
+          this.emitLog({ text, stream: "stderr", context: "uci-init" });
         }
       };
       // LC0 defers DirectML/GPU backend init to the first go command, so warmup can
