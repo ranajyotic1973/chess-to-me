@@ -6,6 +6,7 @@ import { formatHighlightedMoveNotation } from "../utils/formatHighlightedMoveNot
 interface SelectedLineDetailProps {
   selectedLineNum: number | null;
   selectedEngineLineIndex: number | null;
+  selectedLineEntry?: AnalysisEntry | null;
   analysisEntries: AnalysisEntry[];
   currentMoveIndex: number;
   onDeselectLine?: () => void;
@@ -31,6 +32,7 @@ const DEEP_ANALYSIS_FIELDS: Array<{ key: keyof DeepLineAnalysis; label: string }
 export default function SelectedLineDetail({
   selectedLineNum,
   selectedEngineLineIndex,
+  selectedLineEntry,
   analysisEntries,
   currentMoveIndex,
   onDeselectLine,
@@ -42,7 +44,8 @@ export default function SelectedLineDetail({
     return null;
   }
 
-  const entry = analysisEntries[selectedEngineLineIndex];
+  // Use the provided selectedLineEntry (original selected line data), or fall back to analysisEntries
+  const entry = selectedLineEntry || analysisEntries[selectedEngineLineIndex];
   if (!entry) {
     return null;
   }

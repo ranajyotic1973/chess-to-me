@@ -50,6 +50,7 @@ export default function ChatPanel({
   onOpenSettings,
   analysisStatus,
   analysisEntries = [],
+  selectedLineAnalysisEntry = null,
   onMoveSuggested,
   llmProvider = "LLM",
   analysisLines = [],
@@ -199,6 +200,7 @@ export default function ChatPanel({
           <SelectedLineDetail
             selectedLineNum={selectedLineNum}
             selectedEngineLineIndex={selectedEngineLineIndex}
+            selectedLineEntry={selectedLineAnalysisEntry}
             analysisEntries={analysisEntries}
             currentMoveIndex={currentMoveIndex}
             onDeselectLine={onDeselectLine}

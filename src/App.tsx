@@ -275,6 +275,7 @@ export default function App() {
   const [advancedAnalysisNotesModified, setAdvancedAnalysisNotesModified] = useState<boolean>(false);
   const [currentRawPgn, setCurrentRawPgn] = useState<string>("");
   const [selectedEngineLineData, setSelectedEngineLineData] = useState<AnalysisLine | null>(null);
+  const [selectedLineAnalysisEntry, setSelectedLineAnalysisEntry] = useState<AnalysisEntry | null>(null);
   const [lineExplanations, setLineExplanations] = useState<Record<number, string>>({});
   const [currentOpening, setCurrentOpening] = useState<{ name: string; eco: string } | null>(null);
   // History stack for drilling into an engine line: selecting a line previews its first
@@ -1208,6 +1209,7 @@ Make it detailed and exciting!`;
       llmProvider: formState.llmProvider,
     }));
     setSelectedEngineLineData(line);
+    setSelectedLineAnalysisEntry(analysisEntries[lineIndex] || null);
     setSelectedLineBaseFen(currentFen);
     const lineNum = line.rank || lineIndex + 1;
     setStatusMessage(`Line ${lineNum} selected.`);
@@ -1289,6 +1291,7 @@ Make it detailed and exciting!`;
     setIsDrillLoading(false);
     dispatch(deselectEngineLine());
     setSelectedEngineLineData(null);
+    setSelectedLineAnalysisEntry(null);
 
     if (explorationStack.length > 0) {
       const parent = explorationStack[explorationStack.length - 1];
@@ -2913,7 +2916,7 @@ Make it detailed and exciting!`;
                         </Tooltip>
                       </>
                     )}
-                    {!gameMode && (
+                    {!gameMode && advancedAnalysisMode && (
                       <Tooltip title="Save this analysis" disableInteractive={false}>
                         <span>
                           <IconButton
@@ -2938,7 +2941,7 @@ Make it detailed and exciting!`;
                         </span>
                       </Tooltip>
                     )}
-                    {!gameMode && (
+                    {!gameMode && advancedAnalysisMode && (
                       <Tooltip title="Load saved analysis" disableInteractive={false}>
                         <IconButton
                           size="small"
@@ -3003,6 +3006,7 @@ Make it detailed and exciting!`;
                   onClearQuestion={() => setQuestionText("")}
                   onOpenSettings={onOpenSettings}
                   analysisEntries={analysisEntries}
+                  selectedLineAnalysisEntry={selectedLineAnalysisEntry}
                   analysisStatus={analysisStatus}
                   analysisLoading={analysisLoading}
                   onPlayLine={handlePlayLine}

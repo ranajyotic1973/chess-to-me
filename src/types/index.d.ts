@@ -502,6 +502,7 @@ export interface ChatPanelProps {
     onClearQuestion: () => void;
     onOpenSettings: () => void;
     analysisEntries?: AnalysisEntry[];
+    selectedLineAnalysisEntry?: AnalysisEntry | null;
     analysisStatus: string;
     analysisLoading: boolean;
     onPlayLine?: (moves: Move[]) => void;
