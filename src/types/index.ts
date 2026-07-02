@@ -59,6 +59,7 @@ export interface AnalysisEntry {
   description: string;
   uciDescription: string;
   llmUserMessage: string;
+  explanation?: string;
 }
 
 export type NotationFormat = "san" | "uci";
@@ -513,6 +514,7 @@ export interface AnalysisBoardProps {
   isAnalysisRunning?: boolean;
   puzzleMode?: boolean;
   onReset?: () => void;
+  onChessInstanceReady?: (chess: any) => void;
 }
 
 export interface StatusBannerProps {
@@ -569,6 +571,8 @@ export interface ChatPanelProps {
   trainingMoveLabel?: string;
   notationFormat?: "san" | "uci";
   onNotationFormatChange?: (format: "san" | "uci") => void;
+  currentFen?: string;
+  playedMoves?: string[];
   sx?: any;
 }
 

@@ -78,6 +78,8 @@ export default function ChatPanel({
   advancedAnalysisMode = false,
   deepAnalysisResults = {},
   deepAnalysisLoading = false,
+  currentFen = "start",
+  playedMoves = [],
   sx
 }: ChatPanelProps) {
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -94,6 +96,8 @@ export default function ChatPanel({
     : "LLM";
 
   const detectedMoves = detectMovesInResponse(questionResponse);
+
+  console.log(`[ChatPanel] playedMoves.length=${playedMoves?.length}, analysisLines.length=${analysisLines?.length}`);
 
   const showAnalysisLines = analysisLines.length > 0 &&
     (responseType === "Analysis" || responseType === "Position" || responseType === "Game");
@@ -174,7 +178,7 @@ export default function ChatPanel({
             p: 2,
             display: "flex",
             flexDirection: "column",
-            gap: 1.5,
+            gap: 2,
             overflowY: "auto",
             overflowX: "hidden",
             mb: 2,
@@ -186,28 +190,79 @@ export default function ChatPanel({
             "& .MuiTypography-subtitle2": { fontSize: "0.85rem" }
           }}
         >
-          {/* Analysis lines — list always visible */}
+          {/* Section 1: Analysis lines — list always visible */}
           {showAnalysisLines && (
-            <SelectableList
-              items={analysisListItems}
-              title="Engine Analysis (Top Lines)"
-              hint={`Click a line, type its number (1–${analysisLines.length}) or make a move to select`}
-              onSelect={(_id, idx) => onSelectEngineLine?.(idx, analysisLines[idx])}
-            />
+            <>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: "primary.main", mt: 1 }}>
+                1. Engine Analysis
+              </Typography>
+              <SelectableList
+                items={analysisListItems}
+                title="Top Lines"
+                hint={`Click a line, type its number (1–${analysisLines.length}) or make a move to select`}
+                onSelect={(_id, idx) => onSelectEngineLine?.(idx, analysisLines[idx])}
+              />
+            </>
           )}
 
-          {/* Selected line detail — component shows line moves, deselect button, and advanced analysis */}
-          <SelectedLineDetail
-            selectedLineNum={selectedLineNum}
-            selectedEngineLineIndex={selectedEngineLineIndex}
-            selectedLineEntry={selectedLineAnalysisEntry}
-            analysisEntries={analysisEntries}
-            currentMoveIndex={currentMoveIndex}
-            onDeselectLine={onDeselectLine}
-            advancedAnalysisMode={advancedAnalysisMode}
-            deepAnalysisLoading={deepAnalysisLoading}
-            deepAnalysisResults={deepAnalysisResults}
-          />
+          {/* Section 2: Selected line detail */}
+          {playedMoves && playedMoves.length > 0 && (
+            <>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: "primary.main", mt: 1 }}>
+                2. Moves Played
+              </Typography>
+              <SelectedLineDetail
+                playedMoves={playedMoves}
+                selectedLineIndex={selectedEngineLineIndex}
+                selectedLineEntry={selectedLineAnalysisEntry}
+                analysisEntries={analysisEntries}
+                advancedAnalysisMode={advancedAnalysisMode}
+                deepAnalysisLoading={deepAnalysisLoading}
+                deepAnalysisResults={deepAnalysisResults}
+              />
+            </>
+          )}
+
+          {/* Section 3: LLM explanation for selected line */}
+          {selectedEngineLineIndex !== null && lineExplanations[selectedEngineLineIndex] && (
+            <>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: "primary.main", mt: 1 }}>
+                3. Line Analysis
+              </Typography>
+              <Box
+              sx={{
+                mt: 1.5,
+                p: 1.5,
+                backgroundColor: "#f9f9f9",
+                borderRadius: 1,
+                border: 1,
+                borderColor: "divider",
+                fontSize: "0.875rem",
+                lineHeight: 1.6,
+                color: "#333",
+                "& p": { margin: "0.5rem 0" },
+                "& ul, & ol": { marginLeft: "1.5rem", margin: "0.5rem 0" },
+                "& li": { marginBottom: "0.25rem" },
+                "& strong": { fontWeight: 700 },
+                "& em": { fontStyle: "italic" },
+                "& code": { backgroundColor: "#e8e8e8", padding: "2px 6px", borderRadius: "3px", fontFamily: "monospace" }
+              }}
+            >
+              <ReactMarkdown>
+                {lineExplanations[selectedEngineLineIndex]}
+              </ReactMarkdown>
+              </Box>
+            </>
+          )}
+
+          {/* Section 4: Chat response - only shown if user has asked questions */}
+          {questionResponse && (
+            <>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: "primary.main", mt: 1 }}>
+                4. Chat Response
+              </Typography>
+            </>
+          )}
 
           {/* Puzzle navigation instruction */}
           {puzzleNavigationMode && (

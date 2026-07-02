@@ -649,7 +649,7 @@ class EngineRunner {
         if (done) return;
         done = true;
         cleanup();
-        const lines = [...linesByRank.entries()]
+        let lines = [...linesByRank.entries()]
           .sort((a, b) => a[0] - b[0])
           .slice(0, 4)
           .map(([rank, value]) => ({
@@ -657,6 +657,17 @@ class EngineRunner {
             score: value.score || null,
             pv: value.pv || ""
           }));
+
+        // If we have a bestmove, prioritize the line that starts with it
+        if (bestMove && lines.length > 0) {
+          const bestmoveLineIndex = lines.findIndex(line => line.pv.split(' ')[0] === bestMove);
+          if (bestmoveLineIndex > 0) {
+            // Move the bestmove line to the front
+            const [bestmoveLine] = lines.splice(bestmoveLineIndex, 1);
+            lines.unshift(bestmoveLine);
+          }
+        }
+
         mainWindow?.webContents.send("engine:analysis-done", { engine: this.engineName });
         resolve({
           bestMove,
@@ -4630,31 +4641,31 @@ async function checkGamesUpdatePrompt(win: BrowserWindow): Promise<void> {
   win.webContents.send("db:refresh-status");
 }
 
-// Window control handlers for custom title bar
-ipcMain.handle("minimizeWindow", () => {
-  const window = BrowserWindow.getFocusedWindow();
-  if (window) window.minimize();
-});
-
-ipcMain.handle("maximizeWindow", () => {
-  const window = BrowserWindow.getFocusedWindow();
-  if (window) {
-    if (window.isMaximized()) {
-      window.unmaximize();
-    } else {
-      window.maximize();
-    }
-  }
-});
-
-ipcMain.handle("closeWindow", () => {
-  const window = BrowserWindow.getFocusedWindow();
-  if (window) window.close();
-});
-
 app.whenReady().then(async () => {
   logToFile("INFO", "main", "App ready, starting initialization");
   cleanupOldLogs();
+
+  // Window control handlers for custom title bar
+  ipcMain.handle("minimizeWindow", () => {
+    const window = BrowserWindow.getFocusedWindow();
+    if (window) window.minimize();
+  });
+
+  ipcMain.handle("maximizeWindow", () => {
+    const window = BrowserWindow.getFocusedWindow();
+    if (window) {
+      if (window.isMaximized()) {
+        window.unmaximize();
+      } else {
+        window.maximize();
+      }
+    }
+  });
+
+  ipcMain.handle("closeWindow", () => {
+    const window = BrowserWindow.getFocusedWindow();
+    if (window) window.close();
+  });
 
   // Initialize processManager's settings after app is ready
   logToFile("DEBUG", "main", "Initializing processManager from settings");
@@ -4710,16 +4721,16 @@ app.whenReady().then(async () => {
       await createWindow();
     }
   });
-});
 
-app.on("before-quit", async () => {
-  logToFile("INFO", "main", "App closing, shutting down");
-  await processManager.shutdown();
-  closeLogger();
-});
+  app.on("before-quit", async () => {
+    logToFile("INFO", "main", "App closing, shutting down");
+    await processManager.shutdown();
+    closeLogger();
+  });
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") {
+      app.quit();
+    }
+  });
 });

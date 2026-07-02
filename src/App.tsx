@@ -21,6 +21,7 @@ import {
 } from "@mui/material";
 import { Alert } from "@mui/material";
 import { Chess } from "chess.js";
+import { createLineHashMap, findMatchingLine } from "./utils/moveSequenceHash";
 import { useAppDispatch, useAppSelector } from "./redux/hooks";
 import {
   setCurrentFen,
@@ -277,7 +278,9 @@ export default function App() {
   const [selectedEngineLineData, setSelectedEngineLineData] = useState<AnalysisLine | null>(null);
   const [selectedLineAnalysisEntry, setSelectedLineAnalysisEntry] = useState<AnalysisEntry | null>(null);
   const [lineExplanations, setLineExplanations] = useState<Record<number, string>>({});
+  const [chessInstance, setChessInstance] = useState<any>(null);;
   const [currentOpening, setCurrentOpening] = useState<{ name: string; eco: string } | null>(null);
+  const [playedMoves, setPlayedMoves] = useState<string[]>([]);
   // History stack for drilling into an engine line: selecting a line previews its first
   // move, runs a fresh analysis of the resulting position, and shows THAT as a new list
   // ("drilling in"). Each frame is the parent level's state, popped on "back".
@@ -858,14 +861,12 @@ export default function App() {
         if (cancelled || !response?.ok) return;
         const lines: AnalysisLine[] = (response as any).analysis?.lines ?? [];
         if (!lines.length) return;
-        // Update lines and entries, then fetch LLM explanation for the top line.
+        // Update lines and entries from background analysis
         dispatch(setAnalysisLines(lines));
         dispatch(setAnalysisEntries(lines.map((line, i) => parseStockfishLine(line, i + 1, currentFen))));
-        setLineExplanations({}); // clear old explanations for fresh analysis
         setExplorationStack([]); // a real board move starts a fresh top-level analysis
 
-        // Auto-explanation disabled to prevent position validation errors on subsequent moves
-        // Explanations are only generated when user explicitly clicks on a move
+        // Don't clear lineExplanations here — let handleAnalysisSuccess manage it based on move count
       } catch {
         // Background analysis — ignore errors silently.
       }
@@ -897,15 +898,26 @@ export default function App() {
   }, [currentFen]);
 
   const fetchExplanations = useCallback(
-    async (fen: string, lines: AnalysisLine[]): Promise<void> => {
-      if (!lines?.length || !electronAPI?.explainLines) {
+    async (fen: string, selectedLineIndex: number, analysisEntries: AnalysisEntry[], playedMovesForContext: string[]): Promise<void> => {
+      if (selectedLineIndex === null || selectedLineIndex === undefined || !electronAPI?.explainLines) {
+        console.log(`[fetchExplanations] Skipped: selectedLineIndex=${selectedLineIndex}, electronAPI=${!!electronAPI?.explainLines}`);
         return;
       }
+
+      const entry = analysisEntries[selectedLineIndex];
+      if (!entry) {
+        console.log(`[fetchExplanations] No entry found for line index ${selectedLineIndex}`);
+        return;
+      }
+
+      console.log(`[fetchExplanations] Starting fetch for line ${selectedLineIndex} with ${playedMovesForContext.length} played moves`);
+      setIsExplanationLoading(true);
+      dispatch(setAnalysisStatus("LLM processing..."));
       try {
-        console.log(`[fetchExplanations] Fetching explanations for ${lines.length} lines`);
         const response = await electronAPI.explainLines({
           fen,
-          lines,
+          lines: [entry],
+          playedMoves: playedMovesForContext,
           language: formState.explainLanguage,
           model: getModelForProvider(formState.llmProvider, formState.ollamaModel, formState.llmModel),
           baseUrl: getBaseUrlForProvider(formState.llmProvider, formState.ollamaBaseUrl),
@@ -913,25 +925,23 @@ export default function App() {
           llmApiKey: formState.llmApiKey
         });
 
-        console.log(`[fetchExplanations] Response received:`, { ok: response?.ok, explanationsCount: response?.explanations?.length });
+        console.log(`[fetchExplanations] Response received:`, { ok: response?.ok, count: response?.explanations?.length });
 
-        // Store LLM explanations by line index
-        if (response?.ok && Array.isArray(response.explanations)) {
-          const explanationMap: Record<number, string> = {};
-          response.explanations.forEach((exp, idx) => {
-            explanationMap[idx] = exp.text;
-            console.log(`[fetchExplanations] Line ${idx}: ${exp.text?.substring(0, 50)}...`);
-          });
-          console.log(`[fetchExplanations] Setting lineExplanations for ${Object.keys(explanationMap).length} lines`);
-          setLineExplanations(explanationMap);
-        } else {
-          console.warn(`[fetchExplanations] Unexpected response format:`, response);
+        // Store LLM explanation in local state
+        if (response?.ok && Array.isArray(response.explanations) && response.explanations.length > 0) {
+          const explanation = response.explanations[0]?.text || "";
+          console.log(`[fetchExplanations] Setting explanation for line ${selectedLineIndex}`);
+          setLineExplanations({ [selectedLineIndex]: explanation });
+          dispatch(setAnalysisStatus(""));
         }
       } catch (err) {
         console.error(`[fetchExplanations] Error:`, err);
+        dispatch(setAnalysisStatus("LLM processing failed."));
+      } finally {
+        setIsExplanationLoading(false);
       }
     },
-    [formState.explainLanguage, formState.ollamaModel, formState.ollamaBaseUrl, formState.llmProvider, formState.llmApiKey]
+    [formState.explainLanguage, formState.ollamaModel, formState.ollamaBaseUrl, formState.llmProvider, formState.llmApiKey, electronAPI, dispatch]
   );
 
   const handleAnalysisSuccess = useCallback(
@@ -940,7 +950,6 @@ export default function App() {
       // Sort lines by score (best first)
       const sortedLines = sortLinesByScore(lines);
       dispatch(setAnalysisLines(sortedLines));
-      dispatch(deselectEngineLine());
       setSelectedEngineLineData(null);
       dispatch(setDeepAnalysisResults({ lineIndex: -1, results: {} }));
       setExplorationStack([]); // a fresh manual analysis starts a new top-level list
@@ -949,10 +958,42 @@ export default function App() {
       );
       dispatch(setAnalysisEntries(entries));
       dispatch(setAnalysisStatus(""));
-      // NOTE: Do NOT call fetchExplanations here. LLM only engages after user selects a line.
-      // This prevents wasting tokens on unexplained lines at startup.
+
+      // Extract move number from FEN (format: "... w KQkq - 0 1" where last number is move count)
+      const fenParts = fen.split(/\s+/);
+      const moveNumber = fenParts.length >= 6 ? parseInt(fenParts[5], 10) : 1;
+      const activeColor = fenParts.length >= 2 ? fenParts[1] : 'w';
+
+      // Auto-select after White plays 1 move (move number > 1, meaning Black has moved or about to move)
+      const whiteHasMovedOnce = moveNumber > 1;
+
+      // Only fetch LLM after White plays 2 moves AND Black plays 1: moveNumber >= 2 AND Black to move
+      const shouldFetchLLM = moveNumber >= 2 && activeColor === 'b';
+
+      console.log(`[handleAnalysisSuccess] Move ${moveNumber}, color: ${activeColor}, shouldFetchLLM: ${shouldFetchLLM}`);
+
+      if (whiteHasMovedOnce) {
+        console.log(`[handleAnalysisSuccess] White has moved - auto-selecting first line`);
+        dispatch(selectEngineLine({ index: 0 }));
+        // Set currentMoveIndex based on how many moves have been made
+        if (chessInstance) {
+          const historyLength = chessInstance.history().length;
+          const moveIndexToHighlight = Math.max(0, historyLength - 1);
+          console.log(`[handleAnalysisSuccess] Setting currentMoveIndex to ${moveIndexToHighlight} (history length: ${historyLength})`);
+          dispatch(setCurrentMoveIndex(moveIndexToHighlight));
+        }
+        if (shouldFetchLLM) {
+          console.log(`[handleAnalysisSuccess] Sufficient moves for LLM - clearing explanations for fetch`);
+          setLineExplanations({});
+        } else {
+          console.log(`[handleAnalysisSuccess] Too early for LLM - keeping old explanations`);
+        }
+      } else {
+        console.log(`[handleAnalysisSuccess] Starting position or White hasn't moved - deselecting`);
+        dispatch(deselectEngineLine());
+      }
     },
-    [dispatch, currentFen]
+    [dispatch]
   );
 
   const handleSelectAnalysisLine = useCallback((entry: AnalysisEntry): void => {
@@ -970,8 +1011,8 @@ export default function App() {
         return;
       }
       dispatch(setAnalysisLoading(true));
-      dispatch(setAnalysisStatus(""));
       const engineName = formState.selectedEngine?.toUpperCase() || "ENGINE";
+      dispatch(setAnalysisStatus(`${engineName} analyzing...`));
       try {
         // Show more lines in advanced/deep analysis mode (20 lines) vs regular analysis (4 lines)
         const multiPvLines = advancedAnalysisMode || deepMode ? 20 : 4;
@@ -1574,15 +1615,18 @@ Make it detailed and exciting!`;
     }).catch(() => {});
   }, [dispatch, puzzleStartFen, currentResponseData, puzzleMeta]);
 
-  const handleBoardMove = useCallback((newFen: string) => {
+  const handleBoardMove = useCallback((newFen: string, moves: string[] = []) => {
     console.log(`[handleBoardMove] Move detected`, {
       newFen,
+      moves,
       currentFen,
       selectedEngineLineIndex,
       hasSelectedLine: selectedEngineLineIndex !== null,
       analysisEntriesCount: analysisEntries.length,
       currentMoveIndex
     });
+    // Update playedMoves immediately when a move is made
+    setPlayedMoves(moves);
     (async () => {
       try {
         const result = await dispatch(handleBoardMoveThunk({
@@ -1621,17 +1665,44 @@ Make it detailed and exciting!`;
     })();
   }, [dispatch, currentFen, selectedEngineLineIndex, analysisLines, analysisEntries, currentMoveIndex, advancedAnalysisMode, formState, electronAPI, runAnalysis]);
 
-  // Fetch LLM explanations when new analysisLines arrive after a move
+
+  // Auto-select engine line when moves are played
   useEffect(() => {
-    if (lastAnalyzedFenRef.current && analysisLines.length > 0 && selectedEngineLineIndex === null) {
-      console.log(`[useEffect] Fetching LLM explanations for position after move`);
-      fetchExplanations(lastAnalyzedFenRef.current, analysisLines);
-      // Auto-select first line so its explanation is visible
-      dispatch(selectEngineLine({ index: 0 }));
-      console.log(`[useEffect] Auto-selected first line to show explanation`);
-      lastAnalyzedFenRef.current = ""; // Clear it so we don't fetch twice
+    console.log(`[autoSelectLine] Checking: playedMoves.length=${playedMoves.length}, analysisLines.length=${analysisLines.length}, selectedEngineLineIndex=${selectedEngineLineIndex}`);
+    if (playedMoves.length > 0 && analysisLines.length > 0) {
+      // Find the first line that matches the current move sequence
+      const hashMap = createLineHashMap(analysisLines);
+      const matchingLineIndex = findMatchingLine(playedMoves, hashMap);
+      console.log(`[autoSelectLine] Found matching line index:`, matchingLineIndex);
+
+      if (matchingLineIndex !== null && matchingLineIndex !== selectedEngineLineIndex) {
+        dispatch(selectEngineLine({ index: matchingLineIndex }));
+        console.log(`[autoSelectLine] Auto-selected line ${matchingLineIndex} for moves:`, playedMoves);
+      } else {
+        console.log(`[autoSelectLine] Not selecting: matchingLineIndex=${matchingLineIndex}, selectedEngineLineIndex=${selectedEngineLineIndex}`);
+      }
     }
-  }, [analysisLines, fetchExplanations, selectedEngineLineIndex, dispatch]);
+  }, [playedMoves, analysisLines, selectedEngineLineIndex, dispatch]);
+
+  // Fetch LLM explanations when a line is selected AND enough moves have been played
+  useEffect(() => {
+    if (selectedEngineLineIndex !== null && selectedEngineLineIndex >= 0) {
+      // Extract move number from FEN to check if we should fetch
+      const fenParts = currentFen.split(/\s+/);
+      const moveNumber = fenParts.length >= 6 ? parseInt(fenParts[5], 10) : 1;
+      const activeColor = fenParts.length >= 2 ? fenParts[1] : 'w';
+
+      // Only fetch after White plays 2 moves AND Black plays 1: moveNumber >= 2 AND Black to move
+      if (moveNumber >= 2 && activeColor === 'b' && !lineExplanations[selectedEngineLineIndex]) {
+        console.log(`[useEffect] Fetching explanation for line ${selectedEngineLineIndex} at move ${moveNumber}`);
+        fetchExplanations(currentFen, selectedEngineLineIndex, analysisEntries, playedMoves);
+      } else if (moveNumber >= 2 && activeColor === 'b') {
+        console.log(`[useEffect] Explanation already exists for line ${selectedEngineLineIndex}`);
+      } else {
+        console.log(`[useEffect] Too early for LLM fetch - move number: ${moveNumber}, color: ${activeColor}`);
+      }
+    }
+  }, [selectedEngineLineIndex, currentFen, analysisEntries, playedMoves, lineExplanations, fetchExplanations]);
 
   const applyPositions = useCallback(
     (positions: string[], message?: string): void => {
@@ -2835,6 +2906,7 @@ Make it detailed and exciting!`;
                     onMoveAttempt={handleMoveAttempt}
                     puzzleMode={currentResponseType === "Puzzle" || gameMode}
                     onReset={handleResetBoard}
+                    onChessInstanceReady={setChessInstance}
                   />
                 </Box>
                 {/* White player bar — shown below the board when a DB game is loaded */}
@@ -3024,6 +3096,8 @@ Make it detailed and exciting!`;
                   gameMoveIndex={gameMoveIndex}
                   gameTotalMoves={gamePgnFens.length}
                   gameList={gameList}
+                  currentFen={currentFen}
+                  playedMoves={playedMoves}
                   onGameSelect={(idx) => {
                     // Reuse the same path as typing the game number in chat, so clicking a
                     // list item loads the game AND asks the LLM for a contextual introduction

@@ -23,12 +23,22 @@ export default function AnalysisBoard({
   onStopAnalysis,
   isAnalysisRunning = false,
   puzzleMode = false,
-  onReset
+  onReset,
+  onChessInstanceReady
 }: AnalysisBoardProps) {
   const boardRef = useRef<HTMLDivElement>(null);
   const boardInstance = useRef<any>(null);
   const chess = useRef<Chess>(new Chess());
+  const chessExposedRef = useRef(false);
   const [ctor, setCtor] = useState(() => detectChessboardConstructor());
+
+  // Expose chess instance to parent only once
+  useEffect(() => {
+    if (!chessExposedRef.current && onChessInstanceReady) {
+      onChessInstanceReady(chess.current);
+      chessExposedRef.current = true;
+    }
+  }, []);
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const dimension =
     typeof size?.width === "number" && typeof size?.height === "number"
@@ -103,7 +113,8 @@ export default function AnalysisBoard({
           onMoveAttempt(source, target, nextFen);
         }
         if (typeof onBoardMove === "function") {
-          onBoardMove(nextFen);
+          const moves = chess.current.history({ verbose: true }).map((m: any) => `${m.from}${m.to}`) as string[];
+          onBoardMove(nextFen, moves);
         }
         return undefined;
       }
@@ -138,8 +149,9 @@ export default function AnalysisBoard({
       setStatusMessage("Invalid FEN stored: must contain six fields.");
       return;
     }
+    // Don't load FEN into chess.current - it clears move history.
+    // Just update the board display. chess.current stays in sync via onDrop moves.
     try {
-      chess.current.load(currentFen);
       boardInstance.current.position(currentFen);
     } catch (err) {
       setStatusMessage(`Invalid FEN stored: ${err instanceof Error ? err.message : "unable to load"}`);

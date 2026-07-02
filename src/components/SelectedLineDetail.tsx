@@ -1,15 +1,13 @@
-import { Box, Stack, Chip, IconButton, Typography, Skeleton } from "@mui/material";
-import ClearIcon from "@mui/icons-material/Clear";
+import { Box, Stack, Typography } from "@mui/material";
+import { Chess } from "chess.js";
+import { useEffect, useState, useRef } from "react";
 import type { AnalysisEntry, DeepLineAnalysis } from "../types";
-import { formatHighlightedMoveNotation } from "../utils/formatHighlightedMoveNotation";
 
 interface SelectedLineDetailProps {
-  selectedLineNum: number | null;
-  selectedEngineLineIndex: number | null;
+  playedMoves: string[];
+  selectedLineIndex: number | null;
   selectedLineEntry?: AnalysisEntry | null;
   analysisEntries: AnalysisEntry[];
-  currentMoveIndex: number;
-  onDeselectLine?: () => void;
   advancedAnalysisMode?: boolean;
   deepAnalysisLoading?: boolean;
   deepAnalysisResults?: Record<number, DeepLineAnalysis>;
@@ -25,82 +23,120 @@ const DEEP_ANALYSIS_FIELDS: Array<{ key: keyof DeepLineAnalysis; label: string }
   { key: "alternatives", label: "Alternatives" },
 ];
 
-/**
- * SelectedLineDetail displays the details of a selected engine analysis line.
- * Shows the line moves with current move highlighting, a deselect button, and advanced analysis if enabled.
- */
 export default function SelectedLineDetail({
-  selectedLineNum,
-  selectedEngineLineIndex,
+  playedMoves,
+  selectedLineIndex,
   selectedLineEntry,
   analysisEntries,
-  currentMoveIndex,
-  onDeselectLine,
   advancedAnalysisMode = false,
   deepAnalysisLoading = false,
   deepAnalysisResults = {},
 }: SelectedLineDetailProps) {
-  if (selectedEngineLineIndex === null) {
+  const [navigationIndex, setNavigationIndex] = useState(playedMoves.length - 1);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Update navigation index when played moves change
+  useEffect(() => {
+    setNavigationIndex(Math.max(0, playedMoves.length - 1));
+  }, [playedMoves.length]);
+
+  // Handle keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setNavigationIndex((prev) => Math.max(0, prev - 1));
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setNavigationIndex((prev) => Math.min(playedMoves.length - 1, prev + 1));
+      }
+    };
+
+    const element = containerRef.current;
+    if (element) {
+      element.addEventListener("keydown", handleKeyDown);
+      return () => element.removeEventListener("keydown", handleKeyDown);
+    }
+  }, [playedMoves.length]);
+
+  if (playedMoves.length === 0) {
     return null;
   }
 
-  // Use the provided selectedLineEntry (original selected line data), or fall back to analysisEntries
-  const entry = selectedLineEntry || analysisEntries[selectedEngineLineIndex];
-  if (!entry) {
-    return null;
-  }
+  const entry = selectedLineIndex !== null ? (selectedLineEntry || analysisEntries[selectedLineIndex]) : null;
+
+  // Convert moves to SAN format
+  const convertToSAN = () => {
+    const chess = new Chess();
+    return playedMoves.map((uciMove) => {
+      const moveObj: any = { from: uciMove.substring(0, 2), to: uciMove.substring(2, 4) };
+      const toRank = parseInt(uciMove[3]);
+      const piece = chess.get(moveObj.from);
+      if (piece && piece.type === 'p' && (toRank === 8 || toRank === 1)) {
+        moveObj.promotion = 'q';
+      }
+      return chess.move(moveObj)?.san || uciMove;
+    });
+  };
+
+  const sanMoves = convertToSAN();
 
   return (
-    <Box sx={{ p: 1.5, backgroundColor: "info.lighter", borderRadius: 1, border: 1, borderColor: "info.light" }}>
-      {/* Header with line number and deselect button */}
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-        <Chip
-          label={`Line ${selectedLineNum} selected`}
-          size="small"
-          color="primary"
-          variant="outlined"
-        />
-        <IconButton
-          size="small"
-          onClick={() => onDeselectLine?.()}
-          title="Deselect line"
-        >
-          <ClearIcon fontSize="small" />
-        </IconButton>
-      </Stack>
+    <Box
+      ref={containerRef}
+      tabIndex={0}
+      sx={{
+        p: 1.5,
+        backgroundColor: "info.lighter",
+        borderRadius: 1,
+        border: 1,
+        borderColor: "info.light",
+        outline: "none",
+        "&:focus": { borderColor: "primary.main" },
+      }}
+    >
+      <Typography variant="subtitle2" sx={{ fontWeight: 700, color: "primary.main", mb: 1 }}>
+        Moves Played
+      </Typography>
 
-      {/* Display the selected line's moves with the current move highlighted in bold + yellow square */}
-      <Box data-testid="line-explanation">
-        <Typography variant="body2" sx={{ fontFamily: "monospace", mb: 1 }}>
-          {formatHighlightedMoveNotation(entry.description || "", currentMoveIndex)}
-        </Typography>
-      </Box>
+      <Typography variant="body2" sx={{ fontFamily: "monospace", mb: 1 }}>
+        {sanMoves.map((move, idx) => {
+          const moveNum = Math.floor(idx / 2) + 1;
+          const isWhiteMove = idx % 2 === 0;
+          const moveNumberLabel = isWhiteMove ? `${moveNum}. ` : "";
+          return (
+            <span key={idx}>
+              {idx > 0 && " "}
+              {moveNumberLabel}
+              <span
+                style={{
+                  fontWeight: idx === navigationIndex ? "bold" : "normal",
+                  backgroundColor: idx === navigationIndex ? "#FFFF00" : "transparent",
+                  padding: idx === navigationIndex ? "2px 4px" : "0",
+                }}
+              >
+                {move}
+              </span>
+            </span>
+          );
+        })}
+      </Typography>
 
-      {/* Deep analysis fields (shown only in advanced analysis mode) */}
-      {advancedAnalysisMode && selectedEngineLineIndex !== null && (
-        deepAnalysisLoading && deepAnalysisResults[selectedEngineLineIndex] === undefined ? (
-          <Box sx={{ mt: 1.5, display: "flex", flexDirection: "column", gap: 0.75 }}>
-            {DEEP_ANALYSIS_FIELDS.map((f) => (
-              <Box key={f.key}>
-                <Skeleton variant="text" width="30%" sx={{ mb: 0.25 }} />
-                <Skeleton variant="rectangular" height={40} />
-              </Box>
-            ))}
-          </Box>
-        ) : deepAnalysisResults[selectedEngineLineIndex] ? (
-          <Box sx={{ mt: 1.5, display: "flex", flexDirection: "column", gap: 1.25 }}>
-            {DEEP_ANALYSIS_FIELDS.map((f) => (
+      {advancedAnalysisMode && selectedLineIndex !== null && entry && (
+        <Box sx={{ mt: 1.5, display: "flex", flexDirection: "column", gap: 1.25 }}>
+          {deepAnalysisResults[selectedLineIndex] ? (
+            DEEP_ANALYSIS_FIELDS.map((f) => (
               <Box key={f.key}>
                 <Typography variant="caption" sx={{ fontWeight: 700, color: "primary.main", display: "block" }}>
                   {f.label}
                 </Typography>
                 <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                  {deepAnalysisResults[selectedEngineLineIndex]![f.key as keyof DeepLineAnalysis]}
+                  {deepAnalysisResults[selectedLineIndex]![f.key as keyof DeepLineAnalysis]}
                 </Typography>
               </Box>
-            ))}
-          </Box>
-        ) : null
+            ))
+          ) : null}
+        </Box>
       )}
     </Box>
   );
