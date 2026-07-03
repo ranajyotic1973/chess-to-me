@@ -192,17 +192,11 @@ export default function ChatPanel({
         >
           {/* Section 1: Analysis lines — list always visible */}
           {showAnalysisLines && (
-            <>
-              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: "primary.main", mt: 1 }}>
-                1. Engine Analysis
-              </Typography>
-              <SelectableList
-                items={analysisListItems}
-                title="Top Lines"
-                hint={`Click a line, type its number (1–${analysisLines.length}) or make a move to select`}
-                onSelect={(_id, idx) => onSelectEngineLine?.(idx, analysisLines[idx])}
-              />
-            </>
+            <SelectableList
+              items={analysisListItems}
+              title="1. Top Lines"
+              onSelect={(_id, idx) => onSelectEngineLine?.(idx, analysisLines[idx])}
+            />
           )}
 
           {/* Section 2: Selected line detail */}
