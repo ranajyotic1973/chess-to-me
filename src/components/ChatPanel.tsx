@@ -138,16 +138,6 @@ export default function ChatPanel({
       data-testid="chat-panel"
     >
       <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-        {/* Header */}
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2, flexShrink: 0 }}>
-          <Typography variant="h6" sx={{ lineHeight: 1 }}>
-            Ask a strategic question
-          </Typography>
-          <IconButton size="small" onClick={onOpenSettings} aria-label="open settings">
-            <SettingsIcon fontSize="small" />
-          </IconButton>
-        </Box>
-
         {/* Error Status */}
         {analysisStatus && (
           <Typography variant="body2" color="error" sx={{ fontWeight: 500, mb: 1, flexShrink: 0 }}>
@@ -582,6 +572,15 @@ export default function ChatPanel({
               aria-label="clear chat"
             >
               <ClearIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Settings">
+            <IconButton
+              size="small"
+              onClick={onOpenSettings}
+              aria-label="open settings"
+            >
+              <SettingsIcon fontSize="small" />
             </IconButton>
           </Tooltip>
         </Stack>
