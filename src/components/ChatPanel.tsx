@@ -21,7 +21,6 @@ import SelectableList from "./SelectableList";
 import type { SelectableListItem } from "./SelectableList";
 import { formatFieldLabel } from "../utils/formatLabel";
 import SelectedLineDetail from "./SelectedLineDetail";
-import AnalysisModal from "./AnalysisModal";
 
 interface DetectedMove {
   from: string;
@@ -85,28 +84,11 @@ export default function ChatPanel({
 }: ChatPanelProps) {
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const [selectedGameItemId, setSelectedGameItemId] = useState<string | null>(null);
-  const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
 
   // Clear selection when the game list disappears entirely
   useEffect(() => {
     if (!gameList || gameList.length === 0) setSelectedGameItemId(null);
   }, [gameList]);
-
-  // Determine current move index (0-based)
-  const currentMoveIndexInLine = playedMoves?.length ? playedMoves.length - 1 : -1;
-
-  // Toggle functions for analysis modal
-  const toggleAnalysisModal = () => setIsAnalysisModalOpen(!isAnalysisModalOpen);
-  const closeAnalysisModal = () => setIsAnalysisModalOpen(false);
-
-  // Auto-show modal when LLM analysis becomes available and we're at move 3+
-  // The modal only appears after the 3rd move (currentMoveIndexInLine >= 2, since 0-based).
-  // This makes LLM analysis more visible and prevents scrolling to find responses.
-  useEffect(() => {
-    if (selectedEngineLineIndex !== null && currentMoveIndexInLine >= 2 && lineExplanations[selectedEngineLineIndex]) {
-      setIsAnalysisModalOpen(true);
-    }
-  }, [selectedEngineLineIndex, currentMoveIndexInLine, lineExplanations]);
 
   const paperSx = Array.isArray(sx) ? sx : sx ? [sx] : [];
   const providerName = llmProvider
@@ -608,30 +590,7 @@ export default function ChatPanel({
               <ClearIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          {/* Reopen analysis modal button (shown when modal is closed and analysis is available) */}
-          {!isAnalysisModalOpen && selectedEngineLineIndex !== null && currentMoveIndexInLine >= 2 && lineExplanations[selectedEngineLineIndex] && (
-            <Tooltip title="Show analysis">
-              <IconButton
-                size="small"
-                onClick={toggleAnalysisModal}
-                color="primary"
-                aria-label="show analysis modal"
-              >
-                <SettingsIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          )}
         </Stack>
-
-        {/* Analysis Modal */}
-        {selectedEngineLineIndex !== null && currentMoveIndexInLine >= 2 && isAnalysisModalOpen && (
-          <AnalysisModal
-            isOpen={isAnalysisModalOpen}
-            onClose={closeAnalysisModal}
-            moves={playedMoves || []}
-            analysis={lineExplanations[selectedEngineLineIndex] || ""}
-          />
-        )}
       </Box>
     </Paper>
   );
