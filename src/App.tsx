@@ -55,6 +55,7 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import SaveIcon from "@mui/icons-material/Save";
 import StopIcon from "@mui/icons-material/Stop";
 import EditIcon from "@mui/icons-material/Edit";
+import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import SettingsPanel from "./components/SettingsPanel";
 import AnalysisBoard from "./components/AnalysisBoard";
 import ChatPanel from "./components/ChatPanel";
@@ -2880,7 +2881,7 @@ Make it detailed and exciting!`;
                   sx={{
                     flex: "0 0 auto",
                     display: "flex",
-                    alignItems: "center",
+                    alignItems: "flex-start",
                     justifyContent: "flex-start",
                     gap: 1,
                     backgroundColor: "transparent"
@@ -2908,6 +2909,33 @@ Make it detailed and exciting!`;
                     onReset={handleResetBoard}
                     onChessInstanceReady={setChessInstance}
                   />
+                  {/* Right column: View Logs and Reset buttons */}
+                  <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                    <Tooltip title="View logs" disableInteractive={false}>
+                      <IconButton
+                        size="small"
+                        onClick={() => setAnalysisMode("logs")}
+                        color="primary"
+                        aria-label="view logs"
+                      >
+                        <ListAltIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Reset board, clear chat, and return to analysis mode">
+                      <IconButton
+                        onClick={handleResetBoard}
+                        size="small"
+                        sx={{
+                          color: "primary.main",
+                          "&:hover": {
+                            backgroundColor: "action.hover"
+                          }
+                        }}
+                      >
+                        <RestartAltIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
                 </Box>
                 {/* White player bar — shown below the board when a DB game is loaded */}
                 {gameMode && currentGameInfo && (
@@ -3034,16 +3062,6 @@ Make it detailed and exciting!`;
                       </Tooltip>
                     )}
                   </Stack>
-                  <Tooltip title="View logs" disableInteractive={false}>
-                    <IconButton
-                      size="small"
-                      onClick={() => setAnalysisMode("logs")}
-                      color="primary"
-                      aria-label="view logs"
-                    >
-                      <ListAltIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
                 </Box>
               </Box>
               <Box

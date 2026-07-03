@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { Box, IconButton, Tooltip } from "@mui/material";
-import { RestartAlt } from "@mui/icons-material";
 import { Chess } from "chess.js";
 import type { AnalysisBoardProps } from "../types";
 
@@ -187,21 +186,6 @@ export default function AnalysisBoard({
           maxWidth: "100%"
         }}
       />
-      <Tooltip title="Reset board, clear chat, and return to analysis mode">
-        <IconButton
-          onClick={onReset}
-          size="medium"
-          sx={{
-            color: "primary.main",
-            mt: 0.5,
-            "&:hover": {
-              backgroundColor: "action.hover"
-            }
-          }}
-        >
-          <RestartAlt />
-        </IconButton>
-      </Tooltip>
     </>
   );
 }
