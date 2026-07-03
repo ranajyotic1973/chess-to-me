@@ -2694,7 +2694,7 @@ Make it detailed and exciting!`;
                 sx={{ borderBottom: 1, borderColor: "divider", flexShrink: 0, mx: -2 }}
               >
                 <Tab label={`${formState.selectedEngine === "lc0" ? "LC0" : "Stockfish"}`} />
-                <Tab label="Ollama" />
+                <Tab label={formState.llmProvider === "ollama" ? "Ollama" : formState.llmProvider.charAt(0).toUpperCase() + formState.llmProvider.slice(1)} />
               </Tabs>
               {analysisLogError && (
                 <Typography variant="body2" color="error" sx={{ flexShrink: 0, px: 2 }}>
