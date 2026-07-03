@@ -2910,7 +2910,7 @@ Make it detailed and exciting!`;
                     onChessInstanceReady={setChessInstance}
                   />
                   {/* Right column: View Logs and Reset buttons */}
-                  <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                  <Box sx={{ display: "flex", flexDirection: "column", gap: 1, flex: "0 0 auto", alignItems: "center" }}>
                     <Tooltip title="View logs" disableInteractive={false}>
                       <IconButton
                         size="small"
