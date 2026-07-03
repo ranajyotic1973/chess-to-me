@@ -553,27 +553,29 @@ export default function ChatPanel({
         </Box>
 
         {/* Buttons */}
-        <Stack direction="row" spacing={1} sx={{ flexShrink: 0, alignItems: "center" }}>
-          <Button
-            variant="contained"
-            onClick={() => {
-              onAskQuestion();
-              onClearQuestion();
-            }}
-            disabled={questionLoading || isExplanationLoading}
-          >
-            Ask {providerName}
-          </Button>
-          <Tooltip title="Clear">
-            <IconButton
-              size="small"
-              onClick={onClearQuestion}
-              disabled={isExplanationLoading}
-              aria-label="clear chat"
+        <Stack direction="row" spacing={1} sx={{ flexShrink: 0, alignItems: "center", justifyContent: "space-between" }}>
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+            <Button
+              variant="contained"
+              onClick={() => {
+                onAskQuestion();
+                onClearQuestion();
+              }}
+              disabled={questionLoading || isExplanationLoading}
             >
-              <ClearIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
+              Ask {providerName}
+            </Button>
+            <Tooltip title="Clear">
+              <IconButton
+                size="small"
+                onClick={onClearQuestion}
+                disabled={isExplanationLoading}
+                aria-label="clear chat"
+              >
+                <ClearIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
           <Tooltip title="Settings">
             <IconButton
               size="small"
