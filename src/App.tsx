@@ -1694,25 +1694,10 @@ Make it detailed and exciting!`;
       analysisEntriesCount: analysisEntries.length,
       currentMoveIndex
     });
-    // Append new moves from board drag to playedMoves (don't replace).
-    // The moves array from board only contains moves made by dragging since the current position was set.
-    // We need to preserve moves from line selections and append the new dragged moves.
-    setPlayedMoves(prev => {
-      // moves from board includes all moves since the FEN was loaded
-      // If playedMoves is empty, use moves as-is
-      // Otherwise, append only the new moves
-      if (prev.length === 0) {
-        return moves;
-      }
-      // If moves array matches or is shorter than playedMoves, something is wrong
-      // This shouldn't happen in normal flow, but handle it gracefully
-      if (moves.length <= prev.length) {
-        return moves;
-      }
-      // Append the new moves (the difference between board's moves and playedMoves)
-      const newMovesToAppend = moves.slice(prev.length);
-      return [...prev, ...newMovesToAppend];
-    });
+    // Update playedMoves with the full move history from the board.
+    // Since playedMoves is now replayed in AnalysisBoard's chess.current,
+    // when the user drags a piece, the board's moves array contains the complete history.
+    setPlayedMoves(moves);
     // Apply the board move locally (formerly the handleBoardMove thunk + its
     // extraReducers): update the FEN, advance the move index if the move
     // follows the selected line, otherwise run a fresh analysis.
@@ -3001,6 +2986,7 @@ Make it detailed and exciting!`;
                     puzzleMode={currentResponseType === "Puzzle" || gameMode}
                     onReset={handleResetBoard}
                     onChessInstanceReady={setChessInstance}
+                    playedMoves={playedMoves}
                   />
                   {/* Right column: View Logs and Reset buttons */}
                   <Box sx={{ display: "flex", flexDirection: "column", gap: 1, flex: "0 0 auto", alignItems: "center" }}>

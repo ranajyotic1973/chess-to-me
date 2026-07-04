@@ -12,6 +12,13 @@ For any component in UI
 - Keep the UI as lean as possible so loading and rendering is quick
 - All buttons should be considered icon buttons unless user explicitly says otherwise or appropriate icon is not found from fontawesome
 
+### Code Architecture
+Functional code writing should follow the following rules
+- Use interface driven code where interfaces are used for variables and instance of the implementing class gets injected
+- Real objects should be represented by separate classes as much as possible
+- The chess board is the main component, all it's events must be handled properly
+- Code must be event driven as much as possible, minimal use of states.
+
 ### Unit Tests Required
 All files containing logic must have a corresponding test file. This applies to:
 - Utility functions (`src/utils/`)
@@ -19,6 +26,14 @@ All files containing logic must have a corresponding test file. This applies to:
 - Any pure function that takes input and produces output
 
 Tests live alongside the code they test (e.g. `src/utils/foo.ts` → `src/utils/foo.test.ts`). Do not add a feature or fix a bug in a logic file without updating or adding the matching test.
+
+### Integration Tests Required
+All user interactions with the board must have a corresponding integration test. This applies to 
+- Mouse interactions
+- Keyboard interactions
+- Correctness of display on the screen with respect to the previous 2 interactions
+Integrations tests must use headless browser so tests can execute in github build. They must also use mock chess engine and mock LLM for all tests.
+Any new interaction must accompany new integration tests.
 
 ### Testing Checklist Before Committing
 **MANDATORY**: Before creating any commit, ensure ALL tests pass:

@@ -506,7 +506,7 @@ export interface AnalysisBoardProps {
   setCurrentFen: (fen: string) => void;
   runAnalysis: (fen: string) => void;
   setStatusMessage: (msg: string) => void;
-  onBoardMove?: (fen: string) => void;
+  onBoardMove?: (fen: string, moves: string[]) => void;
   onMoveAttempt?: (from: string, to: string, fen: string) => void;
   size?: { width: number; height: number };
   onStartAnalysis?: () => void;
@@ -515,6 +515,7 @@ export interface AnalysisBoardProps {
   puzzleMode?: boolean;
   onReset?: () => void;
   onChessInstanceReady?: (chess: any) => void;
+  playedMoves?: string[];
 }
 
 export interface StatusBannerProps {

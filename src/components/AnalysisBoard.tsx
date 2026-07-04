@@ -23,7 +23,8 @@ export default function AnalysisBoard({
   isAnalysisRunning = false,
   puzzleMode = false,
   onReset,
-  onChessInstanceReady
+  onChessInstanceReady,
+  playedMoves = []
 }: AnalysisBoardProps) {
   const boardRef = useRef<HTMLDivElement>(null);
   const boardInstance = useRef<any>(null);
@@ -148,17 +149,27 @@ export default function AnalysisBoard({
       setStatusMessage("Invalid FEN stored: must contain six fields.");
       return;
     }
-    // Load FEN into chess.current to keep it in sync with the board display.
-    // This ensures that when moves are made via dragging, chess.current has the correct state.
+    // Load FEN into chess.current and replay playedMoves to keep history in sync.
+    // This ensures that when moves are made via dragging, chess.current has the correct full move history.
     // Without this, selecting a line (which changes currentFen without going through onDrop)
-    // would leave chess.current out of sync, causing the next drag move to fail or corrupt the board.
+    // would leave chess.current's history out of sync with the board, causing subsequent drags to fail.
     try {
       chess.current.load(currentFen);
+      // Replay playedMoves to reconstruct the full move history in chess.current
+      for (const move of playedMoves) {
+        try {
+          chess.current.move(move);
+        } catch {
+          // If a move in playedMoves is invalid for the current position, stop replaying
+          // This shouldn't happen in normal flow, but we handle it gracefully
+          break;
+        }
+      }
       boardInstance.current.position(currentFen);
     } catch (err) {
       setStatusMessage(`Invalid FEN stored: ${err instanceof Error ? err.message : "unable to load"}`);
     }
-  }, [currentFen, setStatusMessage]);
+  }, [currentFen, playedMoves, setStatusMessage]);
 
   // Update square highlighting when selection changes
   useEffect(() => {
