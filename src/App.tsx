@@ -23,7 +23,7 @@ import { Alert } from "@mui/material";
 import { Chess } from "chess.js";
 import { createLineHashMap, findMatchingLine } from "./utils/moveSequenceHash";
 import { matchMoveAgainstLine } from "./utils/boardMove";
-import { CHESS_STARTING_POSITION_KEY } from "./constants/chess";
+import { CHESS_STARTING_POSITION_KEY, normalizeStartingPosition } from "./constants/chess";
 import MoveWarningDialog from "./components/MoveWarningDialog";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -1303,7 +1303,9 @@ Make it detailed and exciting!`;
     if (moves.length > 0) {
       try {
         const chess = new Chess();
-        chess.load(currentFen);
+        // Normalize "start" to actual FEN if needed
+        const baseFen = normalizeStartingPosition(currentFen);
+        chess.load(baseFen);
         const moveResult = chess.move(moves[0]);
         if (moveResult) {
           const newFen = chess.fen();
