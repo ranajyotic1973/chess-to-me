@@ -1019,8 +1019,15 @@ export default function App() {
       console.log(`[handleAnalysisSuccess] Move ${moveNumber}, color: ${activeColor}, shouldFetchLLM: ${shouldFetchLLM}`);
 
       if (whiteHasMovedOnce) {
-        console.log(`[handleAnalysisSuccess] White has moved - auto-selecting first line`);
-        selectEngineLine({ index: 0 });
+        // Only auto-select if the user hasn't explicitly selected a line
+        // (selectedEngineLineIndex is null means no user selection, so auto-select is appropriate)
+        if (selectedEngineLineIndexRef.current === null) {
+          console.log(`[handleAnalysisSuccess] White has moved - auto-selecting first line (no user selection)`);
+          selectEngineLine({ index: 0 });
+        } else {
+          console.log(`[handleAnalysisSuccess] White has moved - NOT auto-selecting (user has selected line ${selectedEngineLineIndexRef.current})`);
+        }
+
         // Set currentMoveIndex based on how many moves have been made
         if (chessInstance) {
           const historyLength = chessInstance.history().length;
