@@ -1694,8 +1694,25 @@ Make it detailed and exciting!`;
       analysisEntriesCount: analysisEntries.length,
       currentMoveIndex
     });
-    // Update playedMoves immediately when a move is made
-    setPlayedMoves(moves);
+    // Append new moves from board drag to playedMoves (don't replace).
+    // The moves array from board only contains moves made by dragging since the current position was set.
+    // We need to preserve moves from line selections and append the new dragged moves.
+    setPlayedMoves(prev => {
+      // moves from board includes all moves since the FEN was loaded
+      // If playedMoves is empty, use moves as-is
+      // Otherwise, append only the new moves
+      if (prev.length === 0) {
+        return moves;
+      }
+      // If moves array matches or is shorter than playedMoves, something is wrong
+      // This shouldn't happen in normal flow, but handle it gracefully
+      if (moves.length <= prev.length) {
+        return moves;
+      }
+      // Append the new moves (the difference between board's moves and playedMoves)
+      const newMovesToAppend = moves.slice(prev.length);
+      return [...prev, ...newMovesToAppend];
+    });
     // Apply the board move locally (formerly the handleBoardMove thunk + its
     // extraReducers): update the FEN, advance the move index if the move
     // follows the selected line, otherwise run a fresh analysis.
