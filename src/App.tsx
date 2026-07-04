@@ -1703,6 +1703,23 @@ Make it detailed and exciting!`;
     }
   }, [playedMoves, analysisLines, selectedEngineLineIndex]);
 
+  // Trigger analysis when a line is selected and the first move is applied
+  useEffect(() => {
+    if (selectedEngineLineIndex !== null && selectedEngineLineIndex >= 0 && currentMoveIndex === 0) {
+      // A line is selected and we're at the first move (which has been applied to currentFen)
+      // Trigger analysis on this new position
+      if (selectedEngineLineData && selectedLineBaseFen !== currentFen) {
+        console.log(`[useEffect] Line selected, analyzing position after first move`, {
+          selectedEngineLineIndex,
+          currentMoveIndex,
+          from: selectedLineBaseFen,
+          to: currentFen
+        });
+        runAnalysis(currentFen);
+      }
+    }
+  }, [selectedEngineLineIndex, currentMoveIndex, currentFen, selectedEngineLineData, selectedLineBaseFen, runAnalysis]);
+
   // Fetch LLM explanations when a line is selected AND enough moves have been played
   useEffect(() => {
     if (selectedEngineLineIndex !== null && selectedEngineLineIndex >= 0) {
