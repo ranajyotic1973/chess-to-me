@@ -1694,10 +1694,18 @@ Make it detailed and exciting!`;
       analysisEntriesCount: analysisEntries.length,
       currentMoveIndex
     });
-    // Update playedMoves with the full move history from the board.
-    // Since playedMoves is now replayed in AnalysisBoard's chess.current,
-    // when the user drags a piece, the board's moves array contains the complete history.
-    setPlayedMoves(moves);
+    // Append new moves from the board drag to playedMoves.
+    // moves array only contains moves made since the FEN was loaded (i.e., since line selection or reset).
+    // playedMoves accumulates all moves the user has made, so we append the new dragged moves.
+    setPlayedMoves(prev => {
+      // If there are more moves now than before, append only the new ones
+      if (moves.length > prev.length) {
+        const newMoves = moves.slice(prev.length);
+        return [...prev, ...newMoves];
+      }
+      // If moves.length <= prev.length, use the board's moves as source of truth
+      return moves;
+    });
     // Apply the board move locally (formerly the handleBoardMove thunk + its
     // extraReducers): update the FEN, advance the move index if the move
     // follows the selected line, otherwise run a fresh analysis.
