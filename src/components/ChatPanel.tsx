@@ -147,17 +147,6 @@ export default function ChatPanel({
           </Typography>
         )}
 
-        {/* Line Navigation Help Text - shown when line is selected */}
-        {selectedEngineLineIndex !== null && (
-          <Typography variant="caption" sx={{ color: "info.main", fontStyle: "italic", mb: 1.5, flexShrink: 0 }}>
-            Line {selectedLineNum} selected. Use → to advance moves, ← to go back.
-            {" "}Move {currentMoveIndex + 1} of{" "}
-            {selectedEngineLineIndex !== null
-              ? (analysisEntries[selectedEngineLineIndex]?.moves?.length ??
-                  (selectedLine?.pv || "").split(/\s+/).filter(Boolean).length)
-              : "?"}
-          </Typography>
-        )}
 
         {/* Conversation Area - Scrollable */}
         <Box
