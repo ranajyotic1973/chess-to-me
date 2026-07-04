@@ -1287,19 +1287,46 @@ Make it detailed and exciting!`;
   }, [formState.explainLanguage, formState.ollamaModel, formState.ollamaBaseUrl, formState.llmProvider, formState.llmApiKey, formState.llmModel]);
 
   const handleSelectEngineLine = useCallback((lineIndex: number, line: AnalysisLine) => {
-    // Simply select the line and show its details
-    // Don't automatically play the first move - let the user play it
     console.log(`[handleSelectEngineLine] Selected line ${lineIndex}`, { lineIndex, currentFen, analysisEntries: analysisEntries.length });
-    // Select the line (formerly the selectEngineLine thunk, whose computed FEN
-    // was discarded — only the index/moveIndex mattered).
+
+    // Select the line
     setSelectedEngineLineIndex(lineIndex);
     setSelectedEngineLineData(line);
     setSelectedLineAnalysisEntry(analysisEntries[lineIndex] || null);
     setSelectedLineBaseFen(currentFen);
-    setCurrentMoveIndex(0); // Start from the first move in the line
+    setCurrentMoveIndex(0);
+
+    // Apply the first move immediately and trigger analysis
+    const pv = line.pv || line.line || "";
+    const moves = pv.split(/\s+/).filter((m) => m.trim());
+
+    if (moves.length > 0) {
+      try {
+        const chess = new Chess();
+        chess.load(currentFen);
+        const moveResult = chess.move(moves[0]);
+        if (moveResult) {
+          const newFen = chess.fen();
+          console.log(`[handleSelectEngineLine] Applied first move, triggering analysis on new position`, {
+            from: currentFen,
+            to: newFen,
+            move: moves[0]
+          });
+          setCurrentFen(newFen);
+          // Trigger analysis on the new position
+          setTimeout(() => {
+            console.log(`[handleSelectEngineLine] Calling runAnalysis after first move`);
+            runAnalysis(newFen);
+          }, 0);
+        }
+      } catch (err) {
+        console.error(`[handleSelectEngineLine] Error applying first move:`, err);
+      }
+    }
+
     const lineNum = line.rank || lineIndex + 1;
-    setStatusMessage(`Line ${lineNum} selected. Make the first move to follow this line.`);
-  }, [currentFen, analysisEntries]);
+    setStatusMessage(`Line ${lineNum} selected. Playing first move and analyzing...`);
+  }, [currentFen, analysisEntries, runAnalysis]);
 
   // Pops one level of the exploration stack (or just clears the current selection at
   // the top level), restoring the prior list and its response without a fresh call.
