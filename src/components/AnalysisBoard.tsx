@@ -148,9 +148,12 @@ export default function AnalysisBoard({
       setStatusMessage("Invalid FEN stored: must contain six fields.");
       return;
     }
-    // Don't load FEN into chess.current - it clears move history.
-    // Just update the board display. chess.current stays in sync via onDrop moves.
+    // Load FEN into chess.current to keep it in sync with the board display.
+    // This ensures that when moves are made via dragging, chess.current has the correct state.
+    // Without this, selecting a line (which changes currentFen without going through onDrop)
+    // would leave chess.current out of sync, causing the next drag move to fail or corrupt the board.
     try {
+      chess.current.load(currentFen);
       boardInstance.current.position(currentFen);
     } catch (err) {
       setStatusMessage(`Invalid FEN stored: ${err instanceof Error ? err.message : "unable to load"}`);

@@ -1315,6 +1315,8 @@ Make it detailed and exciting!`;
             move: moves[0]
           });
           setCurrentFen(newFen);
+          // Update playedMoves to include the first move from the line
+          setPlayedMoves([moves[0]]);
           // Trigger analysis on the new position
           setTimeout(() => {
             console.log(`[handleSelectEngineLine] Calling runAnalysis after first move`);
