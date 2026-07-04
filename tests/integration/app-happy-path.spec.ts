@@ -1,4 +1,5 @@
 import { test, expect, DEFAULT_MOCK } from './fixtures/electronMock';
+import { Chess } from 'chess.js';
 
 /**
  * Happy-path integration test: verify the app boots headless against mocked
@@ -424,5 +425,159 @@ test.describe('State synchronization (board, playedMoves, line details)', () => 
     // Analysis lines should exist
     const lineCount = await lines.count();
     expect(lineCount).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Full-game SAN integrity: play >=10 legal moves by RANDOMLY mixing line
+ * selection (click a top line -> plays its first move) and programmatic drag
+ * drops, then assert "Moves Played" renders the exact SAN of the real game.
+ * Guards the regression where a drag after line selections reset playedMoves.
+ */
+function mulberry32(a: number) {
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Random legal game; skip under-promotions so the board's forced 'q' matches.
+function generateGame(seed: number, plies: number) {
+  const rng = mulberry32(seed);
+  const chess = new Chess();
+  const game: Array<{ fenBefore: string; from: string; to: string; uci: string; san: string }> = [];
+  for (let i = 0; i < plies; i++) {
+    const legal = chess.moves({ verbose: true }).filter((m: any) => !m.promotion || m.promotion === 'q');
+    if (legal.length === 0) return null;
+    const m = legal[Math.floor(rng() * legal.length)];
+    const fenBefore = chess.fen();
+    const played = chess.move({ from: m.from, to: m.to, promotion: m.promotion ? 'q' : undefined });
+    game.push({ fenBefore, from: m.from, to: m.to, uci: m.from + m.to + (m.promotion ? 'q' : ''), san: played!.san });
+  }
+  return game;
+}
+
+test.describe('Full-game SAN integrity (line selection + drag mix)', () => {
+  test('rendered "Moves Played" SAN matches the real 12-move game', async ({ page }) => {
+    const PLIES = 12;
+    const startFen = new Chess().fen();
+
+    // Deterministic game + method plan (guarantee both transitions early).
+    let seed = 1;
+    let game = generateGame(seed, PLIES);
+    while (!game) game = generateGame(++seed, PLIES);
+    const rng = mulberry32(seed + 100);
+    const methods = game.map(() => (rng() < 0.5 ? 'select' : 'drag'));
+    methods[0] = 'select'; methods[1] = 'drag'; methods[2] = 'select'; methods[3] = 'drag';
+    const lineIdx = game.map(() => Math.floor(rng() * 4));
+
+    // Position-aware mock: analyzePosition returns, at a chosen line index, a PV
+    // whose first move is the legal move for that position, and fires the engine
+    // lifecycle events so analysisPhase leaves 'engine-running' (no stuck backdrop).
+    const posMap: Record<string, { index: number; uci: string }> = {};
+    game.forEach((g, i) => { posMap[g.fenBefore] = { index: lineIdx[i], uci: g.uci }; });
+
+    await page.addInitScript((cfg: { map: Record<string, { index: number; uci: string }>; startFen: string }) => {
+      const norm = (f?: string) => (!f || f === 'start' ? cfg.startFen : f);
+      const filler = 'e2e4 e7e5 g1f3 b8c6 f1b5';
+      const build = (fen?: string) => {
+        const e = cfg.map[norm(fen)];
+        const lines = [0, 1, 2, 3].map((i) => ({
+          rank: i + 1,
+          score: { type: 'cp', value: 30 - i * 5 },
+          pv: e && e.index === i ? `${e.uci} ${filler}` : filler,
+        }));
+        return { ok: true, analysis: { bestMove: e ? e.uci : 'e2e4', lines } };
+      };
+      const bus = () => { const a: any[] = []; return { a, reg: (cb: any) => { a.push(cb); return () => { const k = a.indexOf(cb); if (k >= 0) a.splice(k, 1); }; } }; };
+      const es = bus(), ed = bus();
+      const fire = (a: any[], p: any) => a.slice().forEach((cb) => { try { cb(p); } catch { /* noop */ } });
+      const patch = () => {
+        const api = (window as any).electronAPI;
+        if (!api) { setTimeout(patch, 0); return; }
+        api.onEngineAnalysisStart = es.reg;
+        api.onEngineAnalysisDone = ed.reg;
+        api.analyzePosition = async (x: any) => { fire(es.a, { engine: 'stockfish' }); const r = build(x && x.fen); fire(ed.a, { engine: 'stockfish' }); return r; };
+        api.analyzeBoardPosition = api.analyzePosition;
+      };
+      patch();
+    }, { map: posMap, startFen });
+
+    await page.goto('/');
+    await page.waitForSelector('[data-testid="chat-panel"]', { timeout: 15000 });
+    await page.waitForSelector('[data-testid="analysis-line"]', { timeout: 15000 });
+    await page.waitForSelector('[data-testid="puzzle-board"] .square-e2 img', { timeout: 15000 });
+
+    // The splash screen is a fixed z-index:9999 overlay that only fades opacity for
+    // ~5s before it stops intercepting pointer events. Manual mouse drags (unlike
+    // Playwright clicks) don't auto-wait for it, so block until the board is hittable.
+    const boardBox = (await page.locator('[data-testid="puzzle-board"]').boundingBox())!;
+    await page.waitForFunction(
+      ([x, y]) => { const el = document.elementFromPoint(x, y); return !!el && !!el.closest('[data-testid="puzzle-board"]'); },
+      [boardBox.x + boardBox.width / 2, boardBox.y + boardBox.height / 2],
+      { timeout: 15000 }
+    );
+
+    const moveSpans = () => page.locator('[data-testid="chat-panel"] [data-testid^="move-"]');
+    const waitCount = async (n: number) =>
+      expect.poll(() => moveSpans().count(), { timeout: 8000 }).toBe(n);
+
+    // Wait until a square's centre is actually the topmost hittable board element
+    // (the auto-dismissing status Alert transiently covers the top ranks).
+    const squareHittable = async (sq: string) => {
+      const b = (await page.locator(`[data-testid="puzzle-board"] .square-${sq}`).first().boundingBox())!;
+      await page.waitForFunction(
+        ([x, y]) => { const el = document.elementFromPoint(x, y); return !!el && !!el.closest('[data-testid="puzzle-board"]'); },
+        [b.x + b.width / 2, b.y + b.height / 2],
+        { timeout: 8000 }
+      );
+    };
+
+    const dragMove = async (from: string, to: string) => {
+      await squareHittable(from);
+      await squareHittable(to);
+      const s = await page.locator(`[data-testid="puzzle-board"] .square-${from} img`).first().boundingBox();
+      const d = await page.locator(`[data-testid="puzzle-board"] .square-${to}`).first().boundingBox();
+      if (!s || !d) throw new Error(`missing square ${from}->${to}`);
+      const sx = s.x + s.width / 2, sy = s.y + s.height / 2;
+      const dx = d.x + d.width / 2, dy = d.y + d.height / 2;
+      await page.mouse.move(sx, sy);
+      await page.mouse.down();
+      await page.waitForTimeout(30);
+      await page.mouse.move((sx + dx) / 2, (sy + dy) / 2, { steps: 6 });
+      await page.waitForTimeout(30);
+      await page.mouse.move(dx, dy, { steps: 6 });
+      await page.waitForTimeout(30);
+      await page.mouse.up();
+    };
+
+    const backdrops = page.locator('.MuiBackdrop-root');
+    const settle = async () => {
+      // The mocked analysis is instant; wait for any transient spinner backdrop to
+      // close so it can't intercept the click/drag.
+      for (let k = 0; k < await backdrops.count(); k++) {
+        await backdrops.nth(k).waitFor({ state: 'hidden', timeout: 4000 }).catch(() => {});
+      }
+    };
+
+    for (let i = 0; i < game.length; i++) {
+      await settle();
+      if (methods[i] === 'select') {
+        await page.locator('[data-testid="analysis-line"]').nth(lineIdx[i]).click({ timeout: 10000 });
+      } else {
+        await page.waitForTimeout(200); // let the board settle/animate before grabbing a piece
+        await dragMove(game[i].from, game[i].to);
+      }
+      // Each ply must append exactly one new move span.
+      await waitCount(i + 1);
+    }
+
+    // The rendered SAN sequence must equal the real game exactly.
+    const rendered = await page.locator('[data-testid="chat-panel"] [data-testid^="move-"]').allInnerTexts();
+    const expected = game.map((g) => g.san);
+    expect(rendered.map((s) => s.trim())).toEqual(expected);
+    expect(rendered.length).toBeGreaterThanOrEqual(10);
   });
 });
