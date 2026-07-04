@@ -182,6 +182,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // PGN save / load
   saveAnalysisPgn: (payload: { pgn: string; notes: Record<string, string> }) =>
     ipcRenderer.invoke("analysis:save-pgn", payload) as Promise<{ ok: boolean; path?: string; error?: string }>,
+  exportAnalysisPgn: (payload: { pgn: string }) =>
+    ipcRenderer.invoke("analysis:export-pgn", payload) as Promise<{ ok: boolean; path?: string; cancelled?: boolean; error?: string }>,
   loadAnalysisPgn: () =>
     ipcRenderer.invoke("analysis:load-pgn") as Promise<{ ok: boolean; pgn?: string; notes?: Record<string, string>; cancelled?: boolean; error?: string }>,
   onDbProgress: (callback: (data: any) => void) => {

@@ -22,30 +22,8 @@ import {
 import { Alert } from "@mui/material";
 import { Chess } from "chess.js";
 import { createLineHashMap, findMatchingLine } from "./utils/moveSequenceHash";
-import { useAppDispatch, useAppSelector } from "./redux/hooks";
-import {
-  setCurrentFen,
-  resetBoard
-} from "./redux/slices/boardSlice";
-import {
-  setAnalysisLines,
-  setAnalysisEntries,
-  selectEngineLine,
-  deselectEngineLine,
-  setCurrentMoveIndex,
-  setDeepAnalysisResults,
-  setDeepAnalysisLoading,
-  resetAnalysis
-} from "./redux/slices/analysisSlice";
-import {
-  setAnalysisLoading,
-  setAnalysisStatus,
-  setAdvancedAnalysisMode
-} from "./redux/slices/uiSlice";
-import {
-  handleBoardMove as handleBoardMoveThunk,
-  selectEngineLine as selectEngineLineThunk
-} from "./redux/thunks/boardThunks";
+import { matchMoveAgainstLine } from "./utils/boardMove";
+import { CHESS_STARTING_POSITION_KEY } from "./constants/chess";
 import MoveWarningDialog from "./components/MoveWarningDialog";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -59,8 +37,9 @@ import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import SettingsPanel from "./components/SettingsPanel";
 import AnalysisBoard from "./components/AnalysisBoard";
 import ChatPanel from "./components/ChatPanel";
-import PositionNotesPanel from "./components/PositionNotesPanel";
-import NotesConfirmDialog from "./components/NotesConfirmDialog";
+import AIImportDialog from "./components/AIImportDialog";
+import NoteEditorPopup from "./components/NoteEditorPopup";
+import { buildPgnWithNotes } from "./utils/pgnNotes";
 import StatusBanner from "./components/StatusBanner";
 import AppStatusBar from "./components/AppStatusBar";
 import BoardPositionEditor from "./components/BoardPositionEditor";
@@ -241,21 +220,45 @@ const determinePreferredModel = (models: string[] | null | undefined): string =>
 };
 
 export default function App() {
-  const dispatch = useAppDispatch();
+  // ── Board & analysis state (previously Redux; now plain React state) ────────
+  const [currentFen, setCurrentFen] = useState<string>(CHESS_STARTING_POSITION_KEY);
+  const [analysisLines, setAnalysisLines] = useState<AnalysisLine[]>([]);
+  const [analysisEntries, setAnalysisEntries] = useState<AnalysisEntry[]>([]);
+  const [currentMoveIndex, setCurrentMoveIndexState] = useState<number>(0);
+  const [selectedEngineLineIndex, setSelectedEngineLineIndex] = useState<number | null>(null);
+  const [deepAnalysisResults, setDeepAnalysisResultsState] = useState<Record<number, Record<string, string>>>({});
+  const [deepAnalysisLoading, setDeepAnalysisLoading] = useState<boolean>(false);
+  const [analysisLoading, setAnalysisLoading] = useState<boolean>(false);
+  const [analysisStatus, setAnalysisStatus] = useState<string>("");
+  const [advancedAnalysisMode, setAdvancedAnalysisMode] = useState<boolean>(false);
 
-  // Redux selectors for board and analysis state
-  const currentFen = useAppSelector((state) => state.board.currentFen);
-  const analysisLines = useAppSelector((state) => state.analysis.analysisLines);
-  const analysisEntries = useAppSelector((state) => state.analysis.analysisEntries);
-  const currentMoveIndex = useAppSelector((state) => state.analysis.currentMoveIndex);
-  const selectedEngineLineIndex = useAppSelector((state) => state.analysis.selectedEngineLineIndex);
-  const deepAnalysisResults = useAppSelector((state) => state.analysis.deepAnalysisResults);
-  const deepAnalysisLoading = useAppSelector((state) => state.analysis.deepAnalysisLoading);
-  const analysisLoading = useAppSelector((state) => state.ui.analysisLoading);
-  const analysisStatus = useAppSelector((state) => state.ui.analysisStatus);
-  const advancedAnalysisMode = useAppSelector((state) => state.ui.advancedAnalysisMode);
+  // Action-equivalent helpers matching the former Redux action creators, so
+  // existing call sites read the same. `selectedAnalysisLineId` is declared as
+  // local state further below and captured by these closures.
+  const setCurrentMoveIndex = (n: number) => setCurrentMoveIndexState(Math.max(0, n));
+  const setDeepAnalysisResults = ({ lineIndex, results }: { lineIndex: number; results: Record<string, string> }) =>
+    setDeepAnalysisResultsState((prev) => ({ ...prev, [lineIndex]: results }));
+  const selectEngineLine = ({ index, lineId }: { index: number; lineId?: string }) => {
+    setSelectedEngineLineIndex(index);
+    setCurrentMoveIndexState(0);
+    if (lineId) setSelectedAnalysisLineId(lineId);
+  };
+  const deselectEngineLine = () => {
+    setSelectedEngineLineIndex(null);
+    setCurrentMoveIndexState(0);
+    setSelectedAnalysisLineId(null);
+  };
+  const resetAnalysis = () => {
+    setAnalysisLines([]);
+    setAnalysisEntries([]);
+    setSelectedEngineLineIndex(null);
+    setCurrentMoveIndexState(0);
+    setDeepAnalysisResultsState({});
+    setDeepAnalysisLoading(false);
+    setSelectedAnalysisLineId(null);
+  };
 
-  // Local state only (UI-only, not Redux)
+  // Local state only (UI-only)
   const [viewMode, setViewMode] = useState<"settings" | "analysis">(() => {
     if (typeof window === "undefined") return "settings";
     // Prefer localStorage flag if it exists (user has completed setup before)
@@ -272,10 +275,15 @@ export default function App() {
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [settingsSaving, setSettingsSaving] = useState<boolean>(false);
   const [isAnalysisRunning, setIsAnalysisRunning] = useState<boolean>(false);
-  const [notesConfirmDialogOpen, setNotesConfirmDialogOpen] = useState<boolean>(false);
-  const [currentNotesMap, setCurrentNotesMap] = useState<Record<string, string>>({});
-  const [advancedAnalysisNotesModified, setAdvancedAnalysisNotesModified] = useState<boolean>(false);
   const [currentRawPgn, setCurrentRawPgn] = useState<string>("");
+  // Advanced-analysis per-move notes (markdown), keyed by 0-based move index.
+  const [moveNotes, setMoveNotes] = useState<Record<number, string>>({});
+  // Note-editing workflow state (popup A → popup B).
+  const [noteEditMoveIndex, setNoteEditMoveIndex] = useState<number | null>(null);
+  const [aiImportDialogOpen, setAiImportDialogOpen] = useState<boolean>(false);
+  const [noteEditorOpen, setNoteEditorOpen] = useState<boolean>(false);
+  const [noteEditorInitial, setNoteEditorInitial] = useState<string>("");
+  const [noteEditorCursorAtStart, setNoteEditorCursorAtStart] = useState<boolean>(false);
   const [selectedEngineLineData, setSelectedEngineLineData] = useState<AnalysisLine | null>(null);
   const [selectedLineAnalysisEntry, setSelectedLineAnalysisEntry] = useState<AnalysisEntry | null>(null);
   const [lineExplanations, setLineExplanations] = useState<Record<number, string>>({});
@@ -659,9 +667,9 @@ export default function App() {
 
   useEffect(() => {
     if (!analysisStatus) return;
-    const t = setTimeout(() => dispatch(setAnalysisStatus("")), 2000);
+    const t = setTimeout(() => setAnalysisStatus(""), 2000);
     return () => clearTimeout(t);
-  }, [analysisStatus, dispatch]);
+  }, [analysisStatus]);
 
   // Stop the engine and clear opening label when the app mode changes
   const prevResponseTypeRef = useRef<import("./types").ResponseType | null>(null);
@@ -676,9 +684,9 @@ export default function App() {
   // Clear deep analysis results when the position changes during advanced mode
   useEffect(() => {
     if (advancedAnalysisMode) {
-      dispatch(setDeepAnalysisResults({ lineIndex: -1, results: {} }));
+      setDeepAnalysisResults({ lineIndex: -1, results: {} });
     }
-  }, [currentFen, advancedAnalysisMode, dispatch]);
+  }, [currentFen, advancedAnalysisMode]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -863,8 +871,8 @@ export default function App() {
         const lines: AnalysisLine[] = (response as any).analysis?.lines ?? [];
         if (!lines.length) return;
         // Update lines and entries from background analysis
-        dispatch(setAnalysisLines(lines));
-        dispatch(setAnalysisEntries(lines.map((line, i) => parseStockfishLine(line, i + 1, currentFen))));
+        setAnalysisLines(lines);
+        setAnalysisEntries(lines.map((line, i) => parseStockfishLine(line, i + 1, currentFen)));
         setExplorationStack([]); // a real board move starts a fresh top-level analysis
 
         // Don't clear lineExplanations here — let handleAnalysisSuccess manage it based on move count
@@ -877,7 +885,7 @@ export default function App() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [currentFen, dispatch]);
+  }, [currentFen]);
 
   // Update PGN in real-time as FEN changes (moves forward/backward)
   useEffect(() => {
@@ -913,7 +921,7 @@ export default function App() {
 
       console.log(`[fetchExplanations] Starting fetch for line ${selectedLineIndex} with ${playedMovesForContext.length} played moves`);
       setIsExplanationLoading(true);
-      dispatch(setAnalysisStatus("LLM processing..."));
+      setAnalysisStatus("LLM processing...");
       try {
         const response = await electronAPI.explainLines({
           fen,
@@ -933,16 +941,16 @@ export default function App() {
           const explanation = response.explanations[0]?.text || "";
           console.log(`[fetchExplanations] Setting explanation for line ${selectedLineIndex}`);
           setLineExplanations({ [selectedLineIndex]: explanation });
-          dispatch(setAnalysisStatus(""));
+          setAnalysisStatus("");
         }
       } catch (err) {
         console.error(`[fetchExplanations] Error:`, err);
-        dispatch(setAnalysisStatus("LLM processing failed."));
+        setAnalysisStatus("LLM processing failed.");
       } finally {
         setIsExplanationLoading(false);
       }
     },
-    [formState.explainLanguage, formState.ollamaModel, formState.ollamaBaseUrl, formState.llmProvider, formState.llmApiKey, electronAPI, dispatch]
+    [formState.explainLanguage, formState.ollamaModel, formState.ollamaBaseUrl, formState.llmProvider, formState.llmApiKey, electronAPI]
   );
 
   const handleAnalysisSuccess = useCallback(
@@ -950,15 +958,15 @@ export default function App() {
       if (!lines?.length) return; // keep previous eval on the bar when result is empty
       // Sort lines by score (best first)
       const sortedLines = sortLinesByScore(lines);
-      dispatch(setAnalysisLines(sortedLines));
+      setAnalysisLines(sortedLines);
       setSelectedEngineLineData(null);
-      dispatch(setDeepAnalysisResults({ lineIndex: -1, results: {} }));
+      setDeepAnalysisResults({ lineIndex: -1, results: {} });
       setExplorationStack([]); // a fresh manual analysis starts a new top-level list
       const entries = (sortedLines || []).map((line, index) =>
         parseStockfishLine(line, index + 1, fen)
       );
-      dispatch(setAnalysisEntries(entries));
-      dispatch(setAnalysisStatus(""));
+      setAnalysisEntries(entries);
+      setAnalysisStatus("");
 
       // Extract move number from FEN (format: "... w KQkq - 0 1" where last number is move count)
       const fenParts = fen.split(/\s+/);
@@ -975,13 +983,13 @@ export default function App() {
 
       if (whiteHasMovedOnce) {
         console.log(`[handleAnalysisSuccess] White has moved - auto-selecting first line`);
-        dispatch(selectEngineLine({ index: 0 }));
+        selectEngineLine({ index: 0 });
         // Set currentMoveIndex based on how many moves have been made
         if (chessInstance) {
           const historyLength = chessInstance.history().length;
           const moveIndexToHighlight = Math.max(0, historyLength - 1);
           console.log(`[handleAnalysisSuccess] Setting currentMoveIndex to ${moveIndexToHighlight} (history length: ${historyLength})`);
-          dispatch(setCurrentMoveIndex(moveIndexToHighlight));
+          setCurrentMoveIndex(moveIndexToHighlight);
         }
         if (shouldFetchLLM) {
           console.log(`[handleAnalysisSuccess] Sufficient moves for LLM - clearing explanations for fetch`);
@@ -991,10 +999,10 @@ export default function App() {
         }
       } else {
         console.log(`[handleAnalysisSuccess] Starting position or White hasn't moved - deselecting`);
-        dispatch(deselectEngineLine());
+        deselectEngineLine();
       }
     },
-    [dispatch]
+    []
   );
 
   const handleSelectAnalysisLine = useCallback((entry: AnalysisEntry): void => {
@@ -1008,12 +1016,12 @@ export default function App() {
   const runAnalysis = useCallback(
     async (fen: string, deepMode = false): Promise<void> => {
       if (!electronAPI?.analyzePosition) {
-        dispatch(setAnalysisStatus("Analysis engine unavailable."));
+        setAnalysisStatus("Analysis engine unavailable.");
         return;
       }
-      dispatch(setAnalysisLoading(true));
+      setAnalysisLoading(true);
       const engineName = formState.selectedEngine?.toUpperCase() || "ENGINE";
-      dispatch(setAnalysisStatus(`${engineName} analyzing...`));
+      setAnalysisStatus(`${engineName} analyzing...`);
       try {
         // Show more lines in advanced/deep analysis mode (20 lines) vs regular analysis (4 lines)
         const multiPvLines = advancedAnalysisMode || deepMode ? 20 : 4;
@@ -1026,7 +1034,7 @@ export default function App() {
           multiPv: multiPvLines
         });
         if (!response?.ok) {
-          dispatch(setAnalysisStatus((response as any)?.error || `${engineName} analysis failed.`));
+          setAnalysisStatus((response as any)?.error || `${engineName} analysis failed.`);
           return;
         }
         const lines = (response as any).analysis?.lines || [];
@@ -1034,30 +1042,30 @@ export default function App() {
 
         // Deep LLM pass when in advanced mode
         if (deepMode && lines.length > 0 && electronAPI?.deepAnalyzeLines) {
-          dispatch(setDeepAnalysisLoading(true));
+          setDeepAnalysisLoading(true);
           electronAPI.deepAnalyzeLines({ fen, lines }).then((res) => {
             if (res?.ok && res.results) {
               const map: Record<number, DeepLineAnalysis | null> = {};
               for (const r of res.results) map[r.lineIndex] = r.analysis;
-              dispatch(setDeepAnalysisResults({ lineIndex: 0, results: map as any }));
+              setDeepAnalysisResults({ lineIndex: 0, results: map as any });
             }
-          }).catch(() => {}).finally(() => dispatch(setDeepAnalysisLoading(false)));
+          }).catch(() => {}).finally(() => setDeepAnalysisLoading(false));
         }
       } catch (err) {
-        dispatch(setAnalysisStatus(`${engineName} analysis failed.`));
+        setAnalysisStatus(`${engineName} analysis failed.`);
       } finally {
-        dispatch(setAnalysisLoading(false));
+        setAnalysisLoading(false);
       }
     },
-    [dispatch, formState.analysisDepth, formState.selectedEngine, advancedAnalysisMode, handleAnalysisSuccess]
+    [formState.analysisDepth, formState.selectedEngine, advancedAnalysisMode, handleAnalysisSuccess]
   );
 
   const handleStartAdvancedAnalysis = useCallback(() => {
-    dispatch(setAdvancedAnalysisMode(true));
+    setAdvancedAnalysisMode(true);
     setIsAnalysisRunning(true);
-    dispatch(setDeepAnalysisResults({ lineIndex: -1, results: {} }));
+    setDeepAnalysisResults({ lineIndex: -1, results: {} });
     runAnalysis(currentFen, true);
-  }, [dispatch, currentFen, runAnalysis]);
+  }, [currentFen, runAnalysis]);
 
   // Auto-run analysis on start position when entering analysis mode
   useEffect(() => {
@@ -1068,61 +1076,51 @@ export default function App() {
     }
   }, [viewMode, settingsLoaded, isAnalysisRunning, analysisLines.length, currentFen, runAnalysis]);
 
-  const annotateGameWithNotes = (pgn: string, notesMap: Record<string, string>): string => {
-    // For now, append notes as comments at the end of the PGN
-    // In a full implementation, would parse PGN and attach comments to specific moves
-    let annotated = pgn;
-    const notesList = Object.values(notesMap).filter(note => note.trim().length > 0);
-    if (notesList.length > 0) {
-      annotated += `\n\n{ Analysis Notes:\n${notesList.join("\n\n")} }`;
-    }
-    return annotated;
-  };
-
-  const handleSaveNotesAndExit = useCallback(async () => {
-    // Convert currentRawPgn to include note annotations
-    if (currentRawPgn) {
-      const annotatedPgn = annotateGameWithNotes(currentRawPgn, currentNotesMap);
-      try {
-        // Note: saveAnnotatedPgn would be implemented in electron/main.ts
-        // For now, just save notes to local map
-        setStatusMessage("Analysis notes saved.");
-      } catch (err) {
-        setStatusMessage("Failed to save annotated PGN.");
-      }
-    }
-    dispatch(setAdvancedAnalysisMode(false));
-    setIsAnalysisRunning(false);
-    dispatch(setAnalysisLoading(false));
-    dispatch(setDeepAnalysisLoading(false));
-    dispatch(setAnalysisStatus("Analysis stopped."));
-    setAdvancedAnalysisNotesModified(false);
-    setNotesConfirmDialogOpen(false);
-  }, [dispatch, currentRawPgn, currentNotesMap, electronAPI]);
-
-  const handleDiscardNotesAndExit = useCallback(() => {
-    dispatch(setAdvancedAnalysisMode(false));
-    setIsAnalysisRunning(false);
-    dispatch(setAnalysisLoading(false));
-    dispatch(setDeepAnalysisLoading(false));
-    dispatch(setAnalysisStatus("Analysis stopped."));
-    setAdvancedAnalysisNotesModified(false);
-    setNotesConfirmDialogOpen(false);
-  }, [dispatch]);
-
-  const handleStopAdvancedAnalysis = useCallback(() => {
-    // Check if notes have been modified
-    if (advancedAnalysisNotesModified) {
-      setNotesConfirmDialogOpen(true);
+  // ── Move-level notes workflow (advanced analysis) ──────────────────────────
+  // Clicking a move opens popup A (AI import prompt) for a fresh note, or jumps
+  // straight to popup B (the markdown editor) when the move already has a note.
+  const handleMoveNoteClick = useCallback((moveIndex: number) => {
+    setNoteEditMoveIndex(moveIndex);
+    const existing = moveNotes[moveIndex];
+    if (existing && existing.trim().length > 0) {
+      // Existing note → open the editor directly, skipping the AI-import prompt.
+      setNoteEditorInitial(existing);
+      setNoteEditorCursorAtStart(false);
+      setNoteEditorOpen(true);
     } else {
-      dispatch(setAdvancedAnalysisMode(false));
-      setIsAnalysisRunning(false);
-      dispatch(setAnalysisLoading(false));
-      dispatch(setDeepAnalysisLoading(false));
-      dispatch(setAnalysisStatus("Analysis stopped."));
-      setAdvancedAnalysisNotesModified(false);
+      // No note yet → ask whether to seed with the AI analysis.
+      setAiImportDialogOpen(true);
     }
-  }, [dispatch, advancedAnalysisNotesModified]);
+  }, [moveNotes]);
+
+  const handleAiImportYes = useCallback(() => {
+    setAiImportDialogOpen(false);
+    const aiText = selectedEngineLineIndex !== null ? (lineExplanations[selectedEngineLineIndex] || "") : "";
+    // Blank line at the top for the user's own note; cursor starts there.
+    setNoteEditorInitial(`\n\n${aiText}`);
+    setNoteEditorCursorAtStart(true);
+    setNoteEditorOpen(true);
+  }, [selectedEngineLineIndex, lineExplanations]);
+
+  const handleAiImportNo = useCallback(() => {
+    setAiImportDialogOpen(false);
+    setNoteEditorInitial("");
+    setNoteEditorCursorAtStart(false);
+    setNoteEditorOpen(true);
+  }, []);
+
+  const handleNoteSave = useCallback((markdown: string) => {
+    if (noteEditMoveIndex !== null) {
+      setMoveNotes((prev) => ({ ...prev, [noteEditMoveIndex]: markdown }));
+    }
+    setNoteEditorOpen(false);
+    setNoteEditMoveIndex(null);
+  }, [noteEditMoveIndex]);
+
+  const handleNoteCancel = useCallback(() => {
+    setNoteEditorOpen(false);
+    setNoteEditMoveIndex(null);
+  }, []);
 
   const handleStartAnalysis = useCallback(() => {
     setIsAnalysisRunning(true);
@@ -1131,13 +1129,13 @@ export default function App() {
 
   const handleStopAnalysis = useCallback(() => {
     setIsAnalysisRunning(false);
-    dispatch(setAnalysisLoading(false));
-    dispatch(setAnalysisStatus("Analysis stopped."));
-  }, [dispatch]);
+    setAnalysisLoading(false);
+    setAnalysisStatus("Analysis stopped.");
+  }, []);
 
   const handleResetBoard = useCallback(() => {
     // Full app reset - clear all state back to initial analysis mode
-    dispatch(setCurrentFen("start"));
+    setCurrentFen("start");
     setQuestionResponse("");
     setViewMode("analysis");
 
@@ -1153,9 +1151,10 @@ export default function App() {
     setPuzzleExplainLoading(false);
 
     // Clear analysis state
-    dispatch(resetAnalysis());
+    resetAnalysis();
     setExplorationStack([]);
     setSelectedEngineLineData(null);
+    setMoveNotes({});
 
     // Clear game state
     setGameMode(false);
@@ -1169,12 +1168,12 @@ export default function App() {
     loadConversationHistory("analysis").catch(() => {});
 
     setStatusMessage("App reset. Ready to analyze.");
-  }, [dispatch, setStatusMessage, loadConversationHistory]);
+  }, [setStatusMessage, loadConversationHistory]);
 
   const applyPuzzleSolutionMove = useCallback((moveIndex: number) => {
     if (!puzzleStartFen) return;
     if (moveIndex < 0) {
-      dispatch(setCurrentFen(puzzleStartFen));
+      setCurrentFen(puzzleStartFen);
       return;
     }
     const chess = new Chess();
@@ -1193,8 +1192,8 @@ export default function App() {
         return;
       }
     }
-    dispatch(setCurrentFen(chess.fen()));
-  }, [dispatch, puzzleStartFen, puzzleSolution]);
+    setCurrentFen(chess.fen());
+  }, [puzzleStartFen, puzzleSolution]);
 
   const fetchPerMoveExplanation = useCallback(async (
     lineIndex: number,
@@ -1252,39 +1251,33 @@ Make it detailed and exciting!`;
     // Simply select the line and show its details
     // Don't automatically play the first move - let the user play it
     console.log(`[handleSelectEngineLine] Selected line ${lineIndex}`, { lineIndex, currentFen, analysisEntries: analysisEntries.length });
-    dispatch(selectEngineLineThunk({
-      lineIndex,
-      analysisEntries,
-      currentFen,
-      electronAPI,
-      formState: formStateRef.current,
-      advancedAnalysisMode,
-      llmProvider: formState.llmProvider,
-    }));
+    // Select the line (formerly the selectEngineLine thunk, whose computed FEN
+    // was discarded — only the index/moveIndex mattered).
+    setSelectedEngineLineIndex(lineIndex);
     setSelectedEngineLineData(line);
     setSelectedLineAnalysisEntry(analysisEntries[lineIndex] || null);
     setSelectedLineBaseFen(currentFen);
-    dispatch(setCurrentMoveIndex(0)); // Start from the first move in the line
+    setCurrentMoveIndex(0); // Start from the first move in the line
     const lineNum = line.rank || lineIndex + 1;
     setStatusMessage(`Line ${lineNum} selected. Make the first move to follow this line.`);
-  }, [dispatch, currentFen, analysisEntries]);
+  }, [currentFen, analysisEntries]);
 
   // Pops one level of the exploration stack (or just clears the current selection at
   // the top level), restoring the prior list and its response without a fresh call.
   const handleBackFromLine = useCallback(() => {
     drillRequestIdRef.current++; // invalidate any in-flight drill so it can't clobber this
     setIsDrillLoading(false);
-    dispatch(deselectEngineLine());
+    deselectEngineLine();
     setSelectedEngineLineData(null);
     setSelectedLineAnalysisEntry(null);
 
     if (explorationStack.length > 0) {
       const parent = explorationStack[explorationStack.length - 1];
       setExplorationStack((stack) => stack.slice(0, -1));
-      dispatch(setAnalysisLines(parent.lines));
-      dispatch(setAnalysisEntries(parent.entries));
+      setAnalysisLines(parent.lines);
+      setAnalysisEntries(parent.entries);
       suppressNextAutoEvalRef.current = true;
-      dispatch(setCurrentFen(parent.fen));
+      setCurrentFen(parent.fen);
       lastListResponseRef.current = parent.listResponse;
       setQuestionResponse("");
       setTimeout(() => setQuestionResponse(parent.listResponse), 80);
@@ -1292,7 +1285,7 @@ Make it detailed and exciting!`;
       setQuestionResponse("");
       setTimeout(() => setQuestionResponse(lastListResponseRef.current), 80);
     }
-  }, [explorationStack, dispatch]);
+  }, [explorationStack]);
 
   const handleKeyboardNavigation = useCallback((event: KeyboardEvent) => {
     // Do not intercept when the user is typing in any input/textarea
@@ -1326,7 +1319,7 @@ Make it detailed and exciting!`;
           const m = trainingMoves[i];
           lastResult = chess.move({ from: m.uci.slice(0, 2), to: m.uci.slice(2, 4), promotion: m.uci[4] });
         }
-        dispatch(setCurrentFen(chess.fen()));
+        setCurrentFen(chess.fen());
         setQuestionResponse(trainingMoves[next].commentary);
         setTrainingMoveLabel(`${next + 1}. ${sanWithGlyph(trainingMoves[next].san, lastResult?.color === "b")}`);
       } else {
@@ -1334,7 +1327,7 @@ Make it detailed and exciting!`;
         const prev = trainingMoveIndex - 1;
         setTrainingMoveIndex(prev);
         if (prev < 0) {
-          dispatch(setCurrentFen(trainingStartFen));
+          setCurrentFen(trainingStartFen);
           setQuestionResponse("Back to the start! Press → to step through the moves.");
           setTrainingMoveLabel("");
         } else {
@@ -1345,7 +1338,7 @@ Make it detailed and exciting!`;
             const m = trainingMoves[i];
             lastResult = chess.move({ from: m.uci.slice(0, 2), to: m.uci.slice(2, 4), promotion: m.uci[4] });
           }
-          dispatch(setCurrentFen(chess.fen()));
+          setCurrentFen(chess.fen());
           setQuestionResponse(trainingMoves[prev].commentary);
           setTrainingMoveLabel(`${prev + 1}. ${sanWithGlyph(trainingMoves[prev].san, lastResult?.color === "b")}`);
         }
@@ -1359,11 +1352,11 @@ Make it detailed and exciting!`;
       if (event.key === "ArrowRight") {
         const next = Math.min(gameMoveIndex + 1, gamePgnFens.length - 1);
         setGameMoveIndex(next);
-        dispatch(setCurrentFen(gamePgnFens[next]));
+        setCurrentFen(gamePgnFens[next]);
       } else {
         const prev = Math.max(gameMoveIndex - 1, 0);
         setGameMoveIndex(prev);
-        dispatch(setCurrentFen(gamePgnFens[prev]));
+        setCurrentFen(gamePgnFens[prev]);
       }
       return;
     }
@@ -1376,13 +1369,13 @@ Make it detailed and exciting!`;
         event.preventDefault();
         const next = currentMoveIndex + 1;
         if (next > puzzleSolution.length) return;
-        dispatch(setCurrentMoveIndex(next));
+        setCurrentMoveIndex(next);
         applyPuzzleSolutionMove(next - 1);
       } else {
         event.preventDefault();
         if (currentMoveIndex <= 0) return;
         const prev = currentMoveIndex - 1;
-        dispatch(setCurrentMoveIndex(prev));
+        setCurrentMoveIndex(prev);
         if (prev === 0) {
           applyPuzzleSolutionMove(-1);
         } else {
@@ -1407,11 +1400,11 @@ Make it detailed and exciting!`;
         setQuestionResponse("End of line — no more moves.");
         return;
       }
-      dispatch(setCurrentMoveIndex(nextIndex));
+      setCurrentMoveIndex(nextIndex);
       // Update board position to show the position after this move
       const fenSequence = deriveFenSequence(moves.slice(0, nextIndex + 1), selectedLineBaseFen);
       if (fenSequence && fenSequence.length > 0) {
-        dispatch(setCurrentFen(fenSequence[fenSequence.length - 1]));
+        setCurrentFen(fenSequence[fenSequence.length - 1]);
       }
       const cacheKey = `${selectedLineBaseFen}:${selectedEngineLineIndex}:${nextIndex}`;
       const cached = explanationCache.current.get(cacheKey);
@@ -1430,17 +1423,17 @@ Make it detailed and exciting!`;
       event.preventDefault();
       if (currentMoveIndex <= 0) {
         // Go back to the line's starting position
-        dispatch(setCurrentFen(selectedLineBaseFen));
-        dispatch(setCurrentMoveIndex(0));
+        setCurrentFen(selectedLineBaseFen);
+        setCurrentMoveIndex(0);
         setQuestionResponse("");
         return;
       }
       const prevIndex = currentMoveIndex - 1;
-      dispatch(setCurrentMoveIndex(prevIndex));
+      setCurrentMoveIndex(prevIndex);
       // Update board position to show the position after this move
       const fenSequence = deriveFenSequence(moves.slice(0, prevIndex + 1), selectedLineBaseFen);
       if (fenSequence && fenSequence.length > 0) {
-        dispatch(setCurrentFen(fenSequence[fenSequence.length - 1]));
+        setCurrentFen(fenSequence[fenSequence.length - 1]);
       }
       const cacheKey = `${selectedLineBaseFen}:${selectedEngineLineIndex}:${prevIndex}`;
       const cached = explanationCache.current.get(cacheKey);
@@ -1451,7 +1444,7 @@ Make it detailed and exciting!`;
       }
     }
   }, [
-    dispatch, gameMode, gamePgnFens, gameMoveIndex,
+    gameMode, gamePgnFens, gameMoveIndex,
     puzzleNavigationMode, puzzleSolution, currentMoveIndex, applyPuzzleSolutionMove,
     showSolution, selectedEngineLineIndex, selectedEngineLineData, selectedLineBaseFen, fetchPerMoveExplanation,
     currentResponseType, trainingMoves, trainingMoveIndex, trainingStartFen
@@ -1514,11 +1507,11 @@ Make it detailed and exciting!`;
         }
       }
       const newFen = chess.fen();
-      dispatch(setCurrentFen(newFen));
+      setCurrentFen(newFen);
     } catch (err) {
       setStatusMessage("Error applying line move.");
     }
-  }, [dispatch, selectedEngineLineData, selectedLineBaseFen, currentFen]);
+  }, [selectedEngineLineData, selectedLineBaseFen, currentFen]);
 
   useEffect(() => {
     if (selectedEngineLineIndex !== null && selectedEngineLineData) {
@@ -1536,8 +1529,8 @@ Make it detailed and exciting!`;
       setSnackbarSeverity("error");
       setSnackbarOpen(true);
       setPuzzleAttemptMoves([]);
-      dispatch(setCurrentFen(puzzleStartFen));
-      dispatch(setCurrentMoveIndex(0));
+      setCurrentFen(puzzleStartFen);
+      setCurrentMoveIndex(0);
       setPuzzleIncorrect(true);
 
       // Deferred LLM explanation on incorrect drag attempt
@@ -1588,14 +1581,14 @@ Make it detailed and exciting!`;
 
   const handleRetryPuzzle = useCallback(() => {
     if (!puzzleStartFen) return;
-    dispatch(setCurrentFen(puzzleStartFen));
-    dispatch(setCurrentMoveIndex(0));
+    setCurrentFen(puzzleStartFen);
+    setCurrentMoveIndex(0);
     setPuzzleAttemptMoves([]);
     setPuzzleIncorrect(false);
     setPuzzleExplainLoading(false);
     const explanation = currentResponseData?.explanation || currentResponseData?.answer || "";
     setQuestionResponse(explanation || "");
-  }, [dispatch, puzzleStartFen, currentResponseData]);
+  }, [puzzleStartFen, currentResponseData]);
 
   const handleShowSolution = useCallback(() => {
     setShowSolution(true);
@@ -1606,15 +1599,15 @@ Make it detailed and exciting!`;
       setQuestionResponse(explanation);
     }
     if (puzzleStartFen) {
-      dispatch(setCurrentFen(puzzleStartFen));
-      dispatch(setCurrentMoveIndex(0));
+      setCurrentFen(puzzleStartFen);
+      setCurrentMoveIndex(0);
       setPuzzleNavigationMode(true);
     }
     const rating = puzzleMeta?.rating ?? 1200;
     electronAPI?.recordSolve?.({ rating, solved: false }).then(() => {
       setProfileRefreshTrigger((n) => n + 1);
     }).catch(() => {});
-  }, [dispatch, puzzleStartFen, currentResponseData, puzzleMeta]);
+  }, [puzzleStartFen, currentResponseData, puzzleMeta]);
 
   const handleBoardMove = useCallback((newFen: string, moves: string[] = []) => {
     console.log(`[handleBoardMove] Move detected`, {
@@ -1628,43 +1621,29 @@ Make it detailed and exciting!`;
     });
     // Update playedMoves immediately when a move is made
     setPlayedMoves(moves);
-    (async () => {
-      try {
-        const result = await dispatch(handleBoardMoveThunk({
-          newFen,
-          currentFen,
-          selectedEngineLineIndex,
-          analysisLines,
-          analysisEntries,
-          currentMoveIndex,
-          electronAPI,
-          formState: formStateRef.current,
-          advancedAnalysisMode,
-          llmProvider: formState.llmProvider,
-        }));
-
-        console.log(`[handleBoardMove] Thunk result:`, {
-          moveMatched: result.payload?.moveMatched,
-          shouldAnalyze: result.payload?.shouldAnalyze,
-          newMoveIndex: result.payload?.newMoveIndex,
-        });
-
-        // If the move doesn't match the selected line, trigger analysis with LLM
-        // (The extraReducer handles updating currentMoveIndex when move matches the line)
-        if (result.payload?.shouldAnalyze) {
-          console.log(`[handleBoardMove] Triggering analysis for new position`);
-          // Store the FEN we're analyzing for LLM later
-          lastAnalyzedFenRef.current = newFen;
-          // Run engine analysis (this will update Redux state with new lines)
-          runAnalysis(newFen);
-        } else if (result.payload?.moveMatched) {
-          console.log(`[handleBoardMove] Move matched line, moving to index ${result.payload.newMoveIndex}`);
-        }
-      } catch (err) {
-        console.error(`[handleBoardMove] Error dispatching thunk:`, err);
+    // Apply the board move locally (formerly the handleBoardMove thunk + its
+    // extraReducers): update the FEN, advance the move index if the move
+    // follows the selected line, otherwise run a fresh analysis.
+    try {
+      setCurrentFen(newFen);
+      const match = matchMoveAgainstLine(newFen, selectedEngineLineIndex, analysisEntries, currentMoveIndex, currentFen);
+      console.log(`[handleBoardMove] Match result:`, {
+        moveMatched: match.matched,
+        shouldAnalyze: match.shouldRunAnalysis,
+        newMoveIndex: match.newMoveIndex,
+      });
+      if (match.matched) {
+        setCurrentMoveIndex(match.newMoveIndex || 0);
       }
-    })();
-  }, [dispatch, currentFen, selectedEngineLineIndex, analysisLines, analysisEntries, currentMoveIndex, advancedAnalysisMode, formState, electronAPI, runAnalysis]);
+      if (match.shouldRunAnalysis) {
+        console.log(`[handleBoardMove] Triggering analysis for new position`);
+        lastAnalyzedFenRef.current = newFen;
+        runAnalysis(newFen);
+      }
+    } catch (err) {
+      console.error(`[handleBoardMove] Error handling move:`, err);
+    }
+  }, [currentFen, selectedEngineLineIndex, analysisLines, analysisEntries, currentMoveIndex, advancedAnalysisMode, formState, electronAPI, runAnalysis]);
 
 
   // Auto-select engine line when moves are played
@@ -1677,13 +1656,13 @@ Make it detailed and exciting!`;
       console.log(`[autoSelectLine] Found matching line index:`, matchingLineIndex);
 
       if (matchingLineIndex !== null && matchingLineIndex !== selectedEngineLineIndex) {
-        dispatch(selectEngineLine({ index: matchingLineIndex }));
+        selectEngineLine({ index: matchingLineIndex });
         console.log(`[autoSelectLine] Auto-selected line ${matchingLineIndex} for moves:`, playedMoves);
       } else {
         console.log(`[autoSelectLine] Not selecting: matchingLineIndex=${matchingLineIndex}, selectedEngineLineIndex=${selectedEngineLineIndex}`);
       }
     }
-  }, [playedMoves, analysisLines, selectedEngineLineIndex, dispatch]);
+  }, [playedMoves, analysisLines, selectedEngineLineIndex]);
 
   // Fetch LLM explanations when a line is selected AND enough moves have been played
   useEffect(() => {
@@ -1708,17 +1687,17 @@ Make it detailed and exciting!`;
   const applyPositions = useCallback(
     (positions: string[], message?: string): void => {
       if (!positions?.length) {
-        dispatch(setAnalysisStatus("No valid positions found."));
+        setAnalysisStatus("No valid positions found.");
         return;
       }
       const finalFen = positions[positions.length - 1];
       setImportText(finalFen === "start" ? "start" : finalFen);
-      dispatch(setCurrentFen(finalFen));
+      setCurrentFen(finalFen);
       setStatusMessage(message || "Position loaded.");
-      dispatch(setAnalysisStatus(""));
+      setAnalysisStatus("");
       runAnalysis(finalFen);
     },
-    [dispatch, runAnalysis]
+    [runAnalysis]
   );
 
   const handleFormChange = useCallback(
@@ -2069,7 +2048,7 @@ Make it detailed and exciting!`;
     setGamePgnFens(fens);
     // Start at move 1 so the board shows a changed position — visual proof the game loaded.
     setGameMoveIndex(1);
-    dispatch(setCurrentFen(fens[1]));
+    setCurrentFen(fens[1]);
     setGameMode(true);
     setCurrentGameInfo({
       white: game.white,
@@ -2078,12 +2057,12 @@ Make it detailed and exciting!`;
       blackElo: game.black_elo > 0 ? game.black_elo : undefined,
     });
     setShowSolution(false);
-    dispatch(resetAnalysis());
+    resetAnalysis();
     setSelectedEngineLineData(null);
     setExplorationStack([]);
     setCurrentRawPgn(game.pgn_moves || "");
     return true;
-  }, [dispatch, parsePgnToFens, setCurrentGameInfo]);
+  }, [parsePgnToFens, setCurrentGameInfo]);
 
   const handleQuestion = useCallback(async (overrideQuestion?: string): Promise<void> => {
     let question = String(overrideQuestion ?? questionText ?? "").trim();
@@ -2175,7 +2154,7 @@ Make it detailed and exciting!`;
           // After a short celebration window, reset board and all puzzle state so
           // the user is in a clean Analysis state ready for the next question.
           setTimeout(() => {
-            dispatch(setCurrentFen("start"));
+            setCurrentFen("start");
             setCurrentResponseType("Analysis");
             setCurrentResponseData({});
             setGameMode(false);
@@ -2188,7 +2167,7 @@ Make it detailed and exciting!`;
             setPuzzleIncorrect(false);
             setShowSolution(false);
             setPuzzleMeta(null);
-            dispatch(resetAnalysis());
+            resetAnalysis();
             setExplorationStack([]);
             setPuzzleExplainLoading(false);
             setQuestionResponse("");
@@ -2336,12 +2315,12 @@ Make it detailed and exciting!`;
       if (isModeSwitching) {
         setGameList(null);
         gameListRef.current = null;
-        dispatch(resetAnalysis()); // Clear analysis lines when switching modes
+        resetAnalysis(); // Clear analysis lines when switching modes
       }
 
       // Update analysis lines if engine was used
       if (engineAnalysisLines.length > 0) {
-        dispatch(setAnalysisLines(engineAnalysisLines));
+        setAnalysisLines(engineAnalysisLines);
         setExplorationStack([]); // a new question starts a fresh top-level list
       }
 
@@ -2385,7 +2364,7 @@ Make it detailed and exciting!`;
       if (finalResponseType === "Puzzle" && parsedResponse.fen) {
         try {
           new Chess(parsedResponse.fen); // validate
-          dispatch(setCurrentFen(parsedResponse.fen));
+          setCurrentFen(parsedResponse.fen);
           setPuzzleStartFen(parsedResponse.fen);
           // Normalize solution moves: trim whitespace and ensure valid UCI format (4+ chars)
           const sol = (Array.isArray(parsedResponse.solution) ? parsedResponse.solution : [])
@@ -2398,7 +2377,7 @@ Make it detailed and exciting!`;
           setPuzzleIncorrect(false);
           setPuzzleExplainLoading(false);
           setShowSolution(false);
-          dispatch(setCurrentMoveIndex(0));
+          setCurrentMoveIndex(0);
           setPuzzleMeta({
             themes: parsedResponse.themes ?? "",
             difficulty: parsedResponse.difficulty ?? "medium",
@@ -2410,7 +2389,7 @@ Make it detailed and exciting!`;
       } else if (finalResponseType === "Position" && parsedResponse.fen) {
         try {
           new Chess(parsedResponse.fen); // validate
-          dispatch(setCurrentFen(parsedResponse.fen));
+          setCurrentFen(parsedResponse.fen);
         } catch (fenError) {
           setStatusMessage(`Invalid FEN in response: ${(fenError as Error).message}`);
         }
@@ -2454,7 +2433,6 @@ Make it detailed and exciting!`;
       setQuestionLoading(false);
     }
   }, [
-    dispatch,
     analysisLines,
     currentFen,
     currentResponseType,
@@ -3004,15 +2982,24 @@ Make it detailed and exciting!`;
                       </>
                     )}
                     {!gameMode && advancedAnalysisMode && (
-                      <Tooltip title="Save this analysis" disableInteractive={false}>
+                      <Tooltip title="Save analysis as PGN" disableInteractive={false}>
                         <span>
                           <IconButton
                             size="small"
                             disabled={deepAnalysisLoading}
                             aria-label="save analysis"
                             onClick={async () => {
-                              if (!electronAPI?.saveAnalysisPgn) return;
-                              const res = await electronAPI.saveAnalysisPgn({ pgn: currentRawPgn, notes: currentNotesMap });
+                              if (!electronAPI?.exportAnalysisPgn) return;
+                              // Build PGN from the played moves + per-move notes.
+                              const pgn = buildPgnWithNotes(playedMoves, moveNotes);
+                              if (!pgn.trim()) {
+                                setSnackbarMessage("No moves to save yet.");
+                                setSnackbarSeverity("error");
+                                setSnackbarOpen(true);
+                                return;
+                              }
+                              const res = await electronAPI.exportAnalysisPgn({ pgn });
+                              if (res?.cancelled) return;
                               if (res?.ok) {
                                 setSnackbarMessage(`Analysis saved to: ${res.path}`);
                                 setSnackbarSeverity("success");
@@ -3044,7 +3031,6 @@ Make it detailed and exciting!`;
                               return;
                             }
                             setCurrentRawPgn(res.pgn || "");
-                            if (res.notes) setCurrentNotesMap((prev) => ({ ...prev, ...res.notes }));
                             // Load PGN onto the board
                             if (res.pgn) {
                               const fens = parsePgnToFens(res.pgn);
@@ -3127,25 +3113,17 @@ Make it detailed and exciting!`;
                     setCurrentResponseType("GameList");
                     setCurrentGameInfo(null);
                     setGamePgnFens([]);
-                    dispatch(setCurrentFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"));
-                    dispatch(resetAnalysis());
+                    setCurrentFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+                    resetAnalysis();
                     setExplorationStack([]);
                   }}
                   advancedAnalysisMode={advancedAnalysisMode}
                   deepAnalysisResults={deepAnalysisResults}
                   deepAnalysisLoading={deepAnalysisLoading}
+                  moveNotes={moveNotes}
+                  onMoveNoteClick={handleMoveNoteClick}
                   sx={{ flex: 1, minHeight: 0 }}
                 />
-                {advancedAnalysisMode && (
-                  <PositionNotesPanel
-                    currentFen={currentFen}
-                    electronAPI={electronAPI}
-                    onNoteChange={(fen, text) =>
-                      setCurrentNotesMap((prev) => ({ ...prev, [fen]: text }))
-                    }
-                    onNotesModified={setAdvancedAnalysisNotesModified}
-                  />
-                )}
               </Box>
             </Box>
           )}
@@ -3166,10 +3144,17 @@ Make it detailed and exciting!`;
         message={moveWarningMessage}
         onClose={() => setMoveWarningOpen(false)}
       />
-      <NotesConfirmDialog
-        open={notesConfirmDialogOpen}
-        onSave={handleSaveNotesAndExit}
-        onDiscard={handleDiscardNotesAndExit}
+      <AIImportDialog
+        open={aiImportDialogOpen}
+        onYes={handleAiImportYes}
+        onNo={handleAiImportNo}
+      />
+      <NoteEditorPopup
+        open={noteEditorOpen}
+        initialContent={noteEditorInitial}
+        cursorAtStart={noteEditorCursorAtStart}
+        onSave={handleNoteSave}
+        onCancel={handleNoteCancel}
       />
       <input
         ref={importFileInput}

@@ -80,6 +80,8 @@ export default function ChatPanel({
   deepAnalysisLoading = false,
   currentFen = "start",
   playedMoves = [],
+  moveNotes = {},
+  onMoveNoteClick,
   sx
 }: ChatPanelProps) {
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -203,6 +205,8 @@ export default function ChatPanel({
                 advancedAnalysisMode={advancedAnalysisMode}
                 deepAnalysisLoading={deepAnalysisLoading}
                 deepAnalysisResults={deepAnalysisResults}
+                moveNotes={moveNotes}
+                onMoveClick={onMoveNoteClick}
               />
             </>
           )}

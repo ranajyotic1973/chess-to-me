@@ -7,9 +7,7 @@ import "@fontsource/great-vibes/400.css";
 import $ from "jquery";
 import "./styles.css";
 import { CssBaseline, ThemeProvider } from "@mui/material";
-import { Provider } from "react-redux";
 import theme from "./theme";
-import { store } from "./redux/store";
 
 if (typeof window !== "undefined") {
   window.$ = $;
@@ -91,12 +89,10 @@ if (root) {
   logRenderer("DEBUG", "Creating React root");
   createRoot(root).render(
     <React.StrictMode>
-      <Provider store={store}>
-        <ThemeProvider theme={theme}>
-          <CssBaseline />
-          <App />
-        </ThemeProvider>
-      </Provider>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <App />
+      </ThemeProvider>
     </React.StrictMode>
   );
   logRenderer("INFO", "React app rendered");

@@ -10,7 +10,8 @@ export default defineConfig({
   timeout: 30 * 1000, // 30s per test
   expect: { timeout: 10 * 1000 }, // 10s for assertions
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://127.0.0.1:5173',
+    headless: true,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     navigationTimeout: 30 * 1000,
@@ -19,12 +20,16 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices['Desktop Chrome'], headless: true },
     },
   ],
+  // Serve ONLY the Vite renderer — do NOT launch Electron. Integration tests run
+  // headless in Chromium and inject a mock `window.electronAPI`
+  // (tests/integration/fixtures/electronMock.ts), so no real engine/LLM or
+  // Electron window is needed — this works in headless CI (e.g. GitHub Actions).
   webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
+    command: 'npm run dev:renderer',
+    url: 'http://127.0.0.1:5173',
     reuseExistingServer: !process.env.CI,
     timeout: 60 * 1000, // 60s to start dev server
   },

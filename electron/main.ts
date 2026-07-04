@@ -42,6 +42,9 @@ import {
   GAME_SEARCH_SYSTEM_PROMPT
 } from "./agentPrompts";
 import type Database from "better-sqlite3";
+import type { IChessEngine } from "./engines/IChessEngine";
+import { EngineFactory, type EngineDetectionResult } from "./engines/EngineFactory";
+import { BoardStateManager } from "./BoardStateManager";
 
 // Import electron APIs
 import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from "electron";
@@ -291,543 +294,11 @@ interface LogEntry {
   note?: string;
 }
 
-class EngineRunner {
-  engineName: string;
-  proc: ChildProcess | null = null;
-  path: string = "";
-  lineBuffer: string = "";
-  pending: Promise<any> = Promise.resolve();
-  analyzeActive = false;
-  logCallback: ((entry: LogEntry) => void) | null = null;
-
-  constructor(engineName: string, logCallback?: (entry: LogEntry) => void) {
-    this.engineName = engineName || "stockfish";
-    this.logCallback = typeof logCallback === "function" ? logCallback : null;
-  }
-
-  setLogCallback(fn: (entry: LogEntry) => void): void {
-    this.logCallback = typeof fn === "function" ? fn : null;
-  }
-
-  emitLog(entry: LogEntry): void {
-    if (typeof this.logCallback !== "function" || !entry) {
-      return;
-    }
-    try {
-      this.logCallback(entry);
-    } catch {
-      // swallow logging errors
-    }
-  }
-
-  private getRecommendedBackends(): string[] {
-    // Return GPU backends in order of preference based on platform and detected hardware
-    const platform = process.platform;
-
-    if (platform === "win32") {
-      // Windows: try DirectML first (supports Intel, NVIDIA, AMD), fallback to CPU
-      return ["onnx-dml", "onnx-cpu"];
-    } else if (platform === "darwin") {
-      // macOS: Metal is the native GPU backend, fallback to CPU
-      // Note: Metal backend may need to be explicitly enabled in LC0 config
-      return ["onnx-cpu"]; // Metal support varies by LC0 version
-    } else if (platform === "linux") {
-      // Linux: CUDA for NVIDIA, CPU fallback (ROCm for AMD requires separate setup)
-      return ["onnx-cuda", "onnx-cpu"];
-    }
-
-    return ["onnx-cpu"]; // Default to CPU for unknown platforms
-  }
-
-  async ensureRunning(enginePath: string): Promise<void> {
-    if (this.proc && this.path === enginePath && !this.proc.killed) {
-      return;
-    }
-    await this.stop();
-    const isLC0 = this.engineName.toLowerCase() === "lc0";
-
-    mainWindow?.webContents.send("engine:warming-up", { engine: this.engineName });
-
-    if (!isLC0) {
-      // Stockfish doesn't need backend management
-      try {
-        await this.start(enginePath);
-      } catch (err) {
-        mainWindow?.webContents.send("engine:ready", { engine: this.engineName, ok: false });
-        throw err;
-      }
-      mainWindow?.webContents.send("engine:ready", { engine: this.engineName, ok: true });
-      return;
-    }
-
-    // LC0 GPU backend management: always try GPU first, then CPU
-    const recommendedBackends = this.getRecommendedBackends();
-    const backendsToTry = [...recommendedBackends]; // Try recommended backends in order
-
-    let lastError: Error | null = null;
-
-    for (let i = 0; i < backendsToTry.length; i++) {
-      const backend = backendsToTry[i];
-      console.log(`[lc0] Attempting backend: ${backend}`);
-
-      try {
-        await this.start(enginePath, backend);
-        console.log(`[lc0] ✓ Backend "${backend}" initialized successfully`);
-        settings.set("lc0Backend", backend); // Save successful backend
-        mainWindow?.webContents.send("engine:ready", { engine: this.engineName, ok: true });
-        return;
-      } catch (err) {
-        lastError = err as Error;
-        const isGpuError = this.isGPUInitializationError(lastError);
-
-        // Log GPU errors more gracefully (they're expected on unsupported hardware)
-        if (isGpuError) {
-          console.log(`[lc0] Backend "${backend}" not supported on this hardware (this is normal and expected on unsupported GPUs)`);
-        } else {
-          console.log(`[lc0] Backend "${backend}" failed: ${lastError.message}`);
-        }
-
-        // If this is a GPU error and we have more backends to try, continue
-        if (isGpuError && i < backendsToTry.length - 1) {
-          console.log(`[lc0] Attempting next backend...`);
-          continue;
-        }
-
-        // Last backend or non-GPU error: show dialog
-        if (i === backendsToTry.length - 1) {
-          // All backends failed, show dialog
-          const result = await dialog.showMessageBox(mainWindow!, {
-            type: "warning",
-            title: "GPU Acceleration Unavailable",
-            message: `Could not initialize GPU acceleration for LC0 on ${this.getPlatformName()}.`,
-            detail: `The app will fall back to CPU-only analysis, which will be slower.\n\nAnalysis may take 90+ seconds per position on CPU.\n\nDo you want to continue with CPU-only mode?`,
-            buttons: ["Continue with CPU", "Cancel"],
-            defaultId: 0,
-          });
-
-          if (result.response === 1) {
-            // User clicked Cancel
-            mainWindow?.webContents.send("engine:ready", { engine: this.engineName, ok: false });
-            throw new Error("User cancelled engine initialization without GPU");
-          }
-
-          console.log(`[lc0] User confirmed CPU-only mode on ${process.platform}`);
-          // Fall through to CPU backend
-          break;
-        }
-      }
-    }
-
-    // Fallback to CPU if all else fails
-    const cpuBackend = "onnx-cpu";
-    console.log(`[lc0] Falling back to CPU backend: ${cpuBackend}`);
-    try {
-      await this.start(enginePath, cpuBackend);
-      settings.set("lc0Backend", cpuBackend);
-      mainWindow?.webContents.send("engine:ready", { engine: this.engineName, ok: true });
-    } catch (err) {
-      mainWindow?.webContents.send("engine:ready", { engine: this.engineName, ok: false });
-      throw err;
-    }
-  }
-
-  private isGPUInitializationError(err: Error): boolean {
-    const message = err.message || "";
-    const platform = process.platform;
-
-    if (platform === "win32") {
-      // Windows DirectML errors
-      return message.includes("LC0_DML_UNSUPPORTED") || message.includes("887A0004") || message.includes("dml_provider");
-    } else if (platform === "darwin") {
-      // macOS specific GPU errors
-      return message.includes("Metal") || message.includes("GPU");
-    } else if (platform === "linux") {
-      // Linux CUDA/GPU errors
-      return message.includes("CUDA") || message.includes("cuda") || message.includes("GPU");
-    }
-
-    return false;
-  }
-
-  private getPlatformName(): string {
-    const platform = process.platform;
-    if (platform === "win32") return "Windows";
-    if (platform === "darwin") return "macOS";
-    if (platform === "linux") return "Linux";
-    return platform;
-  }
-
-  start(enginePath: string, backendOverride?: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const proc = spawn(enginePath, [], { windowsHide: true });
-      let settled = false;
-      let buffer = "";
-      const isLC0 = this.engineName.toLowerCase() === "lc0";
-      const timeoutMs = isLC0 ? ENGINE_VERIFY_TIMEOUT_MS : 2500;
-
-      const cleanup = () => {
-        proc.stdout?.off("data", onData);
-        proc.stderr?.off("data", onStderr);
-        proc.off("error", onError);
-        proc.off("exit", onExit);
-      };
-
-      const fail = (err: Error) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        try {
-          proc.kill();
-        } catch {}
-        reject(err);
-      };
-
-      const succeed = () => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        this.proc = proc;
-        this.path = enginePath;
-        this.lineBuffer = "";
-        resolve();
-      };
-
-      const onError = (err: Error) => fail(err);
-      let dmlErrorSeen = false;
-      const onExit = () => {
-        if (!settled) {
-          if (dmlErrorSeen) {
-            // GPU initialization failed; this will trigger fallback to CPU backend in ensureRunning
-            console.log(`[${this.engineName}] DirectML backend not supported, initiating CPU fallback...`);
-            fail(new Error("LC0_DML_UNSUPPORTED: DirectML backend not supported on this GPU (will retry with CPU)."));
-          } else {
-            const msg = isLC0
-              ? `${this.engineName} process exited before initialization. Ensure LC0 weights file is installed.`
-              : `${this.engineName} process exited before initialization.`;
-            fail(new Error(msg));
-          }
-        }
-      };
-      const onStderr = (chunk: Buffer) => {
-        const text = chunk?.toString?.() || "";
-        // 887A0004 = DXGI_ERROR_UNSUPPORTED — DirectML feature level not supported on this GPU
-        // This is expected on unsupported hardware and will be handled gracefully with fallback to CPU
-        if (isLC0 && (text.includes("887A0004") || text.includes("dml_provider_factory"))) {
-          dmlErrorSeen = true;
-          console.log(`[${this.engineName}] ⚠ DirectML initialization error detected, will fall back to CPU backend`);
-          this.emitLog({ text: "DirectML unsupported on this GPU, falling back to CPU", stream: "stderr", context: "uci-init" });
-        } else {
-          console.log(`[${this.engineName}] STDERR: ${text}`);
-          this.emitLog({ text, stream: "stderr", context: "uci-init" });
-        }
-      };
-      // LC0 defers DirectML/GPU backend init to the first go command, so warmup can
-      // take 30-120s. Use the full analyze timeout to cover that window.
-      const effectiveTimeoutMs = isLC0 ? LC0_ANALYZE_TIMEOUT_MS : timeoutMs;
-
-      // State machine: uci → ready → (LC0 only: warmup) → done
-      let initStage: "uci" | "ready" | "warmup" | "done" = "uci";
-      const onData = (chunk: Buffer) => {
-        const text = chunk?.toString?.() || "";
-        console.log(`[${this.engineName}] INIT OUTPUT: ${text}`);
-        this.emitLog({ text, stream: "stdout", context: "uci-init" });
-        buffer += text;
-
-        if (initStage === "uci" && buffer.includes("uciok")) {
-          initStage = "ready";
-          // Set backend before isready so LC0 applies it before the warmup search
-          if (isLC0 && backendOverride) {
-            console.log(`[${this.engineName}] Setting backend to ${backendOverride}...`);
-            proc.stdin.write(`setoption name Backend value ${backendOverride}\n`);
-          }
-          console.log(`[${this.engineName}] ✓ Received uciok, sending isready...`);
-          proc.stdin.write("isready\n");
-        }
-        if (initStage === "ready" && buffer.includes("readyok")) {
-          if (isLC0) {
-            // Force GPU/neural-net init now so first analysis call returns quickly.
-            initStage = "warmup";
-            console.log(`[${this.engineName}] Warming up neural network (${backendOverride ?? "default"} backend)...`);
-            proc.stdin.write("position startpos\n");
-            proc.stdin.write("go nodes 1\n");
-          } else {
-            initStage = "done";
-            console.log(`[${this.engineName}] ✓ Received readyok, engine ready!`);
-            succeed();
-          }
-        }
-        if (initStage === "warmup" && buffer.includes("bestmove")) {
-          initStage = "done";
-          console.log(`[${this.engineName}] ✓ Warmup complete, engine ready!`);
-          succeed();
-        }
-      };
-
-      proc.on("error", onError);
-      proc.on("exit", onExit);
-      proc.stderr?.on("data", onStderr);
-      proc.stdout?.on("data", onData);
-
-      proc.stdin.write("uci\n");
-
-      setTimeout(() => {
-        const msg = isLC0
-          ? `Timeout initializing ${this.engineName}. Check that LC0 is installed and neural network weights are available. GPU warmup may take up to 2 minutes.`
-          : `Timeout initializing ${this.engineName} with UCI.`;
-        fail(new Error(msg));
-      }, effectiveTimeoutMs);
-    });
-  }
-
-  async stop(): Promise<void> {
-    if (!this.proc) {
-      return;
-    }
-    try {
-      this.proc.kill();
-    } catch {}
-    this.proc = null;
-    this.path = "";
-  }
-
-  send(command: string): void {
-    if (!this.proc || this.proc.killed) {
-      throw new Error(`${this.engineName} process is not running.`);
-    }
-    this.proc.stdin.write(`${command}\n`);
-  }
-
-  analyze(params: { fen: string; depth?: number; multiPv?: number }): Promise<any> {
-    // Only send stop when analysis is actually running. Sending stop to an idle engine
-    // can cause a spurious bestmove response that resolves _analyzeInternal before it starts.
-    if (this.analyzeActive) {
-      try {
-        if (this.proc && !this.proc.killed) {
-          this.proc.stdin.write("stop\n");
-        }
-      } catch {}
-    }
-    // .catch guard: a rejected previous analysis must not block this one.
-    this.pending = this.pending
-      .catch(() => {})
-      .then(() => {
-        this.analyzeActive = true;
-        mainWindow?.webContents.send("engine:analysis-start", { engine: this.engineName });
-        return this._analyzeInternal(params);
-      })
-      .finally(() => {
-        this.analyzeActive = false;
-      });
-    return this.pending;
-  }
-
-  private _analyzeInternal(params: { fen: string; depth?: number; multiPv?: number }): Promise<any> {
-    const { fen, depth = 15, multiPv = 4 } = params;
-    // Engines report scores from the side-to-move's perspective.
-    // Negate when it is black's turn so scores are always white-positive.
-    const blackToMove = fen.split(/\s+/)[1] === "b";
-    return new Promise((resolve, reject) => {
-      if (!this.proc || this.proc.killed) {
-        reject(new Error(`${this.engineName} process is not running.`));
-        return;
-      }
-
-      let buffer = "";
-      let bestMove = "";
-      const linesByRank = new Map<number, any>();
-      let done = false;
-      let maxDepthSeen = 0;
-      const MIN_DEPTH_FOR_STABILITY = 10;
-
-      const cleanup = () => {
-        clearTimeout(timer);
-        clearTimeout(depthCheckTimer);
-        this.proc?.stdout?.off("data", onData);
-      };
-
-      const finish = () => {
-        if (done) return;
-        done = true;
-        cleanup();
-        let lines = [...linesByRank.entries()]
-          .sort((a, b) => a[0] - b[0])
-          .slice(0, 4)
-          .map(([rank, value]) => ({
-            rank,
-            score: value.score || null,
-            pv: value.pv || ""
-          }));
-
-        // If we have a bestmove, prioritize the line that starts with it
-        if (bestMove && lines.length > 0) {
-          const bestmoveLineIndex = lines.findIndex(line => line.pv.split(' ')[0] === bestMove);
-          if (bestmoveLineIndex > 0) {
-            // Move the bestmove line to the front
-            const [bestmoveLine] = lines.splice(bestmoveLineIndex, 1);
-            lines.unshift(bestmoveLine);
-          }
-        }
-
-        mainWindow?.webContents.send("engine:analysis-done", { engine: this.engineName });
-        resolve({
-          bestMove,
-          lines
-        });
-      };
-
-      const fail = (err: Error) => {
-        if (done) return;
-        done = true;
-        cleanup();
-        this.emitLog({
-          text: err?.message || `${this.engineName} analysis failed.`,
-          stream: "stderr",
-          context: "analysis"
-        });
-        reject(err);
-      };
-
-      const parseInfo = (line: string) => {
-        // Extract depth (provided by both Stockfish and LC0)
-        const depthMatch = line.match(/\bdepth\s(\d+)/);
-        const currentDepth = depthMatch ? Number(depthMatch[1]) : undefined;
-        if (currentDepth) {
-          maxDepthSeen = Math.max(maxDepthSeen, currentDepth);
-        }
-
-        // Score parsing: engines are mutually exclusive
-        // Stockfish outputs: "score cp <value>" or "score mate <value>"
-        // LC0 outputs: "score wdl <wins> <draws> <losses>"
-        const scoreCp = line.match(/score cp (-?\d+)/);
-        const scoreMate = line.match(/score mate (-?\d+)/);
-        const scoreWdl = line.match(/score wdl (\d+) (\d+) (\d+)/);
-
-        const pv = line.match(/\spv\s(.+)$/);
-        const mpvMatch = line.match(/\bmultipv\s(\d+)/);
-        const rank = mpvMatch ? Number(mpvMatch[1]) : 1;
-        const existing = linesByRank.get(rank) || { score: null, pv: "" };
-
-        // Log parsing details to console
-        console.log(`[${this.engineName}] Parsing info line | depth: ${currentDepth}, rank: ${rank}`);
-
-        // Set score based on engine type.
-        // Scores are converted to white-positive: negate when black is to move.
-        if (scoreCp) {
-          const raw = Number(scoreCp[1]);
-          const value = blackToMove ? -raw : raw;
-          existing.score = { type: "cp", value, depth: currentDepth };
-          console.log(`[${this.engineName}] ✓ Parsed CP score: ${raw} cp → ${value} (white-positive, depth ${currentDepth})`);
-        } else if (scoreMate) {
-          const raw = Number(scoreMate[1]);
-          const value = blackToMove ? -raw : raw;
-          existing.score = { type: "mate", value, depth: currentDepth };
-          console.log(`[${this.engineName}] ✓ Parsed MATE score: mate in ${raw} → ${value} (white-positive, depth ${currentDepth})`);
-        } else if (scoreWdl) {
-          // WDL: wins/draws/losses from side-to-move's perspective.
-          // White win probability = wins when white moves, losses when black moves.
-          const wins = Number(scoreWdl[1]);
-          const draws = Number(scoreWdl[2]);
-          const losses = Number(scoreWdl[3]);
-          const total = wins + draws + losses;
-          const winProb = total > 0 ? (blackToMove ? losses / total : wins / total) : 0;
-          existing.score = { winProb, depth: currentDepth };
-          console.log(`[${this.engineName}] ✓ Parsed WDL score: ${wins}/${draws}/${losses} → ${(winProb * 100).toFixed(1)}% white win prob (depth ${currentDepth})`);
-        } else {
-          console.log(`[${this.engineName}] ⚠ No score found in line`);
-        }
-
-        if (pv) {
-          existing.pv = pv[1];
-          console.log(`[${this.engineName}] ✓ Parsed PV: ${pv[1]}`);
-        }
-        linesByRank.set(rank, existing);
-      };
-
-      const stopAnalysis = (reason: string) => {
-        if (done) return;
-        console.log(`[${this.engineName}] ${reason} - stopping analysis`);
-        try {
-          this.proc?.stdin?.write("stop\n");
-        } catch (err) {
-          console.error(`[${this.engineName}] Failed to send stop command:`, err);
-        }
-      };
-
-      const onData = (chunk: Buffer) => {
-        const chunkText = chunk.toString();
-        console.log(`[${this.engineName}] Raw output received (${chunkText.length} bytes): ${chunkText.substring(0, 100)}`);
-
-        buffer += chunkText;
-        const lines = buffer.split(/\r?\n/);
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-
-          // Log raw output to UI
-          this.emitLog({ text: line, stream: "stdout", context: "analysis" });
-          console.log(`[${this.engineName}] RAW OUTPUT: ${line}`);
-
-          if (line.startsWith("info ")) {
-            console.log(`[${this.engineName}] Processing info line...`);
-            parseInfo(line);
-          } else if (line.startsWith("bestmove ")) {
-            bestMove = line.split(" ")[1] || "";
-            console.log(`[${this.engineName}] ✓ Analysis complete | best move: ${bestMove}`);
-            finish();
-            return;
-          } else {
-            console.log(`[${this.engineName}] Other output: ${line}`);
-          }
-        }
-      };
-
-      this.proc!.stdout?.on("data", onData);
-
-      // Use configurable timeout or fall back to default based on engine
-      const configuredTimeoutMs = settings.get("engineTimeoutMs");
-      const fallbackTimeoutMs = this.engineName.toLowerCase() === "lc0" ? LC0_ANALYZE_TIMEOUT_MS : ANALYZE_TIMEOUT_MS;
-      const timeoutMs = configuredTimeoutMs ? Number(configuredTimeoutMs) : fallbackTimeoutMs;
-
-      let depthCheckTimer: NodeJS.Timeout;
-      const depthCheckInterval = 500; // Check every 500ms if we've reached min depth
-
-      const checkDepth = () => {
-        if (done || maxDepthSeen < MIN_DEPTH_FOR_STABILITY) {
-          depthCheckTimer = setTimeout(checkDepth, depthCheckInterval);
-          return;
-        }
-        stopAnalysis(`Minimum depth (${MIN_DEPTH_FOR_STABILITY}) reached after ${maxDepthSeen} plies`);
-      };
-
-      const timeoutAction = () => {
-        if (done) return;
-        stopAnalysis(`Hard timeout reached (${timeoutMs}ms)`);
-      };
-
-      const timer = setTimeout(timeoutAction, timeoutMs);
-      depthCheckTimer = setTimeout(checkDepth, depthCheckInterval);
-
-      try {
-        this.send("ucinewgame");
-        const multiPvValue = Math.max(1, Math.min(4, Number(multiPv) || 1));
-        this.send(`setoption name MultiPV value ${multiPvValue}`);
-        // Normalize FEN: convert legacy "start" string to actual starting position FEN
-        const STARTING_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-        const actualFen = fen === "start" ? STARTING_FEN : fen;
-        this.send(`position fen ${actualFen}`);
-        this.send(`go depth ${depth}`);
-      } catch (err) {
-        fail(err as Error);
-      }
-    });
-  }
-}
-
 class ProcessManager {
   settings: any;
-  engineRunners: Record<string, EngineRunner>;
-  currentEngine: string | null = null;
+  private engines: Map<string, IChessEngine> = new Map();
+  private currentEngine: IChessEngine | null = null;
+  private detectionResult: EngineDetectionResult;
   logs: { stockfish: LogEntry[]; ollama: LogEntry[] };
   ollamaServeProcess: ChildProcess | null = null;
   ollamaRunProcess: ChildProcess | null = null;
@@ -836,31 +307,60 @@ class ProcessManager {
   serveRestartTimer: NodeJS.Timeout | null = null;
   serveShuttingDown: boolean = false;
 
-  constructor({ settings }: { settings: any }) {
+  constructor({ settings, detectionResult }: { settings: any; detectionResult: EngineDetectionResult }) {
     this.settings = settings;
-    this.engineRunners = {
-      stockfish: new EngineRunner("stockfish"),
-      lc0: new EngineRunner("lc0")
-    };
+    this.detectionResult = detectionResult;
     this.logs = {
       stockfish: [],
       ollama: []
     };
-    // Don't call settings.get() during initialization - defer until after app is ready
     this.activeModel = DEFAULT_OLLAMA_MODEL;
 
-    this.engineRunners.stockfish.setLogCallback((entry) => this.recordEngineLog("stockfish", entry));
-    this.engineRunners.lc0.setLogCallback((entry) => this.recordEngineLog("lc0", entry));
+    // Instantiate engines via factory
+    const available = EngineFactory.getAvailableEngines(detectionResult);
+    for (const engineName of available) {
+      const engine = EngineFactory.createEngine(engineName, detectionResult);
+      engine.onLog((entry) => this.recordEngineLog(engineName, entry));
+      this.engines.set(engineName, engine);
+    }
+
+    // Select default engine
+    if (available.length > 0) {
+      this.currentEngine = this.engines.get(available[0])!;
+      console.log(`[ProcessManager] Selected engine: ${this.currentEngine.name}`);
+    }
   }
 
   // Call this after app is ready to initialize activeModel from settings
   initializeFromSettings(): void {
     this.activeModel = this.normalizeModel(this.settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL);
+
+    // Switch engine if settings changed
+    const selectedEngine = this.settings.get("selectedEngine");
+    if (selectedEngine && this.engines.has(selectedEngine)) {
+      this.selectEngine(selectedEngine);
+    }
   }
 
-  get engineRunner(): EngineRunner {
-    const engineName = this.settings.get("selectedEngine") || "lc0";
-    return this.engineRunners[engineName] || this.engineRunners.lc0;
+  selectEngine(engineName: string): void {
+    const engine = this.engines.get(engineName);
+    if (!engine) {
+      const available = [...this.engines.keys()].join(", ");
+      throw new Error(`Engine '${engineName}' not found. Available: ${available}`);
+    }
+    this.currentEngine = engine;
+    console.log(`[ProcessManager] Selected engine: ${this.currentEngine.name}`);
+  }
+
+  get engineRunner(): IChessEngine {
+    if (!this.currentEngine) {
+      throw new Error("No engine selected");
+    }
+    return this.currentEngine;
+  }
+
+  getAvailableEngines(): string[] {
+    return EngineFactory.getAvailableEngines(this.detectionResult);
   }
 
   normalizeModel(value: string): string {
@@ -882,6 +382,9 @@ class ProcessManager {
     while (this.logs[bucket].length > PROCESS_LOG_LIMIT) {
       this.logs[bucket].shift();
     }
+
+    // Send log entry to UI for real-time display
+    mainWindow?.webContents.send("process:log-entry", { bucket, entry: normalized });
   }
 
   recordEngineLog(engineName: string, entry: LogEntry): void {
@@ -1150,16 +653,35 @@ class ProcessManager {
   }
 
   async analyze(payload: any): Promise<any> {
-    const savedPath = this.settings.get("stockfishPath");
-    if (!savedPath) {
-      throw new Error("Stockfish path not configured.");
+    if (!this.currentEngine) {
+      throw new Error("No engine selected");
     }
-    const valid = await verifyStockfishPath(savedPath);
-    if (!valid) {
-      throw new Error("Configured Stockfish path is invalid.");
+
+    try {
+      // Ensure engine is running (works with any engine)
+      if (!this.currentEngine.isRunning()) {
+        console.log(`[ProcessManager] Starting engine: ${this.currentEngine.name}`);
+        await this.currentEngine.start();
+      }
+
+      // Send analysis start event to UI
+      mainWindow?.webContents.send("engine:analysis-start", { engine: this.currentEngine.name });
+
+      // Call through interface (works with Stockfish, LC0, or any other engine)
+      const result = await this.currentEngine.analyze(payload);
+
+      // Send analysis done event to UI
+      mainWindow?.webContents.send("engine:analysis-done", { engine: this.currentEngine.name });
+
+      return result;
+    } catch (err) {
+      this.recordEngineLog(this.currentEngine.name, {
+        text: `Analysis failed: ${(err as Error).message}`,
+        stream: "stderr",
+        context: "analysis"
+      });
+      throw err;
     }
-    await this.engineRunner.ensureRunning(savedPath);
-    return this.engineRunner.analyze(payload);
   }
 
   async init(): Promise<void> {
@@ -1174,65 +696,22 @@ class ProcessManager {
   async shutdown(): Promise<void> {
     await this.stopOllamaRun();
     this.stopOllamaServe();
-    await this.engineRunner.stop();
-  }
-}
 
-class BoardStateManager {
-  private board: Chess;
-
-  constructor() {
-    this.board = new Chess();
-  }
-
-  getBoardFen(): string {
-    return this.board.fen();
-  }
-
-  setBoardFen(fen: string): boolean {
-    try {
-      this.board.load(fen);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  getLegalMoves(): string[] {
-    return this.board.moves({ verbose: false }) as string[];
-  }
-
-  validateMove(from: string, to: string): { valid: boolean; reason?: string } {
-    const move = this.board.move({ from, to, promotion: "q" });
-    if (move) {
-      this.board.undo();
-      return { valid: true };
-    }
-    return { valid: false, reason: "move is not legal in current position" };
-  }
-
-  applyMove(from: string, to: string): { ok: boolean; fen?: string; error?: string } {
-    const validation = this.validateMove(from, to);
-    if (!validation.valid) {
-      return { ok: false, error: validation.reason };
-    }
-    const move = this.board.move({ from, to, promotion: "q" });
-    if (!move) {
-      return { ok: false, error: "failed to apply move" };
-    }
-    return { ok: true, fen: this.board.fen() };
-  }
-
-  reset(fen: string = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"): void {
-    this.board.reset();
-    if (fen !== this.board.fen()) {
-      this.board.load(fen);
+    // Stop all engines
+    for (const engine of this.engines.values()) {
+      try {
+        console.log(`[ProcessManager] Stopping engine: ${engine.name}`);
+        await engine.stop();
+        engine.dispose();
+      } catch (err) {
+        console.error(`Failed to stop ${engine.name}:`, err);
+      }
     }
   }
 }
 
 const boardManager = new BoardStateManager();
-const processManager = new ProcessManager({ settings });
+let processManager: ProcessManager | null = null;
 
 function isExecutableCandidate(fullPath: string): boolean {
   try {
@@ -1482,6 +961,32 @@ async function detectEngine(engineName: string): Promise<{ found: boolean; path:
     return { found: true, path: result.path };
   }
   return { found: false, path: "" };
+}
+
+async function detectAllEngines(): Promise<EngineDetectionResult> {
+  const [stockfish, lc0] = await Promise.all([
+    findWorkingEngine("stockfish", false),
+    findWorkingEngine("lc0", false)
+  ]);
+
+  const detectionResult: EngineDetectionResult = {};
+
+  if (stockfish.path) {
+    detectionResult.stockfish = {
+      path: stockfish.path,
+      version: "15" // Default version; could be enhanced to extract from engine output
+    };
+  }
+
+  if (lc0.path) {
+    detectionResult.lc0 = {
+      path: lc0.path,
+      version: "0.31", // Default version
+      gpuBackend: (settings.get("lc0Backend") as any) || "onnx-cpu"
+    };
+  }
+
+  return detectionResult;
 }
 
 async function verifyStockfishPath(enginePath: string): Promise<boolean> {
@@ -1792,7 +1297,7 @@ ipcMain.handle("app:system-check", async () => {
   console.log("[system-check] Stockfish result:", stockfish.path ? `found at ${stockfish.path}` : "not found");
   console.log("[system-check] LC0 result:", lc0.path ? `found at ${lc0.path}` : "not found");
 
-  const processState = processManager.getOllamaState();
+  const processState = processManager!.getOllamaState();
   const result = {
     platform: process.platform,
     ollamaRunning: processState.serveRunning || ollama.ollamaRunning,
@@ -1910,10 +1415,12 @@ ipcMain.handle("getEngineStatus", async () => {
 
 ipcMain.handle("engine:stop", async (_event, { engine }: { engine?: string } = {}) => {
   const name = (engine || settings.get("selectedEngine") || "lc0").toLowerCase();
-  const runner = processManager.engineRunners[name];
-  if (runner) {
-    await runner.stop();
+  try {
+    processManager!.selectEngine(name);
+    await processManager!.engineRunner.stop();
     console.log(`[engine:stop] ${name} engine stopped`);
+  } catch (err) {
+    console.log(`[engine:stop] Error stopping ${name}:`, err);
   }
   return { ok: true };
 });
@@ -1976,7 +1483,7 @@ ipcMain.handle("app:update-settings", async (_event, payload) => {
   // Only manage Ollama model if the provider is Ollama
   if (nextProvider === "ollama") {
     try {
-      await processManager.setActiveModel(nextModel);
+      await processManager!.setActiveModel(nextModel);
     } catch {
       // Already logged in the process manager.
     }
@@ -1997,12 +1504,12 @@ ipcMain.handle("app:update-settings", async (_event, payload) => {
 });
 
 ipcMain.handle("process:get-logs", () => {
-  return processManager.getLogs();
+  return processManager!.getLogs();
 });
 
 ipcMain.handle("process:set-model", async (_event, model) => {
   try {
-    const activeModel = await processManager.setActiveModel(model);
+    const activeModel = await processManager!.setActiveModel(model);
     return { ok: true, activeModel };
   } catch (err) {
     return { ok: false, error: (err as Error)?.message || "Failed to start Ollama model." };
@@ -2074,18 +1581,14 @@ ipcMain.handle("getAvailableModels", async (_event, payload) => {
 
 async function performAnalysis(engine: string, fen: string, depth?: number, multiPv?: number) {
   const selectedEngine = engine || settings.get("selectedEngine") || "lc0";
-  const enginePath = settings.get(`${selectedEngine}Path`);
-  if (!enginePath) {
-    return { ok: false, error: `${selectedEngine} engine not configured.` };
-  }
 
   const finalDepth = Math.max(1, Math.min(30, Number(depth) || Number(settings.get("analysisDepth")) || 16));
   const finalMultiPv = Math.max(1, Math.min(4, Number(multiPv) || 4));
 
   try {
-    const engineRunner = processManager.engineRunners[selectedEngine] || processManager.engineRunner;
-    await engineRunner.ensureRunning(enginePath);
-    const analysis = await engineRunner.analyze({
+    // Use the new engine architecture
+    processManager!.selectEngine(selectedEngine);
+    const analysis = await processManager!.analyze({
       fen,
       depth: finalDepth,
       multiPv: finalMultiPv
@@ -4555,6 +4058,31 @@ ipcMain.handle("analysis:save-pgn", (_event, payload: { pgn: string; notes: Reco
   }
 });
 
+// analysis:export-pgn — prompt for a filename (.pgn only) and write the given
+// PGN content (moves + embedded note comments) to the chosen path.
+ipcMain.handle("analysis:export-pgn", async (_event, payload: { pgn: string }) => {
+  try {
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2, "0");
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const yyyy = now.getFullYear();
+    const result = await dialog.showSaveDialog({
+      title: "Save Analysis as PGN",
+      defaultPath: `analysis-${dd}-${mm}-${yyyy}.pgn`,
+      filters: [{ name: "PGN Files", extensions: ["pgn"] }]
+    });
+    if (result.canceled || !result.filePath) return { ok: false, cancelled: true };
+    // Enforce a .pgn extension even if the user typed something else.
+    const filePath = result.filePath.toLowerCase().endsWith(".pgn")
+      ? result.filePath
+      : `${result.filePath}.pgn`;
+    fs.writeFileSync(filePath, `${payload.pgn || ""}\n`, "utf8");
+    return { ok: true, path: filePath };
+  } catch (err) {
+    return { ok: false, error: String((err as Error).message) };
+  }
+});
+
 // Task 1.6 – analysis:load-pgn
 ipcMain.handle("analysis:load-pgn", async () => {
   const result = await dialog.showOpenDialog({
@@ -4645,6 +4173,21 @@ app.whenReady().then(async () => {
   logToFile("INFO", "main", "App ready, starting initialization");
   cleanupOldLogs();
 
+  // Detect engines and instantiate ProcessManager
+  logToFile("DEBUG", "main", "Detecting chess engines");
+  try {
+    const detectionResult = await detectAllEngines();
+    if (!EngineFactory.isValid(detectionResult)) {
+      logToFile("WARN", "main", "No chess engines detected");
+    }
+    processManager = new ProcessManager({ settings, detectionResult });
+    logToFile("INFO", "main", "ProcessManager created with detected engines");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logToFile("ERROR", "main", "Failed to initialize engines", { error: msg });
+    throw err;
+  }
+
   // Window control handlers for custom title bar
   ipcMain.handle("minimizeWindow", () => {
     const window = BrowserWindow.getFocusedWindow();
@@ -4669,7 +4212,7 @@ app.whenReady().then(async () => {
 
   // Initialize processManager's settings after app is ready
   logToFile("DEBUG", "main", "Initializing processManager from settings");
-  processManager.initializeFromSettings();
+  processManager!.initializeFromSettings();
 
   logToFile("DEBUG", "main", "Loading points");
   loadPoints(app.getPath("userData"));
@@ -4709,7 +4252,7 @@ app.whenReady().then(async () => {
 
   try {
     logToFile("DEBUG", "main", "Initializing ProcessManager");
-    await processManager.init();
+    await processManager!.init();
     logToFile("INFO", "main", "ProcessManager initialized");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -4724,7 +4267,7 @@ app.whenReady().then(async () => {
 
   app.on("before-quit", async () => {
     logToFile("INFO", "main", "App closing, shutting down");
-    await processManager.shutdown();
+    await processManager!.shutdown();
     closeLogger();
   });
 

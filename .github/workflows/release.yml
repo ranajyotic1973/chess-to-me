@@ -32,10 +32,43 @@ jobs:
             exit 1
           fi
 
+  # ─── Test gate: unit + integration tests must pass before any installer ─────
+  test:
+    name: Test (unit + integration)
+    needs: check-branch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install system libraries (required for better-sqlite3)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libnotify-dev libnss3 libxss1 libxtst6
+
+      - name: Rebuild native modules
+        run: npm run rebuild:native
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run integration tests
+        run: npm run test:integration
+
   # ─── Windows: x64 + arm64 NSIS installers ──────────────────────────────────
   build-windows:
     name: Build Windows
-    needs: check-branch
+    needs: [check-branch, test]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
@@ -70,7 +103,7 @@ jobs:
   # ─── macOS: universal DMG (x64 + arm64 fat binary) ─────────────────────────
   build-mac:
     name: Build macOS
-    needs: check-branch
+    needs: [check-branch, test]
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
@@ -99,7 +132,7 @@ jobs:
   # ─── Linux x64: AppImage + deb ──────────────────────────────────────────────
   build-linux-x64:
     name: Build Linux x64
-    needs: check-branch
+    needs: [check-branch, test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -140,7 +173,7 @@ jobs:
   # ─── Linux arm64: AppImage + deb (via QEMU) ─────────────────────────────────
   build-linux-arm64:
     name: Build Linux arm64
-    needs: check-branch
+    needs: [check-branch, test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

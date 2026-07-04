@@ -573,6 +573,10 @@ export interface ChatPanelProps {
   onNotationFormatChange?: (format: "san" | "uci") => void;
   currentFen?: string;
   playedMoves?: string[];
+  /** Per-move markdown notes keyed by 0-based move index (advanced analysis). */
+  moveNotes?: Record<number, string>;
+  /** Invoked when a move is clicked to add/edit its note (advanced analysis). */
+  onMoveNoteClick?: (moveIndex: number) => void;
   sx?: any;
 }
 
@@ -729,6 +733,7 @@ export interface ElectronAPI {
 
   // PGN save / load
   saveAnalysisPgn(payload: { pgn: string; notes: Record<string, string> }): Promise<{ ok: boolean; path?: string; error?: string }>;
+  exportAnalysisPgn(payload: { pgn: string }): Promise<{ ok: boolean; path?: string; cancelled?: boolean; error?: string }>;
   loadAnalysisPgn(): Promise<{ ok: boolean; pgn?: string; notes?: Record<string, string>; cancelled?: boolean; error?: string }>;
 
   // Window controls

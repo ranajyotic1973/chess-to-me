@@ -13,7 +13,22 @@ if (!fs.existsSync(src)) {
 }
 
 for (const file of fs.readdirSync(src)) {
-  fs.renameSync(path.join(src, file), path.join(dest, file));
+  const srcPath = path.join(src, file);
+  const destPath = path.join(dest, file);
+
+  // On Windows, renameSync fails if destination exists. Remove it first.
+  if (fs.existsSync(destPath)) {
+    const stat = fs.statSync(destPath);
+    if (stat.isDirectory()) {
+      // Remove directory recursively
+      fs.rmSync(destPath, { recursive: true, force: true });
+    } else {
+      // Remove file
+      fs.unlinkSync(destPath);
+    }
+  }
+
+  fs.renameSync(srcPath, destPath);
 }
-fs.rmdirSync(src);
+fs.rmSync(src, { recursive: true, force: true });
 console.log("Flattened electron/dist/electron/ → electron/dist/");

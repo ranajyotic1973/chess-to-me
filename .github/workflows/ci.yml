@@ -30,8 +30,14 @@ jobs:
       - name: Rebuild native modules
         run: npm run rebuild:native
 
-      - name: Run tests
+      - name: Run unit tests
         run: npm test
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run integration tests
+        run: npm run test:integration
 
       - name: Build (TypeScript + Vite)
         run: npm run build

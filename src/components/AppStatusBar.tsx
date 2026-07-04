@@ -218,7 +218,7 @@ export default function AppStatusBar({
 
     if (electronAPI?.onEngineReady) {
       unsubs.push(electronAPI.onEngineReady((data: any) => {
-        const eng = data?.engine === "lc0" ? "LC0" : "Stockfish";
+        const eng = data?.engine?.toLowerCase() === "lc0" ? "LC0" : "Stockfish";
         setSlot("engine", { priority: 10, text: `${eng} ready`, color: "#16a34a" });
         clearSlot("engine", 2500);
       }));
@@ -226,14 +226,14 @@ export default function AppStatusBar({
 
     if (electronAPI?.onEngineAnalysisStart) {
       unsubs.push(electronAPI.onEngineAnalysisStart((data: any) => {
-        const eng = data?.engine === "lc0" ? "LC0" : "Stockfish";
+        const eng = data?.engine?.toLowerCase() === "lc0" ? "LC0" : "Stockfish";
         setSlot("engine-analysis", { priority: 15, text: `${eng} analyzing…`, color: "#2563eb" });
       }));
     }
 
     if (electronAPI?.onEngineAnalysisDone) {
       unsubs.push(electronAPI.onEngineAnalysisDone((data: any) => {
-        const eng = data?.engine === "lc0" ? "LC0" : "Stockfish";
+        const eng = data?.engine?.toLowerCase() === "lc0" ? "LC0" : "Stockfish";
         setSlot("engine-analysis", { priority: 15, text: `${eng} analysis complete`, color: "#16a34a" });
         clearSlot("engine-analysis", 1500);
       }));
