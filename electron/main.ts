@@ -1586,6 +1586,11 @@ async function performAnalysis(engine: string, fen: string, depth?: number, mult
   const finalMultiPv = Math.max(1, Math.min(4, Number(multiPv) || 4));
 
   try {
+    // Emit engine analysis start event
+    if (mainWindow?.webContents) {
+      mainWindow.webContents.send("engine:analysis-start", { engine: selectedEngine });
+    }
+
     // Use the new engine architecture
     processManager!.selectEngine(selectedEngine);
     const analysis = await processManager!.analyze({
@@ -1593,9 +1598,22 @@ async function performAnalysis(engine: string, fen: string, depth?: number, mult
       depth: finalDepth,
       multiPv: finalMultiPv
     });
+
+    // Emit engine analysis done event
+    if (mainWindow?.webContents) {
+      mainWindow.webContents.send("engine:analysis-done", { engine: selectedEngine, ok: true });
+    }
+
     return { ok: true, analysis };
   } catch (err) {
-    return { ok: false, error: (err as Error)?.message || "Engine analysis failed." };
+    const errorMsg = (err as Error)?.message || "Engine analysis failed.";
+
+    // Emit engine analysis error event
+    if (mainWindow?.webContents) {
+      mainWindow.webContents.send("engine:analysis-error", { engine: selectedEngine, error: errorMsg });
+    }
+
+    return { ok: false, error: errorMsg };
   }
 }
 

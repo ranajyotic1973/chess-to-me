@@ -228,7 +228,6 @@ export default function App() {
   const [selectedEngineLineIndex, setSelectedEngineLineIndex] = useState<number | null>(null);
   const [deepAnalysisResults, setDeepAnalysisResultsState] = useState<Record<number, Record<string, string>>>({});
   const [deepAnalysisLoading, setDeepAnalysisLoading] = useState<boolean>(false);
-  const [analysisLoading, setAnalysisLoading] = useState<boolean>(false);
   const [analysisStatus, setAnalysisStatus] = useState<string>("");
   const [advancedAnalysisMode, setAdvancedAnalysisMode] = useState<boolean>(false);
 
@@ -274,11 +273,8 @@ export default function App() {
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [settingsSaving, setSettingsSaving] = useState<boolean>(false);
-  const [isAnalysisRunning, setIsAnalysisRunning] = useState<boolean>(false);
-  // Track whether engine analysis has completed successfully with results
-  const [engineAnalysisDone, setEngineAnalysisDone] = useState<boolean>(false);
-  // Separate flag for LLM analysis running state
-  const [isLlmAnalysisRunning, setIsLlmAnalysisRunning] = useState<boolean>(false);
+  // Analysis phase: derived from events, not state. Events fire: engine-start → engine-done → llm-start → llm-done
+  const [analysisPhase, setAnalysisPhase] = useState<'idle' | 'engine-running' | 'llm-running' | 'complete' | 'error'>('idle');
   const [currentRawPgn, setCurrentRawPgn] = useState<string>("");
   // Advanced-analysis per-move notes (markdown), keyed by 0-based move index.
   const [moveNotes, setMoveNotes] = useState<Record<number, string>>({});
@@ -650,14 +646,45 @@ export default function App() {
     };
   }, []);
 
-  // Listen for engine analysis start/done events to block input while calculating
+  // Event-driven analysis lifecycle: engine-start → engine-done → llm-start → llm-done
+  // Events automatically enforce sequencing and prevent race conditions
   useEffect(() => {
-    if (!electronAPI?.onEngineAnalysisStart || !electronAPI?.onEngineAnalysisDone) return;
-    const offStart = electronAPI.onEngineAnalysisStart(() => setEngineAnalyzing(true));
-    const offDone = electronAPI.onEngineAnalysisDone(() => setEngineAnalyzing(false));
+    if (!electronAPI?.onEngineAnalysisStart || !electronAPI?.onEngineAnalysisDone || !electronAPI?.onLlmGenerationStart || !electronAPI?.onLlmGenerationDone) return;
+
+    // Engine analysis phase
+    const offEngineStart = electronAPI.onEngineAnalysisStart(({ engine }) => {
+      setAnalysisPhase('engine-running');
+      setAnalysisStatus(`Analyzing with ${engine?.toUpperCase() || 'ENGINE'}...`);
+      setEngineAnalyzing(true);
+    });
+
+    const offEngineDone = electronAPI.onEngineAnalysisDone(({ engine }) => {
+      setEngineAnalyzing(false);
+      // Engine done, but wait for LLM to start or complete
+      // Status will be updated when LLM starts or completes
+    });
+
+    // LLM analysis phase
+    const offLlmStart = electronAPI.onLlmGenerationStart(({ provider }) => {
+      setAnalysisPhase('llm-running');
+      setAnalysisStatus("Generating explanation...");
+    });
+
+    const offLlmDone = electronAPI.onLlmGenerationDone(({ provider, error }) => {
+      if (error) {
+        setAnalysisPhase('error');
+        setAnalysisStatus("Explanation generation failed.");
+      } else {
+        setAnalysisPhase('complete');
+        setAnalysisStatus("Analysis complete.");
+      }
+    });
+
     return () => {
-      offStart();
-      offDone();
+      offEngineStart();
+      offEngineDone();
+      offLlmStart();
+      offLlmDone();
     };
   }, []);
 
@@ -917,10 +944,9 @@ export default function App() {
         return;
       }
 
-      // Guard: Only proceed with LLM if engine analysis is complete and has results
-      if (!engineAnalysisDone || analysisEntries.length === 0) {
-        console.log(`[fetchExplanations] Blocked: Engine analysis not done or no results. engineAnalysisDone=${engineAnalysisDone}, entriesCount=${analysisEntries.length}`);
-        setAnalysisStatus("Engine analysis incomplete. Cannot generate explanation.");
+      // Guard: Don't call LLM if we don't have analysis results
+      if (analysisEntries.length === 0) {
+        console.log(`[fetchExplanations] Blocked: No analysis entries`);
         return;
       }
 
@@ -932,8 +958,7 @@ export default function App() {
 
       console.log(`[fetchExplanations] Starting fetch for line ${selectedLineIndex} with ${playedMovesForContext.length} played moves`);
       setIsExplanationLoading(true);
-      setIsLlmAnalysisRunning(true);
-      setAnalysisStatus("Generating explanation...");
+      // Events will fire: llm:generation-start → analysis phase updates → llm:generation-done
       try {
         const response = await electronAPI.explainLines({
           fen,
@@ -953,17 +978,14 @@ export default function App() {
           const explanation = response.explanations[0]?.text || "";
           console.log(`[fetchExplanations] Setting explanation for line ${selectedLineIndex}`);
           setLineExplanations({ [selectedLineIndex]: explanation });
-          setAnalysisStatus("Analysis complete.");
         }
       } catch (err) {
         console.error(`[fetchExplanations] Error:`, err);
-        setAnalysisStatus("LLM processing failed.");
       } finally {
         setIsExplanationLoading(false);
-        setIsLlmAnalysisRunning(false);
       }
     },
-    [formState.explainLanguage, formState.ollamaModel, formState.ollamaBaseUrl, formState.llmProvider, formState.llmApiKey, electronAPI, engineAnalysisDone, analysisEntries]
+    [formState.explainLanguage, formState.ollamaModel, formState.ollamaBaseUrl, formState.llmProvider, formState.llmApiKey, electronAPI]
   );
 
   const handleAnalysisSuccess = useCallback(
@@ -1032,17 +1054,12 @@ export default function App() {
         setAnalysisStatus("Analysis engine unavailable.");
         return;
       }
-      // Start analysis: set both loading flags and update UI
-      setAnalysisLoading(true);
-      setIsAnalysisRunning(true);
-      setEngineAnalysisDone(false);
-      const engineName = formState.selectedEngine?.toUpperCase() || "ENGINE";
-      setAnalysisStatus(`Analyzing with ${engineName}...`);
+      // Events fired by main process handle all state updates: engine-start, engine-done, llm-start, llm-done
+      // UI derives state from events, not manual management
+      setAnalysisPhase('engine-running');
+      const multiPvLines = advancedAnalysisMode || deepMode ? 20 : 4;
+      const analysisDepth = advancedAnalysisMode ? formState.analysisDepth : 10;
       try {
-        // Show more lines in advanced/deep analysis mode (20 lines) vs regular analysis (4 lines)
-        const multiPvLines = advancedAnalysisMode || deepMode ? 20 : 4;
-        // Use fixed depth 10 for Analysis mode, app settings depth for Advanced mode
-        const analysisDepth = advancedAnalysisMode ? formState.analysisDepth : 10;
         const response = await electronAPI.analyzePosition({
           engine: formState.selectedEngine,
           fen,
@@ -1050,29 +1067,15 @@ export default function App() {
           multiPv: multiPvLines
         });
         if (!response?.ok) {
-          const errorMsg = (response as any)?.error || `${engineName} analysis timed out`;
-          setAnalysisStatus(errorMsg);
-          setEngineAnalysisDone(false);
-          setIsAnalysisRunning(false);
+          setAnalysisPhase('error');
+          setAnalysisStatus((response as any)?.error || "Engine analysis failed.");
           return;
         }
         const lines = (response as any).analysis?.lines || [];
         handleAnalysisSuccess(lines, fen);
 
-        // Mark engine analysis as done only if we have valid results
-        if (lines.length > 0) {
-          setEngineAnalysisDone(true);
-          setAnalysisStatus("Engine analysis complete. Generating explanation...");
-        } else {
-          setEngineAnalysisDone(false);
-          setAnalysisStatus("Engine analysis did not produce results.");
-          setIsAnalysisRunning(false);
-          return;
-        }
-
         // Deep LLM pass when in advanced mode
         if (deepMode && lines.length > 0 && electronAPI?.deepAnalyzeLines) {
-          setIsLlmAnalysisRunning(true);
           setDeepAnalysisLoading(true);
           electronAPI.deepAnalyzeLines({ fen, lines }).then((res) => {
             if (res?.ok && res.results) {
@@ -1080,24 +1083,16 @@ export default function App() {
               for (const r of res.results) map[r.lineIndex] = r.analysis;
               setDeepAnalysisResults({ lineIndex: 0, results: map as any });
             }
-          }).catch(() => {}).finally(() => {
+          }).catch(() => {
+            setAnalysisPhase('error');
+            setAnalysisStatus("Deep analysis failed.");
+          }).finally(() => {
             setDeepAnalysisLoading(false);
-            setIsLlmAnalysisRunning(false);
-            setIsAnalysisRunning(false);
-            setAnalysisStatus("");
           });
-        } else if (!deepMode) {
-          // For non-deep mode, clear the status and stop the spinner after engine completes
-          setIsAnalysisRunning(false);
-          setAnalysisStatus("");
         }
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : "Unknown error";
-        setAnalysisStatus(`${engineName} analysis failed: ${errorMsg}`);
-        setEngineAnalysisDone(false);
-        setIsAnalysisRunning(false);
-      } finally {
-        setAnalysisLoading(false);
+        setAnalysisPhase('error');
+        setAnalysisStatus("Analysis failed.");
       }
     },
     [formState.analysisDepth, formState.selectedEngine, advancedAnalysisMode, handleAnalysisSuccess]
@@ -1105,19 +1100,19 @@ export default function App() {
 
   const handleStartAdvancedAnalysis = useCallback(() => {
     setAdvancedAnalysisMode(true);
-    setIsAnalysisRunning(true);
     setDeepAnalysisResults({ lineIndex: -1, results: {} });
     runAnalysis(currentFen, true);
+    // Phase will be set to 'engine-running' by events
   }, [currentFen, runAnalysis]);
 
   // Auto-run analysis on start position when entering analysis mode
   useEffect(() => {
-    if (viewMode === "analysis" && settingsLoaded && !isAnalysisRunning && analysisLines.length === 0 && currentFen === "start") {
+    if (viewMode === "analysis" && settingsLoaded && analysisPhase === 'idle' && analysisLines.length === 0 && currentFen === "start") {
       // Automatically run analysis on the start position to show lines immediately
-      setIsAnalysisRunning(true);
       runAnalysis("start");
+      // Phase will be set to 'engine-running' by events
     }
-  }, [viewMode, settingsLoaded, isAnalysisRunning, analysisLines.length, currentFen, runAnalysis]);
+  }, [viewMode, settingsLoaded, analysisPhase, analysisLines.length, currentFen, runAnalysis]);
 
   // ── Move-level notes workflow (advanced analysis) ──────────────────────────
   // Clicking a move opens popup A (AI import prompt) for a fresh note, or jumps
@@ -1171,10 +1166,7 @@ export default function App() {
   }, [currentFen, runAnalysis]);
 
   const handleStopAnalysis = useCallback(() => {
-    setIsAnalysisRunning(false);
-    setAnalysisLoading(false);
-    setEngineAnalysisDone(false);
-    setIsLlmAnalysisRunning(false);
+    setAnalysisPhase('idle');
     setAnalysisStatus("Analysis cancelled.");
   }, []);
 
@@ -2605,7 +2597,7 @@ Make it detailed and exciting!`;
         </Box>
 
       <Backdrop
-        open={!appLoading && (engineWarming || engineAnalyzing || isAnalysisRunning)}
+        open={!appLoading && (engineWarming || engineAnalyzing || analysisPhase === 'engine-running')}
         sx={{
           position: "absolute",
           zIndex: (theme) => theme.zIndex.drawer + 5,
@@ -2614,16 +2606,19 @@ Make it detailed and exciting!`;
       >
         <Stack spacing={2} alignItems="center">
           <CircularProgress color="inherit" />
-          {!engineWarming && !engineAnalyzing && isAnalysisRunning && (
+          {analysisPhase === 'engine-running' && (
             <Typography variant="h6">Engine analysis in progress…</Typography>
           )}
-          {!engineWarming && !engineAnalyzing && !isAnalysisRunning && (
+          {engineWarming && (
+            <Typography variant="h6">Warming up engine…</Typography>
+          )}
+          {!engineWarming && !engineAnalyzing && analysisPhase !== 'engine-running' && (
             <Typography variant="h6">Loading application…</Typography>
           )}
         </Stack>
       </Backdrop>
       <Backdrop
-        open={isExplanationLoading || isLlmAnalysisRunning}
+        open={isExplanationLoading || analysisPhase === 'llm-running'}
         sx={{
           position: "absolute",
           zIndex: (theme) => theme.zIndex.drawer + 4,
@@ -2917,7 +2912,7 @@ Make it detailed and exciting!`;
                     <EvalBar
                       score={analysisLines[0]?.score}
                       height={boardSize.height}
-                      isLoading={isAnalysisRunning}
+                      isLoading={analysisPhase !== 'idle'}
                     />
                   )}
                   <AnalysisBoard
@@ -2928,7 +2923,7 @@ Make it detailed and exciting!`;
                     size={boardSize}
                     onStartAnalysis={handleStartAnalysis}
                     onStopAnalysis={handleStopAnalysis}
-                    isAnalysisRunning={isAnalysisRunning}
+                    isAnalysisRunning={analysisPhase !== 'idle'}
                     onBoardMove={handleBoardMove}
                     onMoveAttempt={handleMoveAttempt}
                     puzzleMode={currentResponseType === "Puzzle" || gameMode}
@@ -3004,7 +2999,7 @@ Make it detailed and exciting!`;
                     </Tooltip>
                     {!gameMode && (
                       <>
-                        {isAnalysisRunning && (
+                        {analysisPhase !== 'idle' && (
                           <Tooltip title="Stop Analysis" disableInteractive={false}>
                             <IconButton
                               size="small"
@@ -3119,7 +3114,7 @@ Make it detailed and exciting!`;
                   analysisEntries={analysisEntries}
                   selectedLineAnalysisEntry={selectedLineAnalysisEntry}
                   analysisStatus={analysisStatus}
-                  analysisLoading={analysisLoading}
+                  analysisLoading={analysisPhase !== 'idle'}
                   onPlayLine={handlePlayLine}
                   selectedAnalysisId={selectedAnalysisLineId}
                   onLineSelect={handleSelectAnalysisLine}
@@ -3306,7 +3301,7 @@ Make it detailed and exciting!`;
       <AppStatusBar
         currentResponseType={currentResponseType}
         selectedEngine={formState.selectedEngine}
-        isEngineRunning={isAnalysisRunning}
+        isEngineRunning={analysisPhase === 'engine-running'}
         llmProvider={formState.llmProvider}
       />
     </Box>
