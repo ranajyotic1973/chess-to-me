@@ -275,6 +275,10 @@ export default function App() {
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [settingsSaving, setSettingsSaving] = useState<boolean>(false);
   const [isAnalysisRunning, setIsAnalysisRunning] = useState<boolean>(false);
+  // Track whether engine analysis has completed successfully with results
+  const [engineAnalysisDone, setEngineAnalysisDone] = useState<boolean>(false);
+  // Separate flag for LLM analysis running state
+  const [isLlmAnalysisRunning, setIsLlmAnalysisRunning] = useState<boolean>(false);
   const [currentRawPgn, setCurrentRawPgn] = useState<string>("");
   // Advanced-analysis per-move notes (markdown), keyed by 0-based move index.
   const [moveNotes, setMoveNotes] = useState<Record<number, string>>({});
@@ -913,6 +917,13 @@ export default function App() {
         return;
       }
 
+      // Guard: Only proceed with LLM if engine analysis is complete and has results
+      if (!engineAnalysisDone || analysisEntries.length === 0) {
+        console.log(`[fetchExplanations] Blocked: Engine analysis not done or no results. engineAnalysisDone=${engineAnalysisDone}, entriesCount=${analysisEntries.length}`);
+        setAnalysisStatus("Engine analysis incomplete. Cannot generate explanation.");
+        return;
+      }
+
       const entry = analysisEntries[selectedLineIndex];
       if (!entry) {
         console.log(`[fetchExplanations] No entry found for line index ${selectedLineIndex}`);
@@ -921,7 +932,8 @@ export default function App() {
 
       console.log(`[fetchExplanations] Starting fetch for line ${selectedLineIndex} with ${playedMovesForContext.length} played moves`);
       setIsExplanationLoading(true);
-      setAnalysisStatus("LLM processing...");
+      setIsLlmAnalysisRunning(true);
+      setAnalysisStatus("Generating explanation...");
       try {
         const response = await electronAPI.explainLines({
           fen,
@@ -941,16 +953,17 @@ export default function App() {
           const explanation = response.explanations[0]?.text || "";
           console.log(`[fetchExplanations] Setting explanation for line ${selectedLineIndex}`);
           setLineExplanations({ [selectedLineIndex]: explanation });
-          setAnalysisStatus("");
+          setAnalysisStatus("Analysis complete.");
         }
       } catch (err) {
         console.error(`[fetchExplanations] Error:`, err);
         setAnalysisStatus("LLM processing failed.");
       } finally {
         setIsExplanationLoading(false);
+        setIsLlmAnalysisRunning(false);
       }
     },
-    [formState.explainLanguage, formState.ollamaModel, formState.ollamaBaseUrl, formState.llmProvider, formState.llmApiKey, electronAPI]
+    [formState.explainLanguage, formState.ollamaModel, formState.ollamaBaseUrl, formState.llmProvider, formState.llmApiKey, electronAPI, engineAnalysisDone, analysisEntries]
   );
 
   const handleAnalysisSuccess = useCallback(
@@ -1019,9 +1032,12 @@ export default function App() {
         setAnalysisStatus("Analysis engine unavailable.");
         return;
       }
+      // Start analysis: set both loading flags and update UI
       setAnalysisLoading(true);
+      setIsAnalysisRunning(true);
+      setEngineAnalysisDone(false);
       const engineName = formState.selectedEngine?.toUpperCase() || "ENGINE";
-      setAnalysisStatus(`${engineName} analyzing...`);
+      setAnalysisStatus(`Analyzing with ${engineName}...`);
       try {
         // Show more lines in advanced/deep analysis mode (20 lines) vs regular analysis (4 lines)
         const multiPvLines = advancedAnalysisMode || deepMode ? 20 : 4;
@@ -1034,14 +1050,29 @@ export default function App() {
           multiPv: multiPvLines
         });
         if (!response?.ok) {
-          setAnalysisStatus((response as any)?.error || `${engineName} analysis failed.`);
+          const errorMsg = (response as any)?.error || `${engineName} analysis timed out`;
+          setAnalysisStatus(errorMsg);
+          setEngineAnalysisDone(false);
+          setIsAnalysisRunning(false);
           return;
         }
         const lines = (response as any).analysis?.lines || [];
         handleAnalysisSuccess(lines, fen);
 
+        // Mark engine analysis as done only if we have valid results
+        if (lines.length > 0) {
+          setEngineAnalysisDone(true);
+          setAnalysisStatus("Engine analysis complete. Generating explanation...");
+        } else {
+          setEngineAnalysisDone(false);
+          setAnalysisStatus("Engine analysis did not produce results.");
+          setIsAnalysisRunning(false);
+          return;
+        }
+
         // Deep LLM pass when in advanced mode
         if (deepMode && lines.length > 0 && electronAPI?.deepAnalyzeLines) {
+          setIsLlmAnalysisRunning(true);
           setDeepAnalysisLoading(true);
           electronAPI.deepAnalyzeLines({ fen, lines }).then((res) => {
             if (res?.ok && res.results) {
@@ -1049,10 +1080,22 @@ export default function App() {
               for (const r of res.results) map[r.lineIndex] = r.analysis;
               setDeepAnalysisResults({ lineIndex: 0, results: map as any });
             }
-          }).catch(() => {}).finally(() => setDeepAnalysisLoading(false));
+          }).catch(() => {}).finally(() => {
+            setDeepAnalysisLoading(false);
+            setIsLlmAnalysisRunning(false);
+            setIsAnalysisRunning(false);
+            setAnalysisStatus("");
+          });
+        } else if (!deepMode) {
+          // For non-deep mode, clear the status and stop the spinner after engine completes
+          setIsAnalysisRunning(false);
+          setAnalysisStatus("");
         }
       } catch (err) {
-        setAnalysisStatus(`${engineName} analysis failed.`);
+        const errorMsg = err instanceof Error ? err.message : "Unknown error";
+        setAnalysisStatus(`${engineName} analysis failed: ${errorMsg}`);
+        setEngineAnalysisDone(false);
+        setIsAnalysisRunning(false);
       } finally {
         setAnalysisLoading(false);
       }
@@ -1130,7 +1173,9 @@ export default function App() {
   const handleStopAnalysis = useCallback(() => {
     setIsAnalysisRunning(false);
     setAnalysisLoading(false);
-    setAnalysisStatus("Analysis stopped.");
+    setEngineAnalysisDone(false);
+    setIsLlmAnalysisRunning(false);
+    setAnalysisStatus("Analysis cancelled.");
   }, []);
 
   const handleResetBoard = useCallback(() => {
@@ -2560,7 +2605,7 @@ Make it detailed and exciting!`;
         </Box>
 
       <Backdrop
-        open={!appLoading && (engineWarming || engineAnalyzing)}
+        open={!appLoading && (engineWarming || engineAnalyzing || isAnalysisRunning)}
         sx={{
           position: "absolute",
           zIndex: (theme) => theme.zIndex.drawer + 5,
@@ -2569,13 +2614,16 @@ Make it detailed and exciting!`;
       >
         <Stack spacing={2} alignItems="center">
           <CircularProgress color="inherit" />
-          {!engineWarming && !engineAnalyzing && (
+          {!engineWarming && !engineAnalyzing && isAnalysisRunning && (
+            <Typography variant="h6">Engine analysis in progress…</Typography>
+          )}
+          {!engineWarming && !engineAnalyzing && !isAnalysisRunning && (
             <Typography variant="h6">Loading application…</Typography>
           )}
         </Stack>
       </Backdrop>
       <Backdrop
-        open={isExplanationLoading}
+        open={isExplanationLoading || isLlmAnalysisRunning}
         sx={{
           position: "absolute",
           zIndex: (theme) => theme.zIndex.drawer + 4,

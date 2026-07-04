@@ -71,6 +71,14 @@ If any step fails, the PR cannot be merged. Fix failing tests locally before pus
 - The Electron main process (`electron/main.ts`) owns all LLM routing and classification (PASS 1 + PASS 2). The renderer must not duplicate classification logic.
 - Engine analysis (LC0 / Stockfish) is run in the main process. The renderer passes the current FEN; the main process decides whether engine lines are needed.
 
+### Analysis State Management
+The analysis workflow (engine → LLM explanation) requires careful state orchestration:
+- **`isAnalysisRunning`**: Master flag for both engine and LLM phases. Set `true` at engine start, `false` only after LLM completes (or on error/cancel).
+- **`engineAnalysisDone`**: Set `true` only when engine returns valid lines. Guards LLM phase: check `engineAnalysisDone && analysisEntries.length > 0` before calling LLM.
+- **`analysisStatus`**: Update at each phase transition (engine start → "Analyzing...", engine done → "Generating explanation...", complete → "Analysis complete."). Auto-clears after 2s.
+- **Spinner logic**: The Backdrop checks `isAnalysisRunning || engineAnalyzing` for engine phase and `isLlmAnalysisRunning` for LLM phase. Both spinners show as long as analysis is ongoing.
+- **Race condition prevention**: LLM (`fetchExplanations`) checks the guard condition before calling `electronAPI.explainLines`. If engine failed or has no results, status updates and LLM is skipped.
+
 ### Web Asset Paths — Relative Only
 This is an Electron application. In production the renderer is loaded from an ASAR bundle via `file://`, so absolute web paths (e.g. `/assets/foo.js`, `/chesspieces/wK.png`) resolve against the filesystem root and fail silently, causing blank screens or missing images.
 
