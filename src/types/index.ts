@@ -515,7 +515,6 @@ export interface AnalysisBoardProps {
   puzzleMode?: boolean;
   onReset?: () => void;
   onChessInstanceReady?: (chess: any) => void;
-  playedMoves?: string[];
 }
 
 export interface StatusBannerProps {

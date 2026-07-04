@@ -1694,18 +1694,11 @@ Make it detailed and exciting!`;
       analysisEntriesCount: analysisEntries.length,
       currentMoveIndex
     });
-    // Append new moves from the board drag to playedMoves.
-    // moves array only contains moves made since the FEN was loaded (i.e., since line selection or reset).
-    // playedMoves accumulates all moves the user has made, so we append the new dragged moves.
-    setPlayedMoves(prev => {
-      // If there are more moves now than before, append only the new ones
-      if (moves.length > prev.length) {
-        const newMoves = moves.slice(prev.length);
-        return [...prev, ...newMoves];
-      }
-      // If moves.length <= prev.length, use the board's moves as source of truth
-      return moves;
-    });
+    // The board reports only the single move just made (via drag). Append it to
+    // playedMoves, which accumulates the full move history across both line
+    // selections and drag moves. The board's own history is unreliable because a
+    // FEN load (from line selection) wipes it.
+    setPlayedMoves(prev => [...prev, ...moves]);
     // Apply the board move locally (formerly the handleBoardMove thunk + its
     // extraReducers): update the FEN, advance the move index if the move
     // follows the selected line, otherwise run a fresh analysis.
@@ -2994,7 +2987,6 @@ Make it detailed and exciting!`;
                     puzzleMode={currentResponseType === "Puzzle" || gameMode}
                     onReset={handleResetBoard}
                     onChessInstanceReady={setChessInstance}
-                    playedMoves={playedMoves}
                   />
                   {/* Right column: View Logs and Reset buttons */}
                   <Box sx={{ display: "flex", flexDirection: "column", gap: 1, flex: "0 0 auto", alignItems: "center" }}>

@@ -23,8 +23,7 @@ export default function AnalysisBoard({
   isAnalysisRunning = false,
   puzzleMode = false,
   onReset,
-  onChessInstanceReady,
-  playedMoves = []
+  onChessInstanceReady
 }: AnalysisBoardProps) {
   const boardRef = useRef<HTMLDivElement>(null);
   const boardInstance = useRef<any>(null);
@@ -113,8 +112,11 @@ export default function AnalysisBoard({
           onMoveAttempt(source, target, nextFen);
         }
         if (typeof onBoardMove === "function") {
-          const moves = chess.current.history({ verbose: true }).map((m: any) => `${m.from}${m.to}`) as string[];
-          onBoardMove(nextFen, moves);
+          // Report only the single move just made (in UCI). The board's chess.current
+          // history is unreliable here because loading a FEN (e.g. from line selection)
+          // wipes its history. App.tsx appends this single move to playedMoves.
+          const uciMove = `${source}${target}${move.promotion || ""}`;
+          onBoardMove(nextFen, [uciMove]);
         }
         return undefined;
       }
