@@ -1328,8 +1328,6 @@ Make it detailed and exciting!`;
       }
     }
 
-    const lineNum = line.rank || lineIndex + 1;
-    setStatusMessage(`Line ${lineNum} selected. Playing first move and analyzing...`);
   }, [currentFen, analysisEntries, runAnalysis]);
 
   // Pops one level of the exploration stack (or just clears the current selection at

@@ -75,13 +75,20 @@ export default function SelectedLineDetail({
   const convertToSAN = () => {
     const chess = new Chess();
     return playedMoves.map((uciMove) => {
-      const moveObj: any = { from: uciMove.substring(0, 2), to: uciMove.substring(2, 4) };
-      const toRank = parseInt(uciMove[3]);
-      const piece = chess.get(moveObj.from);
-      if (piece && piece.type === 'p' && (toRank === 8 || toRank === 1)) {
-        moveObj.promotion = 'q';
+      try {
+        const moveObj: any = { from: uciMove.substring(0, 2), to: uciMove.substring(2, 4) };
+        const toRank = parseInt(uciMove[3]);
+        const piece = chess.get(moveObj.from);
+        if (piece && piece.type === 'p' && (toRank === 8 || toRank === 1)) {
+          moveObj.promotion = 'q';
+        }
+        const result = chess.move(moveObj);
+        return result?.san || uciMove;
+      } catch {
+        // If move is invalid (e.g., playedMoves doesn't match current position),
+        // return the UCI move as fallback to avoid crashing
+        return uciMove;
       }
-      return chess.move(moveObj)?.san || uciMove;
     });
   };
 
