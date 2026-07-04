@@ -660,8 +660,10 @@ export default function App() {
 
     const offEngineDone = electronAPI.onEngineAnalysisDone(({ engine }) => {
       setEngineAnalyzing(false);
-      // Engine done, but wait for LLM to start or complete
-      // Status will be updated when LLM starts or completes
+      // Engine analysis complete - update phase to 'complete'
+      // If LLM starts, phase will transition to 'llm-running'
+      setAnalysisPhase('complete');
+      setAnalysisStatus("Engine analysis complete.");
     });
 
     // LLM analysis phase
