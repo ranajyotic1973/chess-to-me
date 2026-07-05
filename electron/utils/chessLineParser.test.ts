@@ -162,6 +162,17 @@ describe("ChessLineParser", () => {
       expect(ChessLineParser.extractBestMove("bestmove a1a2")).toBe("a1a2");
       expect(ChessLineParser.extractBestMove("bestmove")).toBe("");
     });
+
+    it("extracts ponder move", () => {
+      expect(ChessLineParser.extractPonderMove("bestmove a7a6 ponder b5a4")).toBe("b5a4");
+      expect(ChessLineParser.extractPonderMove("bestmove e2e4 ponder d7d5")).toBe("d7d5");
+    });
+
+    it("returns empty ponder move when none present", () => {
+      expect(ChessLineParser.extractPonderMove("bestmove a1a2")).toBe("");
+      expect(ChessLineParser.extractPonderMove("bestmove a7a6 ponder (none)")).toBe("");
+      expect(ChessLineParser.extractPonderMove("bestmove")).toBe("");
+    });
   });
 
   describe("Edge Cases", () => {

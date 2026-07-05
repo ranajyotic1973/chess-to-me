@@ -160,6 +160,7 @@ export abstract class BaseChessEngine implements IChessEngine {
 
       let buffer = "";
       let bestMove = "";
+      let ponderMove = "";
       const linesByRank = new Map<number, any>();
       let done = false;
       let maxDepthSeen = 0;
@@ -186,24 +187,29 @@ export abstract class BaseChessEngine implements IChessEngine {
             pv: value.pv || ""
           }));
 
-        // Prioritize the line that starts with bestmove
-        if (bestMove && lines.length > 0) {
-          const bestmoveLineIndex = lines.findIndex(
-            (line) => line.pv.split(" ")[0] === bestMove
-          );
-          if (bestmoveLineIndex > 0) {
-            const [bestmoveLine] = lines.splice(bestmoveLineIndex, 1);
-            lines.unshift(bestmoveLine);
+        // Order the lines so the engine's chosen move is first and its ponder
+        // (predicted reply) is second — the search's bestmove/ponder can differ
+        // from the raw multipv ranking (notably for LC0). Float ponder first, then
+        // bestmove, so bestmove ends up at index 0 and ponder at index 1; the
+        // remaining lines keep their multipv order.
+        const floatToFront = (move: string) => {
+          if (!move) return;
+          const idx = lines.findIndex((line) => line.pv.split(" ")[0] === move);
+          if (idx > 0) {
+            const [line] = lines.splice(idx, 1);
+            lines.unshift(line);
           }
-        }
+        };
+        floatToFront(ponderMove);
+        floatToFront(bestMove);
 
         this.emitLog({
-          text: `Analysis complete: best move ${bestMove}`,
+          text: `Analysis complete: best move ${bestMove}${ponderMove ? ` ponder ${ponderMove}` : ""}`,
           stream: "stdout",
           context: "analysis"
         });
 
-        resolve({ bestMove, lines });
+        resolve({ bestMove, ponderMove, lines });
       };
 
       const fail = (err: Error) => {
@@ -242,6 +248,7 @@ export abstract class BaseChessEngine implements IChessEngine {
             linesByRank.set(parsed.rank, existing);
           } else if (ChessLineParser.isBestmoveLine(line)) {
             bestMove = ChessLineParser.extractBestMove(line);
+            ponderMove = ChessLineParser.extractPonderMove(line);
             finish();
             return;
           }

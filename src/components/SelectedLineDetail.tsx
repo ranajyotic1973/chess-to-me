@@ -1,4 +1,4 @@
-import { Box, Stack, Typography } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 import { Chess } from "chess.js";
 import { useEffect, useState, useRef } from "react";
 import type { AnalysisEntry, DeepLineAnalysis } from "../types";
@@ -15,28 +15,16 @@ interface SelectedLineDetailProps {
   moveNotes?: Record<number, string>;
   /** Invoked when the user clicks a move to add/edit its note (advanced mode only). */
   onMoveClick?: (moveIndex: number) => void;
+  /** Section number shown as a prefix on the heading (e.g. 3 → "3. Moves Played"). */
+  index?: number;
 }
-
-const DEEP_ANALYSIS_FIELDS: Array<{ key: keyof DeepLineAnalysis; label: string }> = [
-  { key: "strategy", label: "Strategy" },
-  { key: "proscons", label: "Pros & Cons" },
-  { key: "counterattack", label: "Counter-attack" },
-  { key: "sacrifice", label: "Sacrifice" },
-  { key: "novelty", label: "Novelty" },
-  { key: "endgameChances", label: "Endgame chances" },
-  { key: "alternatives", label: "Alternatives" },
-];
 
 export default function SelectedLineDetail({
   playedMoves,
-  selectedLineIndex,
-  selectedLineEntry,
-  analysisEntries,
   advancedAnalysisMode = false,
-  deepAnalysisLoading = false,
-  deepAnalysisResults = {},
   moveNotes = {},
   onMoveClick,
+  index,
 }: SelectedLineDetailProps) {
   const [navigationIndex, setNavigationIndex] = useState(playedMoves.length - 1);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -68,8 +56,6 @@ export default function SelectedLineDetail({
   if (playedMoves.length === 0) {
     return null;
   }
-
-  const entry = selectedLineIndex !== null ? (selectedLineEntry || analysisEntries[selectedLineIndex]) : null;
 
   // Convert moves to SAN format
   const convertToSAN = () => {
@@ -109,7 +95,7 @@ export default function SelectedLineDetail({
       }}
     >
       <Typography variant="subtitle2" sx={{ fontWeight: 700, color: "primary.main", mb: 1 }}>
-        Moves Played
+        {index != null ? `${index}. Moves Played` : "Moves Played"}
       </Typography>
 
       {/* Notes hint — only in advanced analysis mode, right above the moves. */}
@@ -151,23 +137,6 @@ export default function SelectedLineDetail({
           );
         })}
       </Typography>
-
-      {advancedAnalysisMode && selectedLineIndex !== null && entry && (
-        <Box sx={{ mt: 1.5, display: "flex", flexDirection: "column", gap: 1.25 }}>
-          {deepAnalysisResults[selectedLineIndex] ? (
-            DEEP_ANALYSIS_FIELDS.map((f) => (
-              <Box key={f.key} data-testid={`deep-analysis-${f.key}`}>
-                <Typography variant="caption" sx={{ fontWeight: 700, color: "primary.main", display: "block" }}>
-                  {f.label}
-                </Typography>
-                <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                  {deepAnalysisResults[selectedLineIndex]![f.key as keyof DeepLineAnalysis]}
-                </Typography>
-              </Box>
-            ))
-          ) : null}
-        </Box>
-      )}
     </Box>
   );
 }

@@ -1,4 +1,4 @@
-import { parseStockfishLine, deriveFenSequence, parseFenOrPgnInput, sanWithGlyph } from "./analysisHelpers";
+import { parseStockfishLine, deriveFenSequence, parseFenOrPgnInput, pliesFromFen, sanWithGlyph, selectedLineMovesText, sortLinesByScore } from "./analysisHelpers";
 
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 const AFTER_E4_FEN = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1";
@@ -21,6 +21,51 @@ describe("sanWithGlyph", () => {
 
   test("leaves castling notation unchanged", () => {
     expect(sanWithGlyph("O-O", false)).toBe("O-O");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// sortLinesByScore
+// ---------------------------------------------------------------------------
+describe("sortLinesByScore", () => {
+  const mk = (rank: number, pv: string, value = 0) => ({
+    rank,
+    score: { type: "cp" as const, value },
+    pv,
+  });
+
+  test("sorts by multipv rank when no bestMove/ponder given", () => {
+    const lines = [mk(3, "c2c4 e7e5"), mk(1, "e2e4 c7c5"), mk(2, "d2d4 d7d5")];
+    const sorted = sortLinesByScore(lines);
+    expect(sorted.map((l) => l.rank)).toEqual([1, 2, 3]);
+  });
+
+  test("floats the bestMove line to the top", () => {
+    // Engine's bestmove is a7a6 (multipv rank 3), not the rank-1 line.
+    const lines = [mk(1, "b5a4 g8f6"), mk(2, "e1g1 f8e7"), mk(3, "a7a6 b5a4")];
+    const sorted = sortLinesByScore(lines, "a7a6");
+    expect(sorted[0].pv).toBe("a7a6 b5a4");
+    // The rest keep their multipv order.
+    expect(sorted.slice(1).map((l) => l.rank)).toEqual([1, 2]);
+  });
+
+  test("places bestMove first and ponder second, rest by rank", () => {
+    const lines = [mk(1, "b5a4 g8f6"), mk(2, "e1g1 f8e7"), mk(3, "a7a6 b5a4")];
+    const sorted = sortLinesByScore(lines, "a7a6", "b5a4");
+    expect(sorted.map((l) => l.pv.split(" ")[0])).toEqual(["a7a6", "b5a4", "e1g1"]);
+  });
+
+  test("ignores a bestMove/ponder that matches no line", () => {
+    const lines = [mk(1, "e2e4 c7c5"), mk(2, "d2d4 d7d5")];
+    const sorted = sortLinesByScore(lines, "g1f3", "h7h5");
+    expect(sorted.map((l) => l.rank)).toEqual([1, 2]);
+  });
+
+  test("never duplicates a line when bestMove equals ponder", () => {
+    const lines = [mk(1, "e2e4 c7c5"), mk(2, "d2d4 d7d5")];
+    const sorted = sortLinesByScore(lines, "e2e4", "e2e4");
+    expect(sorted).toHaveLength(2);
+    expect(sorted.map((l) => l.pv.split(" ")[0])).toEqual(["e2e4", "d2d4"]);
   });
 });
 
@@ -230,5 +275,46 @@ describe("parseFenOrPgnInput", () => {
     const pgn = "1. e4";
     const result = parseFenOrPgnInput(pgn) as { positions: string[] };
     expect(result.positions).toHaveLength(2); // start + after e4
+  });
+});
+
+describe("pliesFromFen", () => {
+  test("starting position is 0 plies", () => {
+    expect(pliesFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")).toBe(0);
+  });
+
+  test("after 1.e4 is 1 ply", () => {
+    expect(pliesFromFen("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1")).toBe(1);
+  });
+
+  test("after 1.e4 e5 is 2 plies (the auto-explain threshold)", () => {
+    expect(pliesFromFen("rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2")).toBe(2);
+  });
+
+  test("after 1.e4 e5 2.Nf3 is 3 plies", () => {
+    expect(pliesFromFen("rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2")).toBe(3);
+  });
+
+  test("returns 0 for a malformed FEN missing fields", () => {
+    expect(pliesFromFen("not a real fen")).toBe(0);
+    expect(pliesFromFen("")).toBe(0);
+  });
+});
+
+describe("selectedLineMovesText", () => {
+  const entryWith = (moves: Array<{ from: string; to: string }>, description: string) =>
+    ({ moves, description } as any);
+
+  test("returns the entry description when the line has moves", () => {
+    expect(selectedLineMovesText(entryWith([{ from: "e2", to: "e4" }], "1. e4 e5 2. Nf3"))).toBe("1. e4 e5 2. Nf3");
+  });
+
+  test("returns empty string for a null/undefined entry", () => {
+    expect(selectedLineMovesText(null)).toBe("");
+    expect(selectedLineMovesText(undefined)).toBe("");
+  });
+
+  test("returns empty string when the entry has no moves", () => {
+    expect(selectedLineMovesText(entryWith([], "should be ignored"))).toBe("");
   });
 });

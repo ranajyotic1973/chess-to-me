@@ -221,7 +221,7 @@ Return this structure for EVERY explanation:
 
 **What Both Sides Must Watch**: [Important tactical points both players need to be aware of RIGHT NOW]
 
-**Opening Name** (AFTER MOVE 3 ONLY): [If this is move 3 or beyond, identify and name the chess opening (e.g., "This is the Sicilian Defense, Najdorf Variation"). Only include this section if the opening is clear enough to identify.]
+**Opening Name**: [Only include this whole section (header included) if this is move 3 or beyond AND the opening is clearly identifiable; otherwise omit the section entirely. When included, name the chess opening (e.g., "This is the Sicilian Defense, Najdorf Variation"). Never write the words "AFTER MOVE 3 ONLY" or any similar instructional note in your answer.]
 
 **Historical Story**: [A real story about this position/opening — named after a famous player, used in a legendary game, or an interesting fact. Keep it exciting for kids! Only include if you know a genuine story.]
 

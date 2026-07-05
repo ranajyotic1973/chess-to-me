@@ -1,0 +1,2517 @@
+{
+  ".claude/settings.json": {
+    "mtime": 1783097094.6691332,
+    "ast_hash": "c76861f0705ad424f99a17f53ad0aba2",
+    "semantic_hash": "c76861f0705ad424f99a17f53ad0aba2"
+  },
+  ".claude/settings.local.json": {
+    "mtime": 1782996427.7930458,
+    "ast_hash": "f63512ddb9e91614759b810bc67a9058",
+    "semantic_hash": "f63512ddb9e91614759b810bc67a9058"
+  },
+  "__mocks__/better-sqlite3.js": {
+    "mtime": 1781233618.7741535,
+    "ast_hash": "9560b72704b04a81c2cbc5548a01981d",
+    "semantic_hash": "9560b72704b04a81c2cbc5548a01981d"
+  },
+  "data/eco/ecoA.json": {
+    "mtime": 1781881926.3647902,
+    "ast_hash": "25c411030a3f31632fc00aca7c68ecee",
+    "semantic_hash": "25c411030a3f31632fc00aca7c68ecee"
+  },
+  "data/eco/ecoB.json": {
+    "mtime": 1781881927.069885,
+    "ast_hash": "a6d1b10e7fc3f2728da5c452d5589a4c",
+    "semantic_hash": "a6d1b10e7fc3f2728da5c452d5589a4c"
+  },
+  "data/eco/ecoC.json": {
+    "mtime": 1781881927.6883352,
+    "ast_hash": "f398f9d8b353898e078d729ab970aa60",
+    "semantic_hash": "f398f9d8b353898e078d729ab970aa60"
+  },
+  "data/eco/ecoD.json": {
+    "mtime": 1781881928.2294016,
+    "ast_hash": "420d3ee2c36f1b577a87aa79f96b3ef3",
+    "semantic_hash": "420d3ee2c36f1b577a87aa79f96b3ef3"
+  },
+  "data/eco/ecoE.json": {
+    "mtime": 1781881928.7873514,
+    "ast_hash": "43fdc6673ec0729fcfa5b244899878f7",
+    "semantic_hash": "43fdc6673ec0729fcfa5b244899878f7"
+  },
+  "data/eco/eco_interpolated.json": {
+    "mtime": 1781881929.333107,
+    "ast_hash": "f4a8d74f5061c2068ef2bc6689bcb7dc",
+    "semantic_hash": "f4a8d74f5061c2068ef2bc6689bcb7dc"
+  },
+  "electron/agentPrompts.ts": {
+    "mtime": 1783170117.8087149,
+    "ast_hash": "96fc6a92b2def17a2951916944a6fdbc",
+    "semantic_hash": ""
+  },
+  "electron/classifier.test.ts": {
+    "mtime": 1781360327.7823744,
+    "ast_hash": "06f91b4d71f7c6c327e22050731671ed",
+    "semantic_hash": "06f91b4d71f7c6c327e22050731671ed"
+  },
+  "electron/downloader.test.ts": {
+    "mtime": 1781489946.0844457,
+    "ast_hash": "232e696a436b67320f81a7e71d88d546",
+    "semantic_hash": "232e696a436b67320f81a7e71d88d546"
+  },
+  "electron/downloader.ts": {
+    "mtime": 1781711639.697929,
+    "ast_hash": "80ac9fe854da855218fac658cbf90d04",
+    "semantic_hash": "80ac9fe854da855218fac658cbf90d04"
+  },
+  "electron/ecoLookup.test.ts": {
+    "mtime": 1781882184.5602345,
+    "ast_hash": "8d49082e5c429de484e9e9d8728f2910",
+    "semantic_hash": "8d49082e5c429de484e9e9d8728f2910"
+  },
+  "electron/ecoLookup.ts": {
+    "mtime": 1781927168.6638784,
+    "ast_hash": "d91b4ed778847b9b9d4c391d5effb36e",
+    "semantic_hash": "d91b4ed778847b9b9d4c391d5effb36e"
+  },
+  "electron/endgameAgent.test.ts": {
+    "mtime": 1781359522.8756206,
+    "ast_hash": "be5269788f644cc1167893f2b37200cb",
+    "semantic_hash": "be5269788f644cc1167893f2b37200cb"
+  },
+  "electron/endgameAgent.ts": {
+    "mtime": 1781359502.8412187,
+    "ast_hash": "ccea67e30e81e0a656e0661557c94e91",
+    "semantic_hash": "ccea67e30e81e0a656e0661557c94e91"
+  },
+  "electron/gamesDb.test.ts": {
+    "mtime": 1781233091.607672,
+    "ast_hash": "30db7878fc78d7f905d5aff2f6275918",
+    "semantic_hash": "30db7878fc78d7f905d5aff2f6275918"
+  },
+  "electron/gamesDb.ts": {
+    "mtime": 1781550777.2511148,
+    "ast_hash": "1e598cde0375c565795b151b5156417f",
+    "semantic_hash": "1e598cde0375c565795b151b5156417f"
+  },
+  "electron/logger.ts": {
+    "mtime": 1782995364.751224,
+    "ast_hash": "2f449b4767e07d856f07ca323aadf48e",
+    "semantic_hash": "2f449b4767e07d856f07ca323aadf48e"
+  },
+  "electron/main.ts": {
+    "mtime": 1783127990.058298,
+    "ast_hash": "33465a583d8e58995d33a749a18b2478",
+    "semantic_hash": "33465a583d8e58995d33a749a18b2478"
+  },
+  "electron/middlegameAgent.test.ts": {
+    "mtime": 1781527203.2441003,
+    "ast_hash": "b2fd26c48465732b4c7c6b24fb251f3f",
+    "semantic_hash": "b2fd26c48465732b4c7c6b24fb251f3f"
+  },
+  "electron/middlegameAgent.ts": {
+    "mtime": 1781526906.8903139,
+    "ast_hash": "d60e85724bcea4bc5bab7bef0e65c71c",
+    "semantic_hash": "d60e85724bcea4bc5bab7bef0e65c71c"
+  },
+  "electron/openingAgent.test.ts": {
+    "mtime": 1781359472.068642,
+    "ast_hash": "3220ef1b25a6464e79b62015f843de68",
+    "semantic_hash": "3220ef1b25a6464e79b62015f843de68"
+  },
+  "electron/openingAgent.ts": {
+    "mtime": 1782530965.8735604,
+    "ast_hash": "3e2c7bdbbadf4b94ed48f91481946dbe",
+    "semantic_hash": "3e2c7bdbbadf4b94ed48f91481946dbe"
+  },
+  "electron/otbImport.test.ts": {
+    "mtime": 1781834479.448336,
+    "ast_hash": "fb059c5689eb9ad03e9a084c2f2e37d5",
+    "semantic_hash": "fb059c5689eb9ad03e9a084c2f2e37d5"
+  },
+  "electron/otbImport.ts": {
+    "mtime": 1781834479.463115,
+    "ast_hash": "e444670860449a2b7eb65f1afc272a36",
+    "semantic_hash": "e444670860449a2b7eb65f1afc272a36"
+  },
+  "electron/preload.ts": {
+    "mtime": 1783097094.7004087,
+    "ast_hash": "55352bc1d8c17a2c5ed618aa6ff54b35",
+    "semantic_hash": "55352bc1d8c17a2c5ed618aa6ff54b35"
+  },
+  "electron/puzzleDb.ts": {
+    "mtime": 1782556853.891323,
+    "ast_hash": "26b913049dec2d253d22ade7f4a56b41",
+    "semantic_hash": "26b913049dec2d253d22ade7f4a56b41"
+  },
+  "electron/puzzlePoints.test.ts": {
+    "mtime": 1781353017.3395529,
+    "ast_hash": "c279daa3e8d6ef0ac61dba028bbbd835",
+    "semantic_hash": "c279daa3e8d6ef0ac61dba028bbbd835"
+  },
+  "electron/puzzlePoints.ts": {
+    "mtime": 1781352837.265913,
+    "ast_hash": "fc50a349c37ddbd36e43b316a376db00",
+    "semantic_hash": "fc50a349c37ddbd36e43b316a376db00"
+  },
+  "electron/sanFormat.test.ts": {
+    "mtime": 1781807535.3447769,
+    "ast_hash": "66099c40d4a892c545f8129e780ad46b",
+    "semantic_hash": "66099c40d4a892c545f8129e780ad46b"
+  },
+  "electron/sanFormat.ts": {
+    "mtime": 1781807105.844589,
+    "ast_hash": "c0ad07b8f3b32ccdb8797cfd6dae316a",
+    "semantic_hash": "c0ad07b8f3b32ccdb8797cfd6dae316a"
+  },
+  "electron/settings.ts": {
+    "mtime": 1782995364.7642262,
+    "ast_hash": "4160729d95cdb425e39369907a47a0e8",
+    "semantic_hash": "4160729d95cdb425e39369907a47a0e8"
+  },
+  "jest.config.js": {
+    "mtime": 1781882230.4041688,
+    "ast_hash": "44d8923cbbf2d4c1ebed590e444e413f",
+    "semantic_hash": "44d8923cbbf2d4c1ebed590e444e413f"
+  },
+  "jest.setup.ts": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "09ad0ea253f36f20581e262895cbd685",
+    "semantic_hash": "09ad0ea253f36f20581e262895cbd685"
+  },
+  "package.json": {
+    "mtime": 1783179807.8872213,
+    "ast_hash": "3a3af4599d071fabe64f65ef8569897c",
+    "semantic_hash": ""
+  },
+  "playwright.config.ts": {
+    "mtime": 1783097975.422523,
+    "ast_hash": "4952a82fe3be0500b030fcc635e6afa0",
+    "semantic_hash": "4952a82fe3be0500b030fcc635e6afa0"
+  },
+  "scripts/build-games-db.js": {
+    "mtime": 1780976427.8456223,
+    "ast_hash": "314086096c62d54fb8b85c7762ac44be",
+    "semantic_hash": "314086096c62d54fb8b85c7762ac44be"
+  },
+  "scripts/build-icons.js": {
+    "mtime": 1781966104.4215884,
+    "ast_hash": "33951e0c1be2d83ca732f60b6e113527",
+    "semantic_hash": "33951e0c1be2d83ca732f60b6e113527"
+  },
+  "scripts/flatten-electron-dist.js": {
+    "mtime": 1783097094.7265213,
+    "ast_hash": "4db38297624d8afbc4fab2e9a96d682f",
+    "semantic_hash": "4db38297624d8afbc4fab2e9a96d682f"
+  },
+  "scripts/prepare-installer-assets.ps1": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "90000cd3ae0b2aa2ee97028052e2f9fe",
+    "semantic_hash": "90000cd3ae0b2aa2ee97028052e2f9fe"
+  },
+  "src/App.tsx": {
+    "mtime": 1783179915.7103212,
+    "ast_hash": "eef5fff45fb9135fbf50f10d1602609f",
+    "semantic_hash": ""
+  },
+  "src/components/AnalysisBoard.tsx": {
+    "mtime": 1783171515.9592383,
+    "ast_hash": "e81e34463b006ac6c4be4e382ff27821",
+    "semantic_hash": ""
+  },
+  "src/components/AppStatusBar.tsx": {
+    "mtime": 1783097094.7414932,
+    "ast_hash": "c2bd7f14903a77c174b9945d2144d74d",
+    "semantic_hash": "c2bd7f14903a77c174b9945d2144d74d"
+  },
+  "src/components/BoardPositionEditor.tsx": {
+    "mtime": 1781486662.8343768,
+    "ast_hash": "2f778fe7d6a6fb54e03e8f47192785d3",
+    "semantic_hash": "2f778fe7d6a6fb54e03e8f47192785d3"
+  },
+  "src/components/ChatPanel.tsx": {
+    "mtime": 1783180142.2179816,
+    "ast_hash": "edbe0acb5cf24b58251520695b368084",
+    "semantic_hash": ""
+  },
+  "src/components/EvalBar.test.ts": {
+    "mtime": 1781376180.4787164,
+    "ast_hash": "c723d03bcb9f99d1c87f9b18f5ca51ba",
+    "semantic_hash": "c723d03bcb9f99d1c87f9b18f5ca51ba"
+  },
+  "src/components/EvalBar.tsx": {
+    "mtime": 1781405515.7175415,
+    "ast_hash": "df467b0ceab4409b34396fa346083771",
+    "semantic_hash": "df467b0ceab4409b34396fa346083771"
+  },
+  "src/components/MoveWarningDialog.tsx": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "a11c9c5c25cbb2127ca4def7be9f831a",
+    "semantic_hash": "a11c9c5c25cbb2127ca4def7be9f831a"
+  },
+  "src/components/ProfileIcon.tsx": {
+    "mtime": 1781354207.8270676,
+    "ast_hash": "8748f1f749e7c3ce0d3126ee8ede0b80",
+    "semantic_hash": "8748f1f749e7c3ce0d3126ee8ede0b80"
+  },
+  "src/components/SelectableList.tsx": {
+    "mtime": 1782831014.1822498,
+    "ast_hash": "1044b165f8fd868b24d7f8a45771e438",
+    "semantic_hash": "1044b165f8fd868b24d7f8a45771e438"
+  },
+  "src/components/SelectedLineDetail.tsx": {
+    "mtime": 1783135364.2373676,
+    "ast_hash": "0cc34a0381929e000094742126303498",
+    "semantic_hash": "0cc34a0381929e000094742126303498"
+  },
+  "src/components/SettingsPanel.tsx": {
+    "mtime": 1782996558.808036,
+    "ast_hash": "f757244706b9296df1063acde5fbb98b",
+    "semantic_hash": "f757244706b9296df1063acde5fbb98b"
+  },
+  "src/components/TitleBar.tsx": {
+    "mtime": 1782625651.7148983,
+    "ast_hash": "4285c677ccaf1f844a2b79c85d2c0a3d",
+    "semantic_hash": "4285c677ccaf1f844a2b79c85d2c0a3d"
+  },
+  "src/constants/chess.ts": {
+    "mtime": 1782872437.7668085,
+    "ast_hash": "e3d66a5f8f75e18084e05545f82511f7",
+    "semantic_hash": "e3d66a5f8f75e18084e05545f82511f7"
+  },
+  "src/electron-api.d.ts": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "d1b3da385114cf9b50ed1bed3fbd2310",
+    "semantic_hash": "d1b3da385114cf9b50ed1bed3fbd2310"
+  },
+  "src/main.tsx": {
+    "mtime": 1783097094.7634933,
+    "ast_hash": "4815f8de2c8a62b0fda465831cbc2670",
+    "semantic_hash": "4815f8de2c8a62b0fda465831cbc2670"
+  },
+  "src/theme.ts": {
+    "mtime": 1781185700.004692,
+    "ast_hash": "fb84e00f40ec2b88be317968299277d0",
+    "semantic_hash": "fb84e00f40ec2b88be317968299277d0"
+  },
+  "src/types/index.d.ts": {
+    "mtime": 1783174215.2770238,
+    "ast_hash": "060f4254e3d5b5b1f8ac1bdd3f384522",
+    "semantic_hash": ""
+  },
+  "src/types/index.js": {
+    "mtime": 1781325331.2497196,
+    "ast_hash": "fe02646b3583145d4216796135896611",
+    "semantic_hash": "fe02646b3583145d4216796135896611"
+  },
+  "src/types/index.ts": {
+    "mtime": 1783174210.2775192,
+    "ast_hash": "7875f9aae6be98d8ffdf24074f632ba4",
+    "semantic_hash": ""
+  },
+  "src/utils/ChessEngine.test.ts": {
+    "mtime": 1780808570.0841994,
+    "ast_hash": "00334df7658c84ff45f527b607459828",
+    "semantic_hash": "00334df7658c84ff45f527b607459828"
+  },
+  "src/utils/ChessEngine.ts": {
+    "mtime": 1780840344.1627336,
+    "ast_hash": "1c305954fc18d523b49053a61ee74eed",
+    "semantic_hash": "1c305954fc18d523b49053a61ee74eed"
+  },
+  "src/utils/EngineRouter.test.ts": {
+    "mtime": 1780840588.1613798,
+    "ast_hash": "247913dfc06dc22a0b8c37f30a15e09e",
+    "semantic_hash": "247913dfc06dc22a0b8c37f30a15e09e"
+  },
+  "src/utils/EngineRouter.ts": {
+    "mtime": 1780808570.0841994,
+    "ast_hash": "8a5629c70c6e8229f2144cbecd7009d8",
+    "semantic_hash": "8a5629c70c6e8229f2144cbecd7009d8"
+  },
+  "src/utils/LC0Engine.test.ts": {
+    "mtime": 1780808570.0841994,
+    "ast_hash": "483de4895cd525341975838fd7bb12b3",
+    "semantic_hash": "483de4895cd525341975838fd7bb12b3"
+  },
+  "src/utils/LC0Engine.ts": {
+    "mtime": 1780840434.9659898,
+    "ast_hash": "3a6c470da4741e193b4e928edaa6696d",
+    "semantic_hash": "3a6c470da4741e193b4e928edaa6696d"
+  },
+  "src/utils/StockfishEngine.test.ts": {
+    "mtime": 1780808570.0841994,
+    "ast_hash": "7b1b1ef2f7c0a073c798a3ef4bc867cb",
+    "semantic_hash": "7b1b1ef2f7c0a073c798a3ef4bc867cb"
+  },
+  "src/utils/StockfishEngine.ts": {
+    "mtime": 1780840425.950382,
+    "ast_hash": "b48143f3be56ad0cf06a5b1cc4a0c1de",
+    "semantic_hash": "b48143f3be56ad0cf06a5b1cc4a0c1de"
+  },
+  "src/utils/analysisHelpers.test.ts": {
+    "mtime": 1783180077.7326744,
+    "ast_hash": "6f8373fbd412581435f7881fb2af48ad",
+    "semantic_hash": ""
+  },
+  "src/utils/analysisHelpers.ts": {
+    "mtime": 1783180062.7019403,
+    "ast_hash": "b1a422a1c9f46eac6fd5eccf0edc136c",
+    "semantic_hash": ""
+  },
+  "src/utils/chessNotationParser.test.ts": {
+    "mtime": 1781252200.7287219,
+    "ast_hash": "8b31de3e14ae453a1615534b30f45f61",
+    "semantic_hash": "8b31de3e14ae453a1615534b30f45f61"
+  },
+  "src/utils/chessNotationParser.ts": {
+    "mtime": 1781252178.000654,
+    "ast_hash": "a116397ccfd2a21e691fd20e1305f457",
+    "semantic_hash": "a116397ccfd2a21e691fd20e1305f457"
+  },
+  "src/utils/chessTools.test.ts": {
+    "mtime": 1780840531.581516,
+    "ast_hash": "fdd8eee5a9859046c1047477c10aa452",
+    "semantic_hash": "fdd8eee5a9859046c1047477c10aa452"
+  },
+  "src/utils/chessTools.ts": {
+    "mtime": 1780808570.0841994,
+    "ast_hash": "3f6f8be42352e17c4de35eee0513fba1",
+    "semantic_hash": "3f6f8be42352e17c4de35eee0513fba1"
+  },
+  "src/utils/conversationMemory.test.ts": {
+    "mtime": 1781410752.923231,
+    "ast_hash": "967a66bdda03da84441a1671b07ee9d1",
+    "semantic_hash": "967a66bdda03da84441a1671b07ee9d1"
+  },
+  "src/utils/conversationMemory.ts": {
+    "mtime": 1781355711.3429153,
+    "ast_hash": "c50242aacabc482bcd0db62bea00f753",
+    "semantic_hash": "c50242aacabc482bcd0db62bea00f753"
+  },
+  "src/utils/engineDiscovery.test.ts": {
+    "mtime": 1780808570.0841994,
+    "ast_hash": "74162b303b0fe467699ee3e1e015dc4b",
+    "semantic_hash": "74162b303b0fe467699ee3e1e015dc4b"
+  },
+  "src/utils/engineDiscovery.ts": {
+    "mtime": 1780840407.5634854,
+    "ast_hash": "e00cbc4e2af3c2a14761a1792c95a44c",
+    "semantic_hash": "e00cbc4e2af3c2a14761a1792c95a44c"
+  },
+  "src/utils/evalBarUtils.ts": {
+    "mtime": 1781376147.647887,
+    "ast_hash": "a93f826ad8cd57939f072ddaa3cc8c01",
+    "semantic_hash": "a93f826ad8cd57939f072ddaa3cc8c01"
+  },
+  "src/utils/formatHighlightedMoveNotation.tsx": {
+    "mtime": 1782824620.9885156,
+    "ast_hash": "4854629b2a1988a1d25edeb7197f8243",
+    "semantic_hash": "4854629b2a1988a1d25edeb7197f8243"
+  },
+  "src/utils/formatLabel.test.ts": {
+    "mtime": 1781753801.9010873,
+    "ast_hash": "d58d26f2bf95bece64b669a0ff048d26",
+    "semantic_hash": "d58d26f2bf95bece64b669a0ff048d26"
+  },
+  "src/utils/formatLabel.ts": {
+    "mtime": 1781753793.7072322,
+    "ast_hash": "91ddbae19f8f24da744e0eb478f54bc0",
+    "semantic_hash": "91ddbae19f8f24da744e0eb478f54bc0"
+  },
+  "src/utils/gameMemory.test.ts": {
+    "mtime": 1780840616.7816248,
+    "ast_hash": "7d535829c8c87bd102b20f6421e5764b",
+    "semantic_hash": "7d535829c8c87bd102b20f6421e5764b"
+  },
+  "src/utils/gameMemory.ts": {
+    "mtime": 1780808570.0841994,
+    "ast_hash": "dbc2627361c75efd4b2ab5db855942a4",
+    "semantic_hash": "dbc2627361c75efd4b2ab5db855942a4"
+  },
+  "src/utils/llmResponseParser.test.ts": {
+    "mtime": 1781202511.2267432,
+    "ast_hash": "d227a4cf6532f512ef0e04ec96290405",
+    "semantic_hash": "d227a4cf6532f512ef0e04ec96290405"
+  },
+  "src/utils/llmResponseParser.ts": {
+    "mtime": 1781368750.5372522,
+    "ast_hash": "cef40797d7d5d98722cd16efa5c5964e",
+    "semantic_hash": "cef40797d7d5d98722cd16efa5c5964e"
+  },
+  "src/utils/moveSequenceHash.test.ts": {
+    "mtime": 1782957325.2548797,
+    "ast_hash": "3b36e9d29092b363acad9d82fa00de9c",
+    "semantic_hash": "3b36e9d29092b363acad9d82fa00de9c"
+  },
+  "src/utils/moveSequenceHash.ts": {
+    "mtime": 1782957182.7093177,
+    "ast_hash": "3629f3393144d31ed350387a3d800f4c",
+    "semantic_hash": "3629f3393144d31ed350387a3d800f4c"
+  },
+  "src/utils/puzzleUtils.test.ts": {
+    "mtime": 1781151618.6435711,
+    "ast_hash": "a91f9feaee685cc79a14b467d35269c4",
+    "semantic_hash": "a91f9feaee685cc79a14b467d35269c4"
+  },
+  "src/utils/puzzleUtils.ts": {
+    "mtime": 1781151604.5331802,
+    "ast_hash": "6a520cf95f48935264d38c3a364608f0",
+    "semantic_hash": "6a520cf95f48935264d38c3a364608f0"
+  },
+  "src/utils/systemPromptGenerator.test.ts": {
+    "mtime": 1781178741.8188834,
+    "ast_hash": "dcf63219c18610789ca62b574fea8553",
+    "semantic_hash": "dcf63219c18610789ca62b574fea8553"
+  },
+  "src/utils/systemPromptGenerator.ts": {
+    "mtime": 1780907765.133122,
+    "ast_hash": "2ade37d9c7b5fbac599970b685a35436",
+    "semantic_hash": "2ade37d9c7b5fbac599970b685a35436"
+  },
+  "src/utils/twoStepLLMProcessing.test.ts": {
+    "mtime": 1780840652.3761868,
+    "ast_hash": "55fa691e988ca1e0d1ead32fd765a120",
+    "semantic_hash": "55fa691e988ca1e0d1ead32fd765a120"
+  },
+  "src/utils/twoStepLLMProcessing.ts": {
+    "mtime": 1780808570.0841994,
+    "ast_hash": "05078c883efa295ccb1287400761979b",
+    "semantic_hash": "05078c883efa295ccb1287400761979b"
+  },
+  "tailwind.config.ts": {
+    "mtime": 1780808570.0841994,
+    "ast_hash": "509f3cfbe18b14ffed43fbb0db1a5a22",
+    "semantic_hash": "509f3cfbe18b14ffed43fbb0db1a5a22"
+  },
+  "test-results/.last-run.json": {
+    "mtime": 1783180572.108545,
+    "ast_hash": "f196824657d8858bc7fa44eecbba38b1",
+    "semantic_hash": "f196824657d8858bc7fa44eecbba38b1"
+  },
+  "tests/integration/helpers.ts": {
+    "mtime": 1782828163.84781,
+    "ast_hash": "277d1257e11aaaa2fe829a44dd02f8ac",
+    "semantic_hash": "277d1257e11aaaa2fe829a44dd02f8ac"
+  },
+  "tests/integration/mocks/engine.ts": {
+    "mtime": 1782828066.918387,
+    "ast_hash": "34213fad48405c5eaf3ba957c143846b",
+    "semantic_hash": "34213fad48405c5eaf3ba957c143846b"
+  },
+  "tests/integration/mocks/llm.ts": {
+    "mtime": 1783170281.6719847,
+    "ast_hash": "6b0ec4a17f6691714084b1ff2be99f65",
+    "semantic_hash": ""
+  },
+  "tsconfig.electron.json": {
+    "mtime": 1781325341.2231164,
+    "ast_hash": "28492d5837af240bab4a646ec3ca718a",
+    "semantic_hash": "28492d5837af240bab4a646ec3ca718a"
+  },
+  "tsconfig.json": {
+    "mtime": 1780808570.1779478,
+    "ast_hash": "2ef33b21ee65ed1bbfe5b0f77334dd66",
+    "semantic_hash": "2ef33b21ee65ed1bbfe5b0f77334dd66"
+  },
+  "vite.config.ts": {
+    "mtime": 1783179623.903259,
+    "ast_hash": "f0a21e4a15fb92db67084c1aa7479713",
+    "semantic_hash": ""
+  },
+  ".claude/commands/opsx/apply.md": {
+    "mtime": 1780811877.426281,
+    "ast_hash": "449ed654939d2179ce62e0845707ab35",
+    "semantic_hash": "449ed654939d2179ce62e0845707ab35"
+  },
+  ".claude/commands/opsx/archive.md": {
+    "mtime": 1780811877.426281,
+    "ast_hash": "18594057d0fa5e17fb78e48493553625",
+    "semantic_hash": "18594057d0fa5e17fb78e48493553625"
+  },
+  ".claude/commands/opsx/explore.md": {
+    "mtime": 1780811877.4106872,
+    "ast_hash": "c5bdf374bfb2bb1902b3a4aacdc3b898",
+    "semantic_hash": "c5bdf374bfb2bb1902b3a4aacdc3b898"
+  },
+  ".claude/commands/opsx/propose.md": {
+    "mtime": 1780811877.426281,
+    "ast_hash": "43622af941f4617cc53b12af14d6b355",
+    "semantic_hash": "43622af941f4617cc53b12af14d6b355"
+  },
+  ".claude/skills/openspec-apply-change/SKILL.md": {
+    "mtime": 1780811877.4106872,
+    "ast_hash": "ef62fef14cd5c347e2be60d2af4ea59f",
+    "semantic_hash": "ef62fef14cd5c347e2be60d2af4ea59f"
+  },
+  ".claude/skills/openspec-archive-change/SKILL.md": {
+    "mtime": 1780811877.4106872,
+    "ast_hash": "a853b3ce25149061a7f13f05b127350c",
+    "semantic_hash": "a853b3ce25149061a7f13f05b127350c"
+  },
+  ".claude/skills/openspec-explore/SKILL.md": {
+    "mtime": 1780811877.4106872,
+    "ast_hash": "61496eebbad91c2af8b3e5bf7fc9d256",
+    "semantic_hash": "61496eebbad91c2af8b3e5bf7fc9d256"
+  },
+  ".claude/skills/openspec-propose/SKILL.md": {
+    "mtime": 1780811877.4106872,
+    "ast_hash": "5fe13ada44751b3ff94f56c22c383749",
+    "semantic_hash": "5fe13ada44751b3ff94f56c22c383749"
+  },
+  ".cline/skills/openspec-apply-change/SKILL.md": {
+    "mtime": 1780808570.006073,
+    "ast_hash": "4badfc1de40d4845c161752ccadfcd83",
+    "semantic_hash": "4badfc1de40d4845c161752ccadfcd83"
+  },
+  ".cline/skills/openspec-archive-change/SKILL.md": {
+    "mtime": 1780808570.006073,
+    "ast_hash": "d5d02e1e14879ea3c0f3f9400b91b4a1",
+    "semantic_hash": "d5d02e1e14879ea3c0f3f9400b91b4a1"
+  },
+  ".cline/skills/openspec-explore/SKILL.md": {
+    "mtime": 1780808570.006073,
+    "ast_hash": "861b26647c607f97465a953bd0d21c2b",
+    "semantic_hash": "861b26647c607f97465a953bd0d21c2b"
+  },
+  ".cline/skills/openspec-propose/SKILL.md": {
+    "mtime": 1780808570.006073,
+    "ast_hash": "47879aac5825c4af5f8e43d51254a669",
+    "semantic_hash": "47879aac5825c4af5f8e43d51254a669"
+  },
+  ".clinerules/workflows/opsx-apply.md": {
+    "mtime": 1780808570.006073,
+    "ast_hash": "7b8a54cc6f1ef34231a70fc64d53434b",
+    "semantic_hash": "7b8a54cc6f1ef34231a70fc64d53434b"
+  },
+  ".clinerules/workflows/opsx-archive.md": {
+    "mtime": 1780808570.006073,
+    "ast_hash": "5aaf8d325a93434acfdcead426cab6fa",
+    "semantic_hash": "5aaf8d325a93434acfdcead426cab6fa"
+  },
+  ".clinerules/workflows/opsx-explore.md": {
+    "mtime": 1780808570.006073,
+    "ast_hash": "54d0153ab0d35b9ad50ac16c533fc2e5",
+    "semantic_hash": "54d0153ab0d35b9ad50ac16c533fc2e5"
+  },
+  ".clinerules/workflows/opsx-propose.md": {
+    "mtime": 1780808570.006073,
+    "ast_hash": "4467728767c36f0beac5eba785b566ce",
+    "semantic_hash": "4467728767c36f0beac5eba785b566ce"
+  },
+  ".codex/skills/openspec-apply-change/SKILL.md": {
+    "mtime": 1780808570.006073,
+    "ast_hash": "4badfc1de40d4845c161752ccadfcd83",
+    "semantic_hash": "4badfc1de40d4845c161752ccadfcd83"
+  },
+  ".codex/skills/openspec-archive-change/SKILL.md": {
+    "mtime": 1780808570.006073,
+    "ast_hash": "d5d02e1e14879ea3c0f3f9400b91b4a1",
+    "semantic_hash": "d5d02e1e14879ea3c0f3f9400b91b4a1"
+  },
+  ".codex/skills/openspec-explore/SKILL.md": {
+    "mtime": 1780808570.006073,
+    "ast_hash": "861b26647c607f97465a953bd0d21c2b",
+    "semantic_hash": "861b26647c607f97465a953bd0d21c2b"
+  },
+  ".codex/skills/openspec-propose/SKILL.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "47879aac5825c4af5f8e43d51254a669",
+    "semantic_hash": "47879aac5825c4af5f8e43d51254a669"
+  },
+  ".github/workflows/ci.yml": {
+    "mtime": 1783099738.192564,
+    "ast_hash": "8a0881c9f51a33e61b70bf61ff657957",
+    "semantic_hash": "8a0881c9f51a33e61b70bf61ff657957"
+  },
+  ".github/workflows/release.yml": {
+    "mtime": 1783179674.7755916,
+    "ast_hash": "67d224e3c7397c6bddeefe8537ef0b76",
+    "semantic_hash": ""
+  },
+  ".kilocode/skills/openspec-apply-change/SKILL.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "4badfc1de40d4845c161752ccadfcd83",
+    "semantic_hash": "4badfc1de40d4845c161752ccadfcd83"
+  },
+  ".kilocode/skills/openspec-archive-change/SKILL.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "d5d02e1e14879ea3c0f3f9400b91b4a1",
+    "semantic_hash": "d5d02e1e14879ea3c0f3f9400b91b4a1"
+  },
+  ".kilocode/skills/openspec-explore/SKILL.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "861b26647c607f97465a953bd0d21c2b",
+    "semantic_hash": "861b26647c607f97465a953bd0d21c2b"
+  },
+  ".kilocode/skills/openspec-propose/SKILL.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "47879aac5825c4af5f8e43d51254a669",
+    "semantic_hash": "47879aac5825c4af5f8e43d51254a669"
+  },
+  ".kilocode/workflows/opsx-apply.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "9d1d6f4ff7eb2bd1042bcfc03884a868",
+    "semantic_hash": "9d1d6f4ff7eb2bd1042bcfc03884a868"
+  },
+  ".kilocode/workflows/opsx-archive.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "88d660107548630a488a4331e0f858e0",
+    "semantic_hash": "88d660107548630a488a4331e0f858e0"
+  },
+  ".kilocode/workflows/opsx-explore.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "2bd2a46996cae9a8c8c63e8fa679bed9",
+    "semantic_hash": "2bd2a46996cae9a8c8c63e8fa679bed9"
+  },
+  ".kilocode/workflows/opsx-propose.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "56e15e28aed4ae9bf0805eebf36a627c",
+    "semantic_hash": "56e15e28aed4ae9bf0805eebf36a627c"
+  },
+  "CLAUDE.md": {
+    "mtime": 1783138230.8174589,
+    "ast_hash": "0b187cd52abd9a947042cc1d74f25892",
+    "semantic_hash": "0b187cd52abd9a947042cc1d74f25892"
+  },
+  "DEBUGGING_LLM_NOT_INVOKED.md": {
+    "mtime": 1782905034.9654,
+    "ast_hash": "ea411b1539f8aded0e1803f04e30a91a",
+    "semantic_hash": "ea411b1539f8aded0e1803f04e30a91a"
+  },
+  "LC0_SETUP.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "8d4fe0c266b3bcc6f0bf15829d058726",
+    "semantic_hash": "8d4fe0c266b3bcc6f0bf15829d058726"
+  },
+  "OFFLINE_VERIFICATION.md": {
+    "mtime": 1782625651.6450107,
+    "ast_hash": "ae112fbc82448e65cf0750ad65f600c1",
+    "semantic_hash": "ae112fbc82448e65cf0750ad65f600c1"
+  },
+  "OLLAMA_PERFORMANCE_GUIDE.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "15cc4326f23f6e5e704c7cf05f346dc3",
+    "semantic_hash": "15cc4326f23f6e5e704c7cf05f346dc3"
+  },
+  "README.md": {
+    "mtime": 1781528192.7124076,
+    "ast_hash": "c9e45d19ff5b1008972809489e7bdace",
+    "semantic_hash": "c9e45d19ff5b1008972809489e7bdace"
+  },
+  "REDUX_INTEGRATION_TESTS.md": {
+    "mtime": 1782903581.430292,
+    "ast_hash": "0766ed48d5d2adaeae6e10ec31b43eaa",
+    "semantic_hash": "0766ed48d5d2adaeae6e10ec31b43eaa"
+  },
+  "REDUX_MIGRATION.md": {
+    "mtime": 1782825686.1228006,
+    "ast_hash": "b9ed86f88f90deaa1385db71879a8880",
+    "semantic_hash": "b9ed86f88f90deaa1385db71879a8880"
+  },
+  "TESTING.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "eec2238bb8eea5b9df568aac81a6ae58",
+    "semantic_hash": "eec2238bb8eea5b9df568aac81a6ae58"
+  },
+  "TESTING_CHECKLIST.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "b5e89da62db05dfc8ceb021dc74d3385",
+    "semantic_hash": "b5e89da62db05dfc8ceb021dc74d3385"
+  },
+  "devlog.txt": {
+    "mtime": 1782559762.8574708,
+    "ast_hash": "5cf76c5c7a24532ec1419a2c649ce580",
+    "semantic_hash": "5cf76c5c7a24532ec1419a2c649ce580"
+  },
+  "docs/INTEGRATION_TESTING.md": {
+    "mtime": 1783173240.9847739,
+    "ast_hash": "2adef86c96275d5cb97334f2f66d3ec4",
+    "semantic_hash": ""
+  },
+  "docs/redux-refactor/ACTION_REFERENCE.md": {
+    "mtime": 1782825415.9047904,
+    "ast_hash": "b610b60d41a9e64521cc672ee6bead58",
+    "semantic_hash": "b610b60d41a9e64521cc672ee6bead58"
+  },
+  "docs/redux-refactor/IMPLEMENTATION_CHECKLIST.md": {
+    "mtime": 1782825372.1774974,
+    "ast_hash": "ef82b3ba550ef04aeb47b9d265dacd53",
+    "semantic_hash": "ef82b3ba550ef04aeb47b9d265dacd53"
+  },
+  "docs/redux-refactor/INDEX.md": {
+    "mtime": 1782825588.571924,
+    "ast_hash": "707146f2607fe371319891311f86c2fd",
+    "semantic_hash": "707146f2607fe371319891311f86c2fd"
+  },
+  "docs/redux-refactor/QUICK_REFERENCE.md": {
+    "mtime": 1782825536.881951,
+    "ast_hash": "83131d0e4bfbbedcbc75de00f9534672",
+    "semantic_hash": "83131d0e4bfbbedcbc75de00f9534672"
+  },
+  "docs/redux-refactor/README.md": {
+    "mtime": 1782825502.8162348,
+    "ast_hash": "d1d0ea62eb6099eb3975dfa932003a91",
+    "semantic_hash": "d1d0ea62eb6099eb3975dfa932003a91"
+  },
+  "docs/redux-refactor/REDUX_ARCHITECTURE.md": {
+    "mtime": 1782825322.8433793,
+    "ast_hash": "743e131ef1155f1c2fada420ee3efde6",
+    "semantic_hash": "743e131ef1155f1c2fada420ee3efde6"
+  },
+  "docs/redux-refactor/VISUAL_OVERVIEW.md": {
+    "mtime": 1782825463.75256,
+    "ast_hash": "264cb51883c0c48c33e0335f95e8e258",
+    "semantic_hash": "264cb51883c0c48c33e0335f95e8e258"
+  },
+  "index.html": {
+    "mtime": 1783179616.6703417,
+    "ast_hash": "9eb98ca1a14e44713d3c2da7ab9037cc",
+    "semantic_hash": ""
+  },
+  "openspec/.codex/skills/openspec-apply-change/SKILL.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "4badfc1de40d4845c161752ccadfcd83",
+    "semantic_hash": "4badfc1de40d4845c161752ccadfcd83"
+  },
+  "openspec/.codex/skills/openspec-archive-change/SKILL.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "d5d02e1e14879ea3c0f3f9400b91b4a1",
+    "semantic_hash": "d5d02e1e14879ea3c0f3f9400b91b4a1"
+  },
+  "openspec/.codex/skills/openspec-explore/SKILL.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "861b26647c607f97465a953bd0d21c2b",
+    "semantic_hash": "861b26647c607f97465a953bd0d21c2b"
+  },
+  "openspec/.codex/skills/openspec-propose/SKILL.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "47879aac5825c4af5f8e43d51254a669",
+    "semantic_hash": "47879aac5825c4af5f8e43d51254a669"
+  },
+  "openspec/changes/archive/2026-04-09-chessboardjs-tailwind-llm-enhancements/.openspec.yaml": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "97f4730a26bafb5f42f30accef735ae0",
+    "semantic_hash": "97f4730a26bafb5f42f30accef735ae0"
+  },
+  "openspec/changes/archive/2026-04-09-chessboardjs-tailwind-llm-enhancements/chessboardjs-tailwind-llm-enhancements/.openspec.yaml": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "97f4730a26bafb5f42f30accef735ae0",
+    "semantic_hash": "97f4730a26bafb5f42f30accef735ae0"
+  },
+  "openspec/changes/archive/2026-04-09-chessboardjs-tailwind-llm-enhancements/chessboardjs-tailwind-llm-enhancements/design.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "b1d20409ae141e5e52c6bcb08e5785c5",
+    "semantic_hash": "b1d20409ae141e5e52c6bcb08e5785c5"
+  },
+  "openspec/changes/archive/2026-04-09-chessboardjs-tailwind-llm-enhancements/chessboardjs-tailwind-llm-enhancements/proposal.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "a58e7851d29d1561fd21d52d3ae2b2a2",
+    "semantic_hash": "a58e7851d29d1561fd21d52d3ae2b2a2"
+  },
+  "openspec/changes/archive/2026-04-09-chessboardjs-tailwind-llm-enhancements/chessboardjs-tailwind-llm-enhancements/specs/chessboardjs-llm-analysis/spec.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "6a363e9dc14bfb39cc58228795d9b133",
+    "semantic_hash": "6a363e9dc14bfb39cc58228795d9b133"
+  },
+  "openspec/changes/archive/2026-04-09-chessboardjs-tailwind-llm-enhancements/chessboardjs-tailwind-llm-enhancements/specs/ui-responsive-board-layout/spec.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "ab7c9db6e4abe91f7860d9e8ccdbb9a9",
+    "semantic_hash": "ab7c9db6e4abe91f7860d9e8ccdbb9a9"
+  },
+  "openspec/changes/archive/2026-04-09-chessboardjs-tailwind-llm-enhancements/chessboardjs-tailwind-llm-enhancements/specs/ui-settings-flow/spec.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "3083d3668949f508e898ea8a8b2b08a9",
+    "semantic_hash": "3083d3668949f508e898ea8a8b2b08a9"
+  },
+  "openspec/changes/archive/2026-04-09-chessboardjs-tailwind-llm-enhancements/chessboardjs-tailwind-llm-enhancements/tasks.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "5d806db3422065b6e58c38b5e1ed0f49",
+    "semantic_hash": "5d806db3422065b6e58c38b5e1ed0f49"
+  },
+  "openspec/changes/archive/2026-04-09-chessboardjs-tailwind-llm-enhancements/design.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "2c645783e2dd5b8cd0844c8e55ae6600",
+    "semantic_hash": "2c645783e2dd5b8cd0844c8e55ae6600"
+  },
+  "openspec/changes/archive/2026-04-09-chessboardjs-tailwind-llm-enhancements/proposal.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "29e64c7502458ab952fbf51a6f9d7d6d",
+    "semantic_hash": "29e64c7502458ab952fbf51a6f9d7d6d"
+  },
+  "openspec/changes/archive/2026-04-09-chessboardjs-tailwind-llm-enhancements/specs/analysis-and-llm-guidance/spec.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "15d6aa37ec48ecdbef795c64a3098bb9",
+    "semantic_hash": "15d6aa37ec48ecdbef795c64a3098bb9"
+  },
+  "openspec/changes/archive/2026-04-09-chessboardjs-tailwind-llm-enhancements/specs/ui-and-board-experience/spec.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "76be5bcc738c138bb8416703683278aa",
+    "semantic_hash": "76be5bcc738c138bb8416703683278aa"
+  },
+  "openspec/changes/archive/2026-04-09-chessboardjs-tailwind-llm-enhancements/tasks.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "6f44ec89d217c3fe620746f99d67880c",
+    "semantic_hash": "6f44ec89d217c3fe620746f99d67880c"
+  },
+  "openspec/changes/archive/2026-04-09-convert-to-openspec/design.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "268038266721a5371665b1c017ba8551",
+    "semantic_hash": "268038266721a5371665b1c017ba8551"
+  },
+  "openspec/changes/archive/2026-04-09-convert-to-openspec/proposal.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "6d59cf9e6166b1b179d430d993aebdd5",
+    "semantic_hash": "6d59cf9e6166b1b179d430d993aebdd5"
+  },
+  "openspec/changes/archive/2026-04-09-convert-to-openspec/specs/bmad-cleanup/spec.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "e42ac284fb9d7a4c4f950598fe815935",
+    "semantic_hash": "e42ac284fb9d7a4c4f950598fe815935"
+  },
+  "openspec/changes/archive/2026-04-09-convert-to-openspec/tasks.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "8950223eb99338e3b6939a95c81a3989",
+    "semantic_hash": "8950223eb99338e3b6939a95c81a3989"
+  },
+  "openspec/changes/archive/2026-04-09-tailwindcss-style-fix/.openspec.yaml": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "97f4730a26bafb5f42f30accef735ae0",
+    "semantic_hash": "97f4730a26bafb5f42f30accef735ae0"
+  },
+  "openspec/changes/archive/2026-04-09-tailwindcss-style-fix/design.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "9225769c50259cbf30ed54d8f686198f",
+    "semantic_hash": "9225769c50259cbf30ed54d8f686198f"
+  },
+  "openspec/changes/archive/2026-04-09-tailwindcss-style-fix/proposal.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "dcb4d9d79c105fc88b3ba355ebff5e4c",
+    "semantic_hash": "dcb4d9d79c105fc88b3ba355ebff5e4c"
+  },
+  "openspec/changes/archive/2026-04-09-tailwindcss-style-fix/specs/tailwind-postcss-build/spec.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "6744060630e8fdabeda57d3b2a15849f",
+    "semantic_hash": "6744060630e8fdabeda57d3b2a15849f"
+  },
+  "openspec/changes/archive/2026-04-09-tailwindcss-style-fix/tasks.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "78aab5f4b665ba532f06e19f8aea1de5",
+    "semantic_hash": "78aab5f4b665ba532f06e19f8aea1de5"
+  },
+  "openspec/changes/archive/2026-04-10-fix-chessboard-rendering-rounded/.openspec.yaml": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "5b3d38673368b11499bc23df3ceefd20",
+    "semantic_hash": "5b3d38673368b11499bc23df3ceefd20"
+  },
+  "openspec/changes/archive/2026-04-10-fix-chessboard-rendering-rounded/design.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "740c9250502554b52b9b4ec474cd341e",
+    "semantic_hash": "740c9250502554b52b9b4ec474cd341e"
+  },
+  "openspec/changes/archive/2026-04-10-fix-chessboard-rendering-rounded/proposal.md": {
+    "mtime": 1780808570.021698,
+    "ast_hash": "f87e67f3b7f36b13b9b46cd7064da42d",
+    "semantic_hash": "f87e67f3b7f36b13b9b46cd7064da42d"
+  },
+  "openspec/changes/archive/2026-04-10-fix-chessboard-rendering-rounded/specs/chessboard-rendering/spec.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "846a2f023521bc2117b59b8b7deb06f8",
+    "semantic_hash": "846a2f023521bc2117b59b8b7deb06f8"
+  },
+  "openspec/changes/archive/2026-04-10-fix-chessboard-rendering-rounded/tasks.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "c82cb679164b251c654ec1b7c98aeaf2",
+    "semantic_hash": "c82cb679164b251c654ec1b7c98aeaf2"
+  },
+  "openspec/changes/archive/2026-04-10-fix-chessboardjs-global/.openspec.yaml": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "5b3d38673368b11499bc23df3ceefd20",
+    "semantic_hash": "5b3d38673368b11499bc23df3ceefd20"
+  },
+  "openspec/changes/archive/2026-04-10-fix-chessboardjs-global/design.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "292a0ae34dde37ee863c5885f0c670b6",
+    "semantic_hash": "292a0ae34dde37ee863c5885f0c670b6"
+  },
+  "openspec/changes/archive/2026-04-10-fix-chessboardjs-global/proposal.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "b91ebc3ad55b22238d5d2ea293819173",
+    "semantic_hash": "b91ebc3ad55b22238d5d2ea293819173"
+  },
+  "openspec/changes/archive/2026-04-10-fix-chessboardjs-global/specs/chessboard-global-detection/spec.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "095afb12b315154c9d8ef714aeb4d9d6",
+    "semantic_hash": "095afb12b315154c9d8ef714aeb4d9d6"
+  },
+  "openspec/changes/archive/2026-04-10-fix-chessboardjs-global/tasks.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "fca1ecdf34d20e54c5294625ac55893a",
+    "semantic_hash": "fca1ecdf34d20e54c5294625ac55893a"
+  },
+  "openspec/changes/archive/2026-04-10-replace-tailwind-with-blueprint/.openspec.yaml": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "97f4730a26bafb5f42f30accef735ae0",
+    "semantic_hash": "97f4730a26bafb5f42f30accef735ae0"
+  },
+  "openspec/changes/archive/2026-04-10-replace-tailwind-with-blueprint/design.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "1ffd82f6b9c6a0e3d57cc703bf7abb38",
+    "semantic_hash": "1ffd82f6b9c6a0e3d57cc703bf7abb38"
+  },
+  "openspec/changes/archive/2026-04-10-replace-tailwind-with-blueprint/proposal.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "874c22c642d270f4b22ad55c462488ac",
+    "semantic_hash": "874c22c642d270f4b22ad55c462488ac"
+  },
+  "openspec/changes/archive/2026-04-10-replace-tailwind-with-blueprint/specs/blueprint-desktop-ui/spec.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "5365180935e636bb3e2b6d57b7b81844",
+    "semantic_hash": "5365180935e636bb3e2b6d57b7b81844"
+  },
+  "openspec/changes/archive/2026-04-10-replace-tailwind-with-blueprint/tasks.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "0f2d8cea7194e46b6428628634a46ab9",
+    "semantic_hash": "0f2d8cea7194e46b6428628634a46ab9"
+  },
+  "openspec/changes/archive/2026-04-11-stockfish-report-parser/stockfish-report-parser/.openspec.yaml": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "31229e1d14388c4367b7bd2d55cabeb1",
+    "semantic_hash": "31229e1d14388c4367b7bd2d55cabeb1"
+  },
+  "openspec/changes/archive/2026-04-11-stockfish-report-parser/stockfish-report-parser/design.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "f8d71d51969ac333cea9482629083f2b",
+    "semantic_hash": "f8d71d51969ac333cea9482629083f2b"
+  },
+  "openspec/changes/archive/2026-04-11-stockfish-report-parser/stockfish-report-parser/proposal.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "5c04c6497dd5206006c1a47c728041de",
+    "semantic_hash": "5c04c6497dd5206006c1a47c728041de"
+  },
+  "openspec/changes/archive/2026-04-11-stockfish-report-parser/stockfish-report-parser/specs/fen-pgn-importer/spec.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "04b5b6d16e035643436eeaf1ec3d10fb",
+    "semantic_hash": "04b5b6d16e035643436eeaf1ec3d10fb"
+  },
+  "openspec/changes/archive/2026-04-11-stockfish-report-parser/stockfish-report-parser/specs/stockfish-notation-parser/spec.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "52638351680d7993837b95bcab6b7901",
+    "semantic_hash": "52638351680d7993837b95bcab6b7901"
+  },
+  "openspec/changes/archive/2026-04-11-stockfish-report-parser/stockfish-report-parser/tasks.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "a42650476a03d3c2249e0b5c26a780b3",
+    "semantic_hash": "a42650476a03d3c2249e0b5c26a780b3"
+  },
+  "openspec/changes/archive/2026-04-18-divide-main-window/.openspec.yaml": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "5b3d38673368b11499bc23df3ceefd20",
+    "semantic_hash": "5b3d38673368b11499bc23df3ceefd20"
+  },
+  "openspec/changes/archive/2026-04-18-divide-main-window/design.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "ac747a4e704649f038c2b81d54effa06",
+    "semantic_hash": "ac747a4e704649f038c2b81d54effa06"
+  },
+  "openspec/changes/archive/2026-04-18-divide-main-window/proposal.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "89f746074c77a5e53def099b9967fc69",
+    "semantic_hash": "89f746074c77a5e53def099b9967fc69"
+  },
+  "openspec/changes/archive/2026-04-18-divide-main-window/specs/analysis-layout-partition/spec.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "19f51707d4cb8f8c76556e77513cc663",
+    "semantic_hash": "19f51707d4cb8f8c76556e77513cc663"
+  },
+  "openspec/changes/archive/2026-04-18-divide-main-window/tasks.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "5c86e81d5f47a764d96afdeb2e3bada2",
+    "semantic_hash": "5c86e81d5f47a764d96afdeb2e3bada2"
+  },
+  "openspec/changes/archive/2026-04-18-integrate-ollama-stockfish-logs/.openspec.yaml": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "31229e1d14388c4367b7bd2d55cabeb1",
+    "semantic_hash": "31229e1d14388c4367b7bd2d55cabeb1"
+  },
+  "openspec/changes/archive/2026-04-18-integrate-ollama-stockfish-logs/design.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "b6d560bdb4c78f265827fc515ce9c81a",
+    "semantic_hash": "b6d560bdb4c78f265827fc515ce9c81a"
+  },
+  "openspec/changes/archive/2026-04-18-integrate-ollama-stockfish-logs/proposal.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "a41a487a4bbbef0f3efab72837a64ed0",
+    "semantic_hash": "a41a487a4bbbef0f3efab72837a64ed0"
+  },
+  "openspec/changes/archive/2026-04-18-integrate-ollama-stockfish-logs/specs/analysis-process-orchestration/spec.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "abbcd042bd5ebfe900cf839598d9f7d9",
+    "semantic_hash": "abbcd042bd5ebfe900cf839598d9f7d9"
+  },
+  "openspec/changes/archive/2026-04-18-integrate-ollama-stockfish-logs/specs/analysis-ui-height-and-logs/spec.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "15d7b4d8807d3d430882bf45bcd2cf9d",
+    "semantic_hash": "15d7b4d8807d3d430882bf45bcd2cf9d"
+  },
+  "openspec/changes/archive/2026-04-18-integrate-ollama-stockfish-logs/tasks.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "e2053f9b4e40a978c456c7a489e17bac",
+    "semantic_hash": "e2053f9b4e40a978c456c7a489e17bac"
+  },
+  "openspec/changes/archive/2026-04-18-material-ui-redesign/.openspec.yaml": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "5b3d38673368b11499bc23df3ceefd20",
+    "semantic_hash": "5b3d38673368b11499bc23df3ceefd20"
+  },
+  "openspec/changes/archive/2026-04-18-material-ui-redesign/design.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "43a870c696850623e2a8f3e53ba7450d",
+    "semantic_hash": "43a870c696850623e2a8f3e53ba7450d"
+  },
+  "openspec/changes/archive/2026-04-18-material-ui-redesign/proposal.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "7f1be99594a3d066eedb72ecdcabb501",
+    "semantic_hash": "7f1be99594a3d066eedb72ecdcabb501"
+  },
+  "openspec/changes/archive/2026-04-18-material-ui-redesign/specs/material-ui-renderer/spec.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "9868de23d8596ca04e9078bdc595063d",
+    "semantic_hash": "9868de23d8596ca04e9078bdc595063d"
+  },
+  "openspec/changes/archive/2026-04-18-material-ui-redesign/specs/modular-analysis-layout/spec.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "f7c391759c81076d03ec751b154d3719",
+    "semantic_hash": "f7c391759c81076d03ec751b154d3719"
+  },
+  "openspec/changes/archive/2026-04-18-material-ui-redesign/tasks.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "c5b86692f9ba62eaff049343764b5ccf",
+    "semantic_hash": "c5b86692f9ba62eaff049343764b5ccf"
+  },
+  "openspec/changes/archive/2026-04-18-responsive-board-layout/.openspec.yaml": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "5b3d38673368b11499bc23df3ceefd20",
+    "semantic_hash": "5b3d38673368b11499bc23df3ceefd20"
+  },
+  "openspec/changes/archive/2026-04-18-responsive-board-layout/design.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "707ba80942a42311d5a3686450770109",
+    "semantic_hash": "707ba80942a42311d5a3686450770109"
+  },
+  "openspec/changes/archive/2026-04-18-responsive-board-layout/proposal.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "8431e2a0e6c9f9839864718566f751a8",
+    "semantic_hash": "8431e2a0e6c9f9839864718566f751a8"
+  },
+  "openspec/changes/archive/2026-04-18-responsive-board-layout/specs/board-controls-panel-layout/spec.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "8e6e459135b578f292ec2d54dd2350cd",
+    "semantic_hash": "8e6e459135b578f292ec2d54dd2350cd"
+  },
+  "openspec/changes/archive/2026-04-18-responsive-board-layout/tasks.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "44d9360e24e16d7b38e07eb86c4356e7",
+    "semantic_hash": "44d9360e24e16d7b38e07eb86c4356e7"
+  },
+  "openspec/changes/archive/2026-05-01-conditional-engine-path-ui/.openspec.yaml": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "48a3cab44a8b4a3b488340e308b1dc89",
+    "semantic_hash": "48a3cab44a8b4a3b488340e308b1dc89"
+  },
+  "openspec/changes/archive/2026-05-01-conditional-engine-path-ui/design.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "1e6fb0b56da6b7bf19cc5539919d1cfb",
+    "semantic_hash": "1e6fb0b56da6b7bf19cc5539919d1cfb"
+  },
+  "openspec/changes/archive/2026-05-01-conditional-engine-path-ui/proposal.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "1a10d816cd1551c9e810b3185a429020",
+    "semantic_hash": "1a10d816cd1551c9e810b3185a429020"
+  },
+  "openspec/changes/archive/2026-05-01-conditional-engine-path-ui/specs/conditional-engine-configuration/spec.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "53e1afae743d1e676283012d77ef137f",
+    "semantic_hash": "53e1afae743d1e676283012d77ef137f"
+  },
+  "openspec/changes/archive/2026-05-01-conditional-engine-path-ui/specs/engine-selection/spec.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "8c9c0a9d433eff5fab81ce80e2add3b9",
+    "semantic_hash": "8c9c0a9d433eff5fab81ce80e2add3b9"
+  },
+  "openspec/changes/archive/2026-05-01-conditional-engine-path-ui/tasks.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "05a225a2fb8d51fa6a9102efc9a642e9",
+    "semantic_hash": "05a225a2fb8d51fa6a9102efc9a642e9"
+  },
+  "openspec/changes/archive/2026-05-01-enhance-llm-chess-analysis/.openspec.yaml": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "48a3cab44a8b4a3b488340e308b1dc89",
+    "semantic_hash": "48a3cab44a8b4a3b488340e308b1dc89"
+  },
+  "openspec/changes/archive/2026-05-01-enhance-llm-chess-analysis/design.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "124f051350ceb47fefecd06a8ed1bbe0",
+    "semantic_hash": "124f051350ceb47fefecd06a8ed1bbe0"
+  },
+  "openspec/changes/archive/2026-05-01-enhance-llm-chess-analysis/proposal.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "88b2511064ce6e7a72247d2ec86e31dd",
+    "semantic_hash": "88b2511064ce6e7a72247d2ec86e31dd"
+  },
+  "openspec/changes/archive/2026-05-01-enhance-llm-chess-analysis/specs/llm-analysis-system-prompt/spec.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "7d9e8beb53dffcdaf3020a8de13d6029",
+    "semantic_hash": "7d9e8beb53dffcdaf3020a8de13d6029"
+  },
+  "openspec/changes/archive/2026-05-01-enhance-llm-chess-analysis/specs/llm-engine-output-normalization/spec.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "f7f0906a228d7db0b19ea8883d21d053",
+    "semantic_hash": "f7f0906a228d7db0b19ea8883d21d053"
+  },
+  "openspec/changes/archive/2026-05-01-enhance-llm-chess-analysis/specs/llm-grandmaster-system-prompt/spec.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "af32aba0841524fd8d0363c9df6cd6a2",
+    "semantic_hash": "af32aba0841524fd8d0363c9df6cd6a2"
+  },
+  "openspec/changes/archive/2026-05-01-enhance-llm-chess-analysis/specs/llm-line-explanations/spec.md": {
+    "mtime": 1780808570.0373237,
+    "ast_hash": "2c31b96529f2d562c6a95e8b4d06e077",
+    "semantic_hash": "2c31b96529f2d562c6a95e8b4d06e077"
+  },
+  "openspec/changes/archive/2026-05-01-enhance-llm-chess-analysis/specs/llm-position-question-handling/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "a5355bb34d449fb95653e7a1294145c2",
+    "semantic_hash": "a5355bb34d449fb95653e7a1294145c2"
+  },
+  "openspec/changes/archive/2026-05-01-enhance-llm-chess-analysis/tasks.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "62056bfd776df92d18491778069ab0a8",
+    "semantic_hash": "62056bfd776df92d18491778069ab0a8"
+  },
+  "openspec/changes/archive/2026-05-21-add-llm-chess-tools/.openspec.yaml": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "6f670058702c436356c263ce88d4a435",
+    "semantic_hash": "6f670058702c436356c263ce88d4a435"
+  },
+  "openspec/changes/archive/2026-05-21-add-llm-chess-tools/design.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "a6ad2a6720330bfad2d177940c2706ac",
+    "semantic_hash": "a6ad2a6720330bfad2d177940c2706ac"
+  },
+  "openspec/changes/archive/2026-05-21-add-llm-chess-tools/proposal.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "db47276a256c57373c7e845628896873",
+    "semantic_hash": "db47276a256c57373c7e845628896873"
+  },
+  "openspec/changes/archive/2026-05-21-add-llm-chess-tools/specs/analysis-and-llm-guidance/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "01252928898d0330fc25f94bafb0353e",
+    "semantic_hash": "01252928898d0330fc25f94bafb0353e"
+  },
+  "openspec/changes/archive/2026-05-21-add-llm-chess-tools/specs/interactive-position-analysis/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "0c5fb73a9db72ebdc301c72d49eb803b",
+    "semantic_hash": "0c5fb73a9db72ebdc301c72d49eb803b"
+  },
+  "openspec/changes/archive/2026-05-21-add-llm-chess-tools/specs/llm-chess-tools/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "593ca1d4a374896a56f5cce9b5d867b5",
+    "semantic_hash": "593ca1d4a374896a56f5cce9b5d867b5"
+  },
+  "openspec/changes/archive/2026-05-21-add-llm-chess-tools/specs/move-suggestion-and-validation/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "6df8191eab5a2f8f7ccf065676e3e35b",
+    "semantic_hash": "6df8191eab5a2f8f7ccf065676e3e35b"
+  },
+  "openspec/changes/archive/2026-05-21-add-llm-chess-tools/tasks.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "517cfdf341aed916c10f7fa9fadfa4f0",
+    "semantic_hash": "517cfdf341aed916c10f7fa9fadfa4f0"
+  },
+  "openspec/changes/archive/2026-05-22-llm-response-types-and-memory/.openspec.yaml": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "023774f56360f1894783aa4445496447",
+    "semantic_hash": "023774f56360f1894783aa4445496447"
+  },
+  "openspec/changes/archive/2026-05-22-llm-response-types-and-memory/design.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "5740c2ee3f24a385f5119419e7a219ed",
+    "semantic_hash": "5740c2ee3f24a385f5119419e7a219ed"
+  },
+  "openspec/changes/archive/2026-05-22-llm-response-types-and-memory/proposal.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "b76b2670fddbfec4710368f1de7149d8",
+    "semantic_hash": "b76b2670fddbfec4710368f1de7149d8"
+  },
+  "openspec/changes/archive/2026-05-22-llm-response-types-and-memory/specs/analysis-and-llm-guidance/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "ecf8773623b2a2c8c5cff1d06c264ffb",
+    "semantic_hash": "ecf8773623b2a2c8c5cff1d06c264ffb"
+  },
+  "openspec/changes/archive/2026-05-22-llm-response-types-and-memory/specs/conversation-memory/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "a87394e43677411c0cd3a32ba6e33f90",
+    "semantic_hash": "a87394e43677411c0cd3a32ba6e33f90"
+  },
+  "openspec/changes/archive/2026-05-22-llm-response-types-and-memory/specs/engine-driven-line-analysis/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "0e1bcac6663d98ec76596d621a66431a",
+    "semantic_hash": "0e1bcac6663d98ec76596d621a66431a"
+  },
+  "openspec/changes/archive/2026-05-22-llm-response-types-and-memory/specs/engine-lines-popup-fix/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "7a45fdd13dcc8f520034b44d1fce4bc0",
+    "semantic_hash": "7a45fdd13dcc8f520034b44d1fce4bc0"
+  },
+  "openspec/changes/archive/2026-05-22-llm-response-types-and-memory/specs/fen-position-rendering/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "4e3c5e5769f9c83811ebd552d0e0f593",
+    "semantic_hash": "4e3c5e5769f9c83811ebd552d0e0f593"
+  },
+  "openspec/changes/archive/2026-05-22-llm-response-types-and-memory/specs/game-memory-annotation/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "0357fccd8d0244689b45cce7cc3083fe",
+    "semantic_hash": "0357fccd8d0244689b45cce7cc3083fe"
+  },
+  "openspec/changes/archive/2026-05-22-llm-response-types-and-memory/specs/hidden-solutions/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "dba8f4fed608e9ecbefaf9b179091ba4",
+    "semantic_hash": "dba8f4fed608e9ecbefaf9b179091ba4"
+  },
+  "openspec/changes/archive/2026-05-22-llm-response-types-and-memory/specs/llm-response-types/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "977a470936c32cf6521cbc8960e7a299",
+    "semantic_hash": "977a470936c32cf6521cbc8960e7a299"
+  },
+  "openspec/changes/archive/2026-05-22-llm-response-types-and-memory/specs/system-prompt-optimization/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "acddc6b0682c417ac411244114660298",
+    "semantic_hash": "acddc6b0682c417ac411244114660298"
+  },
+  "openspec/changes/archive/2026-05-22-llm-response-types-and-memory/tasks.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "7b115268521091eac1f2736d2d1213b2",
+    "semantic_hash": "7b115268521091eac1f2736d2d1213b2"
+  },
+  "openspec/changes/archive/2026-05-22-manual-analysis-engine-lines/.openspec.yaml": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "50b14fa5b978fe4f547873a3ede59204",
+    "semantic_hash": "50b14fa5b978fe4f547873a3ede59204"
+  },
+  "openspec/changes/archive/2026-05-22-manual-analysis-engine-lines/design.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "def831a13bc1ea33ed3436c4dc4d3dea",
+    "semantic_hash": "def831a13bc1ea33ed3436c4dc4d3dea"
+  },
+  "openspec/changes/archive/2026-05-22-manual-analysis-engine-lines/proposal.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "71bfc327d35da875d21bd914a4bb3ef1",
+    "semantic_hash": "71bfc327d35da875d21bd914a4bb3ef1"
+  },
+  "openspec/changes/archive/2026-05-22-manual-analysis-engine-lines/specs/analysis-and-llm-guidance/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "0772bb251158ef6345d958cad66fb1ea",
+    "semantic_hash": "0772bb251158ef6345d958cad66fb1ea"
+  },
+  "openspec/changes/archive/2026-05-22-manual-analysis-engine-lines/specs/board-arrow-visualization/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "98fc43428df1a366fc27761faa3ba8d2",
+    "semantic_hash": "98fc43428df1a366fc27761faa3ba8d2"
+  },
+  "openspec/changes/archive/2026-05-22-manual-analysis-engine-lines/specs/engine-driven-line-analysis/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "5456e9bacc3c86b81f5ae93987dcf1d6",
+    "semantic_hash": "5456e9bacc3c86b81f5ae93987dcf1d6"
+  },
+  "openspec/changes/archive/2026-05-22-manual-analysis-engine-lines/specs/keyboard-move-navigation/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "1c6040f5d2d6577f8a3a7aa6530c5890",
+    "semantic_hash": "1c6040f5d2d6577f8a3a7aa6530c5890"
+  },
+  "openspec/changes/archive/2026-05-22-manual-analysis-engine-lines/specs/line-selection-interface/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "c3d0f8a34c51b3539a27f8ce58d73195",
+    "semantic_hash": "c3d0f8a34c51b3539a27f8ce58d73195"
+  },
+  "openspec/changes/archive/2026-05-22-manual-analysis-engine-lines/specs/manual-analysis-control/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "549ae458aeb7986622b46862e2eb2bd7",
+    "semantic_hash": "549ae458aeb7986622b46862e2eb2bd7"
+  },
+  "openspec/changes/archive/2026-05-22-manual-analysis-engine-lines/specs/selected-line-memorization/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "4a006e5452db59a25b9f06b301c97f74",
+    "semantic_hash": "4a006e5452db59a25b9f06b301c97f74"
+  },
+  "openspec/changes/archive/2026-05-22-manual-analysis-engine-lines/tasks.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "8f7a4429b0ddf37df09b2951fecbec72",
+    "semantic_hash": "8f7a4429b0ddf37df09b2951fecbec72"
+  },
+  "openspec/changes/archive/2026-05-26-board-editor-and-chat-ux/.openspec.yaml": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "f99119482b0cce6d48d937fdc8bce2fe",
+    "semantic_hash": "f99119482b0cce6d48d937fdc8bce2fe"
+  },
+  "openspec/changes/archive/2026-05-26-board-editor-and-chat-ux/design.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "c998e7c81163309bbc7878189c078775",
+    "semantic_hash": "c998e7c81163309bbc7878189c078775"
+  },
+  "openspec/changes/archive/2026-05-26-board-editor-and-chat-ux/proposal.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "895986525b485f178ddf8a5910886726",
+    "semantic_hash": "895986525b485f178ddf8a5910886726"
+  },
+  "openspec/changes/archive/2026-05-26-board-editor-and-chat-ux/specs/board-position-editor/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "95a73c24dd068996c466080d5679c3a1",
+    "semantic_hash": "95a73c24dd068996c466080d5679c3a1"
+  },
+  "openspec/changes/archive/2026-05-26-board-editor-and-chat-ux/specs/chat-message-input-ux/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "f95bdf7c58de6a410896d792427d0d3a",
+    "semantic_hash": "f95bdf7c58de6a410896d792427d0d3a"
+  },
+  "openspec/changes/archive/2026-05-26-board-editor-and-chat-ux/tasks.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "3be26807fca567d42981d9542c2d630b",
+    "semantic_hash": "3be26807fca567d42981d9542c2d630b"
+  },
+  "openspec/changes/archive/2026-06-08-chess-puzzle-and-analysis-features/.openspec.yaml": {
+    "mtime": 1780812755.8449566,
+    "ast_hash": "f63adfbd18401f608d1cbd630e182a2e",
+    "semantic_hash": "f63adfbd18401f608d1cbd630e182a2e"
+  },
+  "openspec/changes/archive/2026-06-08-chess-puzzle-and-analysis-features/design.md": {
+    "mtime": 1780813228.9797313,
+    "ast_hash": "c7836a2b173e07ac8d52f8880ffc9f5f",
+    "semantic_hash": "c7836a2b173e07ac8d52f8880ffc9f5f"
+  },
+  "openspec/changes/archive/2026-06-08-chess-puzzle-and-analysis-features/proposal.md": {
+    "mtime": 1780813169.6527476,
+    "ast_hash": "7d48cc9ed286dbfe578035a5c3aeb786",
+    "semantic_hash": "7d48cc9ed286dbfe578035a5c3aeb786"
+  },
+  "openspec/changes/archive/2026-06-08-chess-puzzle-and-analysis-features/specs/analysis-and-llm-guidance/spec.md": {
+    "mtime": 1780813328.6382747,
+    "ast_hash": "5decebdc78db8d259f39eb16284ac8e1",
+    "semantic_hash": "5decebdc78db8d259f39eb16284ac8e1"
+  },
+  "openspec/changes/archive/2026-06-08-chess-puzzle-and-analysis-features/specs/chessboard-rendering/spec.md": {
+    "mtime": 1780813340.7975597,
+    "ast_hash": "1f16b0c0ab03d0ebafd4aba1a3ddee00",
+    "semantic_hash": "1f16b0c0ab03d0ebafd4aba1a3ddee00"
+  },
+  "openspec/changes/archive/2026-06-08-chess-puzzle-and-analysis-features/specs/inline-analysis-lines/spec.md": {
+    "mtime": 1780813281.936347,
+    "ast_hash": "6418e776f63299501c29cbd05154b948",
+    "semantic_hash": "6418e776f63299501c29cbd05154b948"
+  },
+  "openspec/changes/archive/2026-06-08-chess-puzzle-and-analysis-features/specs/per-move-explanation-with-cache/spec.md": {
+    "mtime": 1780813305.464118,
+    "ast_hash": "3d2cf5e04805222e8294a1f041638061",
+    "semantic_hash": "3d2cf5e04805222e8294a1f041638061"
+  },
+  "openspec/changes/archive/2026-06-08-chess-puzzle-and-analysis-features/specs/puzzle-solve-flow/spec.md": {
+    "mtime": 1780813263.0394435,
+    "ast_hash": "5dc8fc8292fac7f0f432ee090fd6e3bc",
+    "semantic_hash": "5dc8fc8292fac7f0f432ee090fd6e3bc"
+  },
+  "openspec/changes/archive/2026-06-08-chess-puzzle-and-analysis-features/tasks.md": {
+    "mtime": 1780889620.9654727,
+    "ast_hash": "3afce6e77bf6a0f8c37772f3ba7ab6dc",
+    "semantic_hash": "3afce6e77bf6a0f8c37772f3ba7ab6dc"
+  },
+  "openspec/changes/archive/2026-06-13-cross-platform-installers/.openspec.yaml": {
+    "mtime": 1781316249.6848047,
+    "ast_hash": "1f312a7bd7149a67c677f67a6b030c23",
+    "semantic_hash": "1f312a7bd7149a67c677f67a6b030c23"
+  },
+  "openspec/changes/archive/2026-06-13-cross-platform-installers/design.md": {
+    "mtime": 1781316468.2044635,
+    "ast_hash": "92690987507e240c4d46f36c875900ec",
+    "semantic_hash": "92690987507e240c4d46f36c875900ec"
+  },
+  "openspec/changes/archive/2026-06-13-cross-platform-installers/proposal.md": {
+    "mtime": 1781316371.7928228,
+    "ast_hash": "78929689830b17884d8a542da7d91d84",
+    "semantic_hash": "78929689830b17884d8a542da7d91d84"
+  },
+  "openspec/changes/archive/2026-06-13-cross-platform-installers/specs/build-distribution/spec.md": {
+    "mtime": 1781316522.5279284,
+    "ast_hash": "6e3c2f1557f1862d87c000fe8f3612c2",
+    "semantic_hash": "6e3c2f1557f1862d87c000fe8f3612c2"
+  },
+  "openspec/changes/archive/2026-06-13-cross-platform-installers/tasks.md": {
+    "mtime": 1781324634.0852385,
+    "ast_hash": "e99925eb85f64e3970026c67da7fc2c0",
+    "semantic_hash": "e99925eb85f64e3970026c67da7fc2c0"
+  },
+  "openspec/changes/archive/2026-06-13-lichess-puzzle-and-games-db/.openspec.yaml": {
+    "mtime": 1780898830.8889594,
+    "ast_hash": "563aa4b3ac0b07a7a7857a21749f7843",
+    "semantic_hash": "563aa4b3ac0b07a7a7857a21749f7843"
+  },
+  "openspec/changes/archive/2026-06-13-lichess-puzzle-and-games-db/design.md": {
+    "mtime": 1780899251.0851493,
+    "ast_hash": "40cbc72c8b3a274837b7af2195d772d2",
+    "semantic_hash": "40cbc72c8b3a274837b7af2195d772d2"
+  },
+  "openspec/changes/archive/2026-06-13-lichess-puzzle-and-games-db/proposal.md": {
+    "mtime": 1780899125.7058246,
+    "ast_hash": "2546774d236a8f2d87bfaa1abaed11b5",
+    "semantic_hash": "2546774d236a8f2d87bfaa1abaed11b5"
+  },
+  "openspec/changes/archive/2026-06-13-lichess-puzzle-and-games-db/specs/analysis-and-llm-guidance/spec.md": {
+    "mtime": 1780899339.8595862,
+    "ast_hash": "dd50ba8adfc78e62f4aa1204298157ff",
+    "semantic_hash": "dd50ba8adfc78e62f4aa1204298157ff"
+  },
+  "openspec/changes/archive/2026-06-13-lichess-puzzle-and-games-db/specs/database-updater/spec.md": {
+    "mtime": 1780899308.9025156,
+    "ast_hash": "367df9fcf4345b9a40fd89693a794065",
+    "semantic_hash": "367df9fcf4345b9a40fd89693a794065"
+  },
+  "openspec/changes/archive/2026-06-13-lichess-puzzle-and-games-db/specs/games-database/spec.md": {
+    "mtime": 1780899291.0262754,
+    "ast_hash": "ca7d39e78145c23753c1e6624e6d5248",
+    "semantic_hash": "ca7d39e78145c23753c1e6624e6d5248"
+  },
+  "openspec/changes/archive/2026-06-13-lichess-puzzle-and-games-db/specs/puzzle-database/spec.md": {
+    "mtime": 1780899272.1400003,
+    "ast_hash": "2510f1423e1d8aec7f829263c5df254c",
+    "semantic_hash": "2510f1423e1d8aec7f829263c5df254c"
+  },
+  "openspec/changes/archive/2026-06-13-lichess-puzzle-and-games-db/specs/puzzle-solve-flow/spec.md": {
+    "mtime": 1780899325.9462469,
+    "ast_hash": "b253d205d14b749910b3ade24b281eb9",
+    "semantic_hash": "b253d205d14b749910b3ade24b281eb9"
+  },
+  "openspec/changes/archive/2026-06-13-lichess-puzzle-and-games-db/tasks.md": {
+    "mtime": 1780940136.7830353,
+    "ast_hash": "680988209d0be15915e3f49518c8ae73",
+    "semantic_hash": "680988209d0be15915e3f49518c8ae73"
+  },
+  "openspec/changes/archive/2026-06-13-user-profile-puzzle-points/.openspec.yaml": {
+    "mtime": 1781352052.7892885,
+    "ast_hash": "1f312a7bd7149a67c677f67a6b030c23",
+    "semantic_hash": "1f312a7bd7149a67c677f67a6b030c23"
+  },
+  "openspec/changes/archive/2026-06-13-user-profile-puzzle-points/design.md": {
+    "mtime": 1781352152.532405,
+    "ast_hash": "373c80fa5f2bb570fd4f63bd3f3ccd6b",
+    "semantic_hash": "373c80fa5f2bb570fd4f63bd3f3ccd6b"
+  },
+  "openspec/changes/archive/2026-06-13-user-profile-puzzle-points/proposal.md": {
+    "mtime": 1781352098.4532588,
+    "ast_hash": "46f73365ebda3866cf15f780c8c366fd",
+    "semantic_hash": "46f73365ebda3866cf15f780c8c366fd"
+  },
+  "openspec/changes/archive/2026-06-13-user-profile-puzzle-points/specs/puzzle-points/spec.md": {
+    "mtime": 1781352207.229988,
+    "ast_hash": "b2e5d39d99560e89a9f827a6730435a4",
+    "semantic_hash": "b2e5d39d99560e89a9f827a6730435a4"
+  },
+  "openspec/changes/archive/2026-06-13-user-profile-puzzle-points/specs/puzzle-solve-flow/spec.md": {
+    "mtime": 1781352216.7362413,
+    "ast_hash": "774f038de4963f3a303f7cbf686c232d",
+    "semantic_hash": "774f038de4963f3a303f7cbf686c232d"
+  },
+  "openspec/changes/archive/2026-06-13-user-profile-puzzle-points/specs/user-profile/spec.md": {
+    "mtime": 1781352182.284371,
+    "ast_hash": "d0593502ef8d85e099a33da79062fbc2",
+    "semantic_hash": "d0593502ef8d85e099a33da79062fbc2"
+  },
+  "openspec/changes/archive/2026-06-13-user-profile-puzzle-points/tasks.md": {
+    "mtime": 1781353410.91652,
+    "ast_hash": "f31a62ebde074fcc6b39bee12f0dc59b",
+    "semantic_hash": "f31a62ebde074fcc6b39bee12f0dc59b"
+  },
+  "openspec/changes/archive/2026-06-14-deep-analysis-and-position-notes/.openspec.yaml": {
+    "mtime": 1781409957.4029858,
+    "ast_hash": "d3f3cdfce511e197472e6dee42eaf5d8",
+    "semantic_hash": "d3f3cdfce511e197472e6dee42eaf5d8"
+  },
+  "openspec/changes/archive/2026-06-14-deep-analysis-and-position-notes/design.md": {
+    "mtime": 1781410321.8554254,
+    "ast_hash": "e9dab47a306953d5a7d809bbb71e2b44",
+    "semantic_hash": "e9dab47a306953d5a7d809bbb71e2b44"
+  },
+  "openspec/changes/archive/2026-06-14-deep-analysis-and-position-notes/proposal.md": {
+    "mtime": 1781410018.958887,
+    "ast_hash": "e68b9313d7099fa07a207d610ebabcf9",
+    "semantic_hash": "e68b9313d7099fa07a207d610ebabcf9"
+  },
+  "openspec/changes/archive/2026-06-14-deep-analysis-and-position-notes/specs/analysis-and-llm-guidance/spec.md": {
+    "mtime": 1781410430.0526967,
+    "ast_hash": "2bdd3a379deb22dc1e46748c7285d825",
+    "semantic_hash": "2bdd3a379deb22dc1e46748c7285d825"
+  },
+  "openspec/changes/archive/2026-06-14-deep-analysis-and-position-notes/specs/analysis-pgn-save-load/spec.md": {
+    "mtime": 1781410412.412645,
+    "ast_hash": "d02a36340cbdfc43f23687e9b0d4b490",
+    "semantic_hash": "d02a36340cbdfc43f23687e9b0d4b490"
+  },
+  "openspec/changes/archive/2026-06-14-deep-analysis-and-position-notes/specs/deep-analysis-mode/spec.md": {
+    "mtime": 1781410364.561723,
+    "ast_hash": "535e968489d3ce9b212eec757423120b",
+    "semantic_hash": "535e968489d3ce9b212eec757423120b"
+  },
+  "openspec/changes/archive/2026-06-14-deep-analysis-and-position-notes/specs/inline-analysis-lines/spec.md": {
+    "mtime": 1781410443.849229,
+    "ast_hash": "13c85501a8277f1329d658779e3d7266",
+    "semantic_hash": "13c85501a8277f1329d658779e3d7266"
+  },
+  "openspec/changes/archive/2026-06-14-deep-analysis-and-position-notes/specs/position-notes/spec.md": {
+    "mtime": 1781410386.479244,
+    "ast_hash": "af87ee0de36251e396a000d4419a4b18",
+    "semantic_hash": "af87ee0de36251e396a000d4419a4b18"
+  },
+  "openspec/changes/archive/2026-06-14-deep-analysis-and-position-notes/tasks.md": {
+    "mtime": 1781419286.5427701,
+    "ast_hash": "211f68dbf29e3a568b2b3517eec9c7ee",
+    "semantic_hash": "211f68dbf29e3a568b2b3517eec9c7ee"
+  },
+  "openspec/changes/archive/2026-06-14-games-database-import-setup/.openspec.yaml": {
+    "mtime": 1781420872.0294156,
+    "ast_hash": "d3f3cdfce511e197472e6dee42eaf5d8",
+    "semantic_hash": "d3f3cdfce511e197472e6dee42eaf5d8"
+  },
+  "openspec/changes/archive/2026-06-14-games-database-import-setup/design.md": {
+    "mtime": 1781421057.2071521,
+    "ast_hash": "11cfd33c9855e265635a646e747f4c35",
+    "semantic_hash": "11cfd33c9855e265635a646e747f4c35"
+  },
+  "openspec/changes/archive/2026-06-14-games-database-import-setup/proposal.md": {
+    "mtime": 1781420921.2226274,
+    "ast_hash": "c602d382f3230967a3a44a42d573a390",
+    "semantic_hash": "c602d382f3230967a3a44a42d573a390"
+  },
+  "openspec/changes/archive/2026-06-14-games-database-import-setup/specs/database-updater/spec.md": {
+    "mtime": 1781421130.5108404,
+    "ast_hash": "f24e4bf077748b271be8cddf0157418a",
+    "semantic_hash": "f24e4bf077748b271be8cddf0157418a"
+  },
+  "openspec/changes/archive/2026-06-14-games-database-import-setup/specs/games-database/spec.md": {
+    "mtime": 1781421112.8808267,
+    "ast_hash": "d3db1162e4e6fbe381cf1e2f538ad293",
+    "semantic_hash": "d3db1162e4e6fbe381cf1e2f538ad293"
+  },
+  "openspec/changes/archive/2026-06-14-games-database-import-setup/specs/otb-games-import/spec.md": {
+    "mtime": 1781421100.817451,
+    "ast_hash": "241b6c3e21ca6bb616b4c617c0c2bcb7",
+    "semantic_hash": "241b6c3e21ca6bb616b4c617c0c2bcb7"
+  },
+  "openspec/changes/archive/2026-06-14-games-database-import-setup/tasks.md": {
+    "mtime": 1781433964.937536,
+    "ast_hash": "86c28f3f8db4a90c42991f9d1549fd44",
+    "semantic_hash": "86c28f3f8db4a90c42991f9d1549fd44"
+  },
+  "openspec/changes/archive/2026-06-14-opening-and-endgame-training-agents/.openspec.yaml": {
+    "mtime": 1781357354.5088863,
+    "ast_hash": "1f312a7bd7149a67c677f67a6b030c23",
+    "semantic_hash": "1f312a7bd7149a67c677f67a6b030c23"
+  },
+  "openspec/changes/archive/2026-06-14-opening-and-endgame-training-agents/design.md": {
+    "mtime": 1781357660.705932,
+    "ast_hash": "fbefb8a4c3323fb34a300283a8ed0cb4",
+    "semantic_hash": "fbefb8a4c3323fb34a300283a8ed0cb4"
+  },
+  "openspec/changes/archive/2026-06-14-opening-and-endgame-training-agents/proposal.md": {
+    "mtime": 1781357596.8506322,
+    "ast_hash": "2c15d4a786e21e919938b0ec8c7976a7",
+    "semantic_hash": "2c15d4a786e21e919938b0ec8c7976a7"
+  },
+  "openspec/changes/archive/2026-06-14-opening-and-endgame-training-agents/specs/analysis-and-llm-guidance/spec.md": {
+    "mtime": 1781358012.873358,
+    "ast_hash": "ddabd0d1741c7fd1f8a7059386597ed3",
+    "semantic_hash": "ddabd0d1741c7fd1f8a7059386597ed3"
+  },
+  "openspec/changes/archive/2026-06-14-opening-and-endgame-training-agents/specs/eco-opening-library/spec.md": {
+    "mtime": 1781357783.1831722,
+    "ast_hash": "2debc2f34530c96992c917dacbc2f64b",
+    "semantic_hash": "2debc2f34530c96992c917dacbc2f64b"
+  },
+  "openspec/changes/archive/2026-06-14-opening-and-endgame-training-agents/specs/endgame-training-agent/spec.md": {
+    "mtime": 1781357757.973147,
+    "ast_hash": "ba043556255b13301c94680e575998e9",
+    "semantic_hash": "ba043556255b13301c94680e575998e9"
+  },
+  "openspec/changes/archive/2026-06-14-opening-and-endgame-training-agents/specs/games-database/spec.md": {
+    "mtime": 1781357984.6560185,
+    "ast_hash": "14a0f90c722a8c661de334a06b7ab848",
+    "semantic_hash": "14a0f90c722a8c661de334a06b7ab848"
+  },
+  "openspec/changes/archive/2026-06-14-opening-and-endgame-training-agents/specs/opening-training-agent/spec.md": {
+    "mtime": 1781357728.9722507,
+    "ast_hash": "28e7fa15a6199047b5660644146ebb46",
+    "semantic_hash": "28e7fa15a6199047b5660644146ebb46"
+  },
+  "openspec/changes/archive/2026-06-14-opening-and-endgame-training-agents/specs/puzzle-solve-flow/spec.md": {
+    "mtime": 1781357803.3468478,
+    "ast_hash": "943f3b87c9d174a8696692d09a48dde4",
+    "semantic_hash": "943f3b87c9d174a8696692d09a48dde4"
+  },
+  "openspec/changes/archive/2026-06-14-opening-and-endgame-training-agents/tasks.md": {
+    "mtime": 1781408344.9652498,
+    "ast_hash": "1cc96cc7f0407a44516da3d9574fa540",
+    "semantic_hash": "1cc96cc7f0407a44516da3d9574fa540"
+  },
+  "openspec/changes/archive/2026-06-19-smooth-otb-import-progress/.openspec.yaml": {
+    "mtime": 1781507702.9682152,
+    "ast_hash": "0ac7f81219e0206f87bbee5da5020dcc",
+    "semantic_hash": "0ac7f81219e0206f87bbee5da5020dcc"
+  },
+  "openspec/changes/archive/2026-06-19-smooth-otb-import-progress/design.md": {
+    "mtime": 1781508422.1752532,
+    "ast_hash": "ba3c8d2813daf28f01aae64b6df5a334",
+    "semantic_hash": "ba3c8d2813daf28f01aae64b6df5a334"
+  },
+  "openspec/changes/archive/2026-06-19-smooth-otb-import-progress/proposal.md": {
+    "mtime": 1781508295.383693,
+    "ast_hash": "c5e4e473cc98395e352144525efaf898",
+    "semantic_hash": "c5e4e473cc98395e352144525efaf898"
+  },
+  "openspec/changes/archive/2026-06-19-smooth-otb-import-progress/specs/otb-games-import/spec.md": {
+    "mtime": 1781508356.175129,
+    "ast_hash": "71c4f3f5130b634919cb126b6ae4d0da",
+    "semantic_hash": "71c4f3f5130b634919cb126b6ae4d0da"
+  },
+  "openspec/changes/archive/2026-06-19-smooth-otb-import-progress/tasks.md": {
+    "mtime": 1781834105.9492693,
+    "ast_hash": "9b650962624eb64bde4b617a55ec64d5",
+    "semantic_hash": "9b650962624eb64bde4b617a55ec64d5"
+  },
+  "openspec/changes/archive/2026-06-20-fix-info-bar-and-list-scroll/.openspec.yaml": {
+    "mtime": 1781834915.8321855,
+    "ast_hash": "34b43c55d3ca6875b6faa975762e6c09",
+    "semantic_hash": "34b43c55d3ca6875b6faa975762e6c09"
+  },
+  "openspec/changes/archive/2026-06-20-fix-info-bar-and-list-scroll/design.md": {
+    "mtime": 1781879887.4495645,
+    "ast_hash": "fd3b859d1c50037045d91690073052d5",
+    "semantic_hash": "fd3b859d1c50037045d91690073052d5"
+  },
+  "openspec/changes/archive/2026-06-20-fix-info-bar-and-list-scroll/proposal.md": {
+    "mtime": 1781879839.6713836,
+    "ast_hash": "86acd90e5a6527d25883e60822300231",
+    "semantic_hash": "86acd90e5a6527d25883e60822300231"
+  },
+  "openspec/changes/archive/2026-06-20-fix-info-bar-and-list-scroll/specs/modular-analysis-layout/spec.md": {
+    "mtime": 1781879920.7716513,
+    "ast_hash": "15df62435bef811648506e7f7947500e",
+    "semantic_hash": "15df62435bef811648506e7f7947500e"
+  },
+  "openspec/changes/archive/2026-06-20-fix-info-bar-and-list-scroll/tasks.md": {
+    "mtime": 1781921674.852069,
+    "ast_hash": "fed2c5855a1371894c4defecff809891",
+    "semantic_hash": "fed2c5855a1371894c4defecff809891"
+  },
+  "openspec/changes/archive/2026-06-20-version-display-and-icon-size/.openspec.yaml": {
+    "mtime": 1781962828.5038633,
+    "ast_hash": "7a86170687cf7c283ea92402da648fc1",
+    "semantic_hash": "7a86170687cf7c283ea92402da648fc1"
+  },
+  "openspec/changes/archive/2026-06-20-version-display-and-icon-size/design.md": {
+    "mtime": 1781962884.5317488,
+    "ast_hash": "4a44b729e8e053031e12540da8ba5b0e",
+    "semantic_hash": "4a44b729e8e053031e12540da8ba5b0e"
+  },
+  "openspec/changes/archive/2026-06-20-version-display-and-icon-size/proposal.md": {
+    "mtime": 1781962853.6209683,
+    "ast_hash": "54e0364ee3ef21aec76a0a3c214e3819",
+    "semantic_hash": "54e0364ee3ef21aec76a0a3c214e3819"
+  },
+  "openspec/changes/archive/2026-06-20-version-display-and-icon-size/specs/app-icon-display/spec.md": {
+    "mtime": 1781962916.9563498,
+    "ast_hash": "573fe79fdad1fdadf371b8f4a0374f4c",
+    "semantic_hash": "573fe79fdad1fdadf371b8f4a0374f4c"
+  },
+  "openspec/changes/archive/2026-06-20-version-display-and-icon-size/specs/version-display-in-title/spec.md": {
+    "mtime": 1781962909.5616019,
+    "ast_hash": "c7486fc1bc396895178f0e3fdc906663",
+    "semantic_hash": "c7486fc1bc396895178f0e3fdc906663"
+  },
+  "openspec/changes/archive/2026-06-20-version-display-and-icon-size/tasks.md": {
+    "mtime": 1781966204.2329643,
+    "ast_hash": "db8a3a3a5de3822eba292836c55f9de8",
+    "semantic_hash": "db8a3a3a5de3822eba292836c55f9de8"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-board-bugs/.openspec.yaml": {
+    "mtime": 1782528196.9290538,
+    "ast_hash": "9765f2c9197beec902d61226135a85e7",
+    "semantic_hash": "9765f2c9197beec902d61226135a85e7"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-board-bugs/design.md": {
+    "mtime": 1782528366.6531065,
+    "ast_hash": "f008a0e9ad7dcbc645666fe26b8031b1",
+    "semantic_hash": "f008a0e9ad7dcbc645666fe26b8031b1"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-board-bugs/proposal.md": {
+    "mtime": 1782528334.2406127,
+    "ast_hash": "a0825c58a143e7ed2be259c0741358db",
+    "semantic_hash": "a0825c58a143e7ed2be259c0741358db"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-board-bugs/specs/advanced-analysis-layout/spec.md": {
+    "mtime": 1782528397.4988122,
+    "ast_hash": "050142c8e4ee6fe0c7666dc1133595fb",
+    "semantic_hash": "050142c8e4ee6fe0c7666dc1133595fb"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-board-bugs/specs/analysis-board-interaction/spec.md": {
+    "mtime": 1782528463.6030002,
+    "ast_hash": "8bfed76961147dbff29b8f85c9f5b9b5",
+    "semantic_hash": "8bfed76961147dbff29b8f85c9f5b9b5"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-board-bugs/specs/legal-moves-only-drops/spec.md": {
+    "mtime": 1782528426.6051977,
+    "ast_hash": "cba399f5e4c1019aa6e16d9122834eff",
+    "semantic_hash": "cba399f5e4c1019aa6e16d9122834eff"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-board-bugs/specs/notation-display-control/spec.md": {
+    "mtime": 1782528388.4926353,
+    "ast_hash": "50ea25f7dfe0235cf7a860a1d84653e9",
+    "semantic_hash": "50ea25f7dfe0235cf7a860a1d84653e9"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-board-bugs/specs/pgn-real-time-tracking/spec.md": {
+    "mtime": 1782528416.7747064,
+    "ast_hash": "e2db4ac6a5bfedcfdda278761b461458",
+    "semantic_hash": "e2db4ac6a5bfedcfdda278761b461458"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-board-bugs/specs/position-notes-save-prompt/spec.md": {
+    "mtime": 1782528406.9318695,
+    "ast_hash": "f6fbf5b373c622ee5a7d1ff14b45a41b",
+    "semantic_hash": "f6fbf5b373c622ee5a7d1ff14b45a41b"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-board-bugs/specs/user-controlled-line-selection/spec.md": {
+    "mtime": 1782528437.258289,
+    "ast_hash": "fd260fe81b3fb3cfe0d3b59b70a8fca8",
+    "semantic_hash": "fd260fe81b3fb3cfe0d3b59b70a8fca8"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-board-bugs/tasks.md": {
+    "mtime": 1782530240.0602987,
+    "ast_hash": "00bc534ba802d83d9988ebafdfa30b66",
+    "semantic_hash": "00bc534ba802d83d9988ebafdfa30b66"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-mode-and-list-wrapping/.openspec.yaml": {
+    "mtime": 1782743743.775876,
+    "ast_hash": "603c5ea41732be2351f30ab0ce563b10",
+    "semantic_hash": "603c5ea41732be2351f30ab0ce563b10"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-mode-and-list-wrapping/design.md": {
+    "mtime": 1782743853.8732283,
+    "ast_hash": "718cd45d418bd4f675cf5e6a1b77f4c2",
+    "semantic_hash": "718cd45d418bd4f675cf5e6a1b77f4c2"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-mode-and-list-wrapping/proposal.md": {
+    "mtime": 1782743815.2019887,
+    "ast_hash": "8b76beb8f5b9ab748fdf617e233757a5",
+    "semantic_hash": "8b76beb8f5b9ab748fdf617e233757a5"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-mode-and-list-wrapping/specs/analysis-and-llm-guidance/spec.md": {
+    "mtime": 1782743925.164178,
+    "ast_hash": "8b61cfcb23e109585bf3e8e3e892775d",
+    "semantic_hash": "8b61cfcb23e109585bf3e8e3e892775d"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-mode-and-list-wrapping/specs/analysis-panel/spec.md": {
+    "mtime": 1782743939.3431606,
+    "ast_hash": "ec641ebbc659c0f871c97d88d62aaa7c",
+    "semantic_hash": "ec641ebbc659c0f871c97d88d62aaa7c"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-mode-and-list-wrapping/specs/line-step-navigation/spec.md": {
+    "mtime": 1782743897.2840633,
+    "ast_hash": "e8966d53be690972583cbfd304bf5d69",
+    "semantic_hash": "e8966d53be690972583cbfd304bf5d69"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-mode-and-list-wrapping/specs/selectable-list-text-wrapping/spec.md": {
+    "mtime": 1782743906.3415413,
+    "ast_hash": "a2706c0a570410688631bb5575db6877",
+    "semantic_hash": "a2706c0a570410688631bb5575db6877"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-mode-and-list-wrapping/specs/user-move-matching/spec.md": {
+    "mtime": 1782743876.4782586,
+    "ast_hash": "e9d8d679cf1060ef8b22cf6044b00e12",
+    "semantic_hash": "e9d8d679cf1060ef8b22cf6044b00e12"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-mode-and-list-wrapping/specs/user-move-off-book-analysis/spec.md": {
+    "mtime": 1782743886.0230293,
+    "ast_hash": "63b6f86460614164fb14c8dbc1e53225",
+    "semantic_hash": "63b6f86460614164fb14c8dbc1e53225"
+  },
+  "openspec/changes/archive/2026-06-30-fix-analysis-mode-and-list-wrapping/tasks.md": {
+    "mtime": 1782744307.1090114,
+    "ast_hash": "c2227eb0502a462d557fa72815ea1eac",
+    "semantic_hash": "c2227eb0502a462d557fa72815ea1eac"
+  },
+  "openspec/config.yaml": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "63c26766698dd49488b53c274bfec0f9",
+    "semantic_hash": "63c26766698dd49488b53c274bfec0f9"
+  },
+  "openspec/specs/analysis-and-llm-guidance/spec.md": {
+    "mtime": 1781419679.2396376,
+    "ast_hash": "6c758ebe8a6b36e2c77765cfa1fce34f",
+    "semantic_hash": "6c758ebe8a6b36e2c77765cfa1fce34f"
+  },
+  "openspec/specs/analysis-layout-partition/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "b570222bfe03b6709b5821aa289aa961",
+    "semantic_hash": "b570222bfe03b6709b5821aa289aa961"
+  },
+  "openspec/specs/analysis-panel/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "2befe5606d3c5b4f06786dc3dbee7a88",
+    "semantic_hash": "2befe5606d3c5b4f06786dc3dbee7a88"
+  },
+  "openspec/specs/analysis-pgn-save-load/spec.md": {
+    "mtime": 1781419775.65887,
+    "ast_hash": "d02a36340cbdfc43f23687e9b0d4b490",
+    "semantic_hash": "d02a36340cbdfc43f23687e9b0d4b490"
+  },
+  "openspec/specs/analysis-process-orchestration/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "b109e895caf4b1d6d34f24fb4778aa88",
+    "semantic_hash": "b109e895caf4b1d6d34f24fb4778aa88"
+  },
+  "openspec/specs/analysis-ui-height-and-logs/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "c97b55659da52dbf7aaa6544fc6e1467",
+    "semantic_hash": "c97b55659da52dbf7aaa6544fc6e1467"
+  },
+  "openspec/specs/blueprint-desktop-ui/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "f8c0a91e27ab13f3360e456dc8b7b834",
+    "semantic_hash": "f8c0a91e27ab13f3360e456dc8b7b834"
+  },
+  "openspec/specs/board-controls-panel-layout/spec.md": {
+    "mtime": 1780808570.0529482,
+    "ast_hash": "ace335d4ccab41f322dbcbb68ac11e1b",
+    "semantic_hash": "ace335d4ccab41f322dbcbb68ac11e1b"
+  },
+  "openspec/specs/build-distribution/spec.md": {
+    "mtime": 1781351549.9360554,
+    "ast_hash": "30cb43e42ce60a717d51c036f865bc1e",
+    "semantic_hash": "30cb43e42ce60a717d51c036f865bc1e"
+  },
+  "openspec/specs/chess-trainer/spec.md": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "a3fdf467a0314d567a4bc2ab17b2b8e3",
+    "semantic_hash": "a3fdf467a0314d567a4bc2ab17b2b8e3"
+  },
+  "openspec/specs/chessboard-global-detection/spec.md": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "3e0a1283b8f5bbedd654c225a5d27c39",
+    "semantic_hash": "3e0a1283b8f5bbedd654c225a5d27c39"
+  },
+  "openspec/specs/chessboard-rendering/spec.md": {
+    "mtime": 1780890263.2224667,
+    "ast_hash": "33a1c2a7c88e16dc913fac536f92bccd",
+    "semantic_hash": "33a1c2a7c88e16dc913fac536f92bccd"
+  },
+  "openspec/specs/conditional-engine-configuration/spec.md": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "ee6ce6a0d5abd4fdfdc46e32b8426269",
+    "semantic_hash": "ee6ce6a0d5abd4fdfdc46e32b8426269"
+  },
+  "openspec/specs/database-updater/spec.md": {
+    "mtime": 1781436702.0013628,
+    "ast_hash": "8963716ff0bb33ab78d9a25bb7f6f4e3",
+    "semantic_hash": "8963716ff0bb33ab78d9a25bb7f6f4e3"
+  },
+  "openspec/specs/deep-analysis-mode/spec.md": {
+    "mtime": 1781419726.392132,
+    "ast_hash": "535e968489d3ce9b212eec757423120b",
+    "semantic_hash": "535e968489d3ce9b212eec757423120b"
+  },
+  "openspec/specs/eco-opening-library/spec.md": {
+    "mtime": 1781408974.387518,
+    "ast_hash": "04e63aac47c58d42486ae0a2ec11b0cc",
+    "semantic_hash": "04e63aac47c58d42486ae0a2ec11b0cc"
+  },
+  "openspec/specs/endgame-training-agent/spec.md": {
+    "mtime": 1781408944.3332381,
+    "ast_hash": "ba043556255b13301c94680e575998e9",
+    "semantic_hash": "ba043556255b13301c94680e575998e9"
+  },
+  "openspec/specs/engine-abstraction/spec.md": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "8027275574cdf65078a34bc3dd4df798",
+    "semantic_hash": "8027275574cdf65078a34bc3dd4df798"
+  },
+  "openspec/specs/engine-configuration/spec.md": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "5875661aa58bb64e1bd1ff7c1edbc5a9",
+    "semantic_hash": "5875661aa58bb64e1bd1ff7c1edbc5a9"
+  },
+  "openspec/specs/engine-selection/spec.md": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "ba970d706e6e345a66369e2a85933bdf",
+    "semantic_hash": "ba970d706e6e345a66369e2a85933bdf"
+  },
+  "openspec/specs/fen-pgn-importer/spec.md": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "76a4184f1aa71474c02ad03663119f30",
+    "semantic_hash": "76a4184f1aa71474c02ad03663119f30"
+  },
+  "openspec/specs/games-database/spec.md": {
+    "mtime": 1781436721.1783814,
+    "ast_hash": "4b94a22b0c3af1b778ecdb81adce6542",
+    "semantic_hash": "4b94a22b0c3af1b778ecdb81adce6542"
+  },
+  "openspec/specs/inline-analysis-lines/spec.md": {
+    "mtime": 1781419697.6388817,
+    "ast_hash": "69ee7f665d87e61cbf81067b432aa31f",
+    "semantic_hash": "69ee7f665d87e61cbf81067b432aa31f"
+  },
+  "openspec/specs/lc0-engine-integration/spec.md": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "48799e9b7171f9eca297981d16efe9cf",
+    "semantic_hash": "48799e9b7171f9eca297981d16efe9cf"
+  },
+  "openspec/specs/material-ui-renderer/spec.md": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "601f6603b2e850462d42a6c5e975b732",
+    "semantic_hash": "601f6603b2e850462d42a6c5e975b732"
+  },
+  "openspec/specs/modular-analysis-layout/spec.md": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "c0bdb2c31dbbb620f01006dc155850e0",
+    "semantic_hash": "c0bdb2c31dbbb620f01006dc155850e0"
+  },
+  "openspec/specs/opening-training-agent/spec.md": {
+    "mtime": 1781408915.5704546,
+    "ast_hash": "28e7fa15a6199047b5660644146ebb46",
+    "semantic_hash": "28e7fa15a6199047b5660644146ebb46"
+  },
+  "openspec/specs/otb-games-import/spec.md": {
+    "mtime": 1781834479.4779003,
+    "ast_hash": "06bbe11519902b555cc233b379d9619f",
+    "semantic_hash": "06bbe11519902b555cc233b379d9619f"
+  },
+  "openspec/specs/per-move-explanation-with-cache/spec.md": {
+    "mtime": 1780890298.625343,
+    "ast_hash": "3d2cf5e04805222e8294a1f041638061",
+    "semantic_hash": "3d2cf5e04805222e8294a1f041638061"
+  },
+  "openspec/specs/puzzle-database/spec.md": {
+    "mtime": 1781316098.344609,
+    "ast_hash": "2510f1423e1d8aec7f829263c5df254c",
+    "semantic_hash": "2510f1423e1d8aec7f829263c5df254c"
+  },
+  "openspec/specs/puzzle-points/spec.md": {
+    "mtime": 1781354548.6514413,
+    "ast_hash": "b2e5d39d99560e89a9f827a6730435a4",
+    "semantic_hash": "b2e5d39d99560e89a9f827a6730435a4"
+  },
+  "openspec/specs/puzzle-solve-flow/spec.md": {
+    "mtime": 1781408801.0135956,
+    "ast_hash": "f91c08a8413ba7addfff01b3f0df514a",
+    "semantic_hash": "f91c08a8413ba7addfff01b3f0df514a"
+  },
+  "openspec/specs/stockfish-notation-parser/spec.md": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "f6388cb07660c900d6793681646c51aa",
+    "semantic_hash": "f6388cb07660c900d6793681646c51aa"
+  },
+  "openspec/specs/tailwind-postcss-build/spec.md": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "6744060630e8fdabeda57d3b2a15849f",
+    "semantic_hash": "6744060630e8fdabeda57d3b2a15849f"
+  },
+  "openspec/specs/ui-and-board-experience/spec.md": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "a349e55473010749aaa968be49e7a7e4",
+    "semantic_hash": "a349e55473010749aaa968be49e7a7e4"
+  },
+  "openspec/specs/user-profile/spec.md": {
+    "mtime": 1781354560.8092165,
+    "ast_hash": "d0593502ef8d85e099a33da79062fbc2",
+    "semantic_hash": "d0593502ef8d85e099a33da79062fbc2"
+  },
+  "playwright-report/index.html": {
+    "mtime": 1783180572.108545,
+    "ast_hash": "dc3b1402ad0c9ef4c4a338f19746ace4",
+    "semantic_hash": ""
+  },
+  "tests/integration/README.md": {
+    "mtime": 1782828151.2822647,
+    "ast_hash": "6e483637531369e78ea0d6e827a3ad8c",
+    "semantic_hash": "6e483637531369e78ea0d6e827a3ad8c"
+  },
+  "tools/nsis/Menu/index.html": {
+    "mtime": 1780808570.162323,
+    "ast_hash": "bf9a126897b72e0e82410810cacc9425",
+    "semantic_hash": "bf9a126897b72e0e82410810cacc9425"
+  },
+  "tools/nsis/Menu/notinstalled.html": {
+    "mtime": 1780808570.162323,
+    "ast_hash": "5cf64068aa2de22cdd6c2e2ad9087bb0",
+    "semantic_hash": "5cf64068aa2de22cdd6c2e2ad9087bb0"
+  },
+  "public/chesspieces/wikipedia/bB.png": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "3b014212f9bc5ecc6a73c191252ff2a4",
+    "semantic_hash": "3b014212f9bc5ecc6a73c191252ff2a4"
+  },
+  "public/chesspieces/wikipedia/bK.png": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "474307eef58a34990b954abab2181b64",
+    "semantic_hash": "474307eef58a34990b954abab2181b64"
+  },
+  "public/chesspieces/wikipedia/bN.png": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "a2e451246463158983b3a280051d4fde",
+    "semantic_hash": "a2e451246463158983b3a280051d4fde"
+  },
+  "public/chesspieces/wikipedia/bP.png": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "9473e99a93f36c2c5e34b16c2b80da18",
+    "semantic_hash": "9473e99a93f36c2c5e34b16c2b80da18"
+  },
+  "public/chesspieces/wikipedia/bQ.png": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "12e26dc3ea07e500793505c0fb7ff848",
+    "semantic_hash": "12e26dc3ea07e500793505c0fb7ff848"
+  },
+  "public/chesspieces/wikipedia/bR.png": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "5f85bb3c47b5faf6d37d93cd472f273a",
+    "semantic_hash": "5f85bb3c47b5faf6d37d93cd472f273a"
+  },
+  "public/chesspieces/wikipedia/wB.png": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "7dc2524b02ba373c558fe86ade8d974f",
+    "semantic_hash": "7dc2524b02ba373c558fe86ade8d974f"
+  },
+  "public/chesspieces/wikipedia/wK.png": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "3023695ee08ba79d3426233b36f7e2f0",
+    "semantic_hash": "3023695ee08ba79d3426233b36f7e2f0"
+  },
+  "public/chesspieces/wikipedia/wN.png": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "37398b803db0bb1dcbd7824f22970903",
+    "semantic_hash": "37398b803db0bb1dcbd7824f22970903"
+  },
+  "public/chesspieces/wikipedia/wP.png": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "f57254b7320b9a2f9113a203c483246f",
+    "semantic_hash": "f57254b7320b9a2f9113a203c483246f"
+  },
+  "public/chesspieces/wikipedia/wQ.png": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "aee6543bc4f1a7b82e1df31c6e516180",
+    "semantic_hash": "aee6543bc4f1a7b82e1df31c6e516180"
+  },
+  "public/chesspieces/wikipedia/wR.png": {
+    "mtime": 1780808570.0685725,
+    "ast_hash": "84c7134294991eced0cfd6d13531174e",
+    "semantic_hash": "84c7134294991eced0cfd6d13531174e"
+  },
+  "public/queen-icon.svg": {
+    "mtime": 1781453149.7535849,
+    "ast_hash": "12e9710d0dda936fc786dcf5b17f9f30",
+    "semantic_hash": "12e9710d0dda936fc786dcf5b17f9f30"
+  },
+  "tools/nsis/Menu/images/header.gif": {
+    "mtime": 1780808570.162323,
+    "ast_hash": "f89222a2c435626c180917bb78870350",
+    "semantic_hash": "f89222a2c435626c180917bb78870350"
+  },
+  "tools/nsis/Menu/images/line.gif": {
+    "mtime": 1780808570.162323,
+    "ast_hash": "2c7d86dfa1f749a9d6db649345ba46a1",
+    "semantic_hash": "2c7d86dfa1f749a9d6db649345ba46a1"
+  },
+  "tools/nsis/Menu/images/site.gif": {
+    "mtime": 1780808570.162323,
+    "ast_hash": "1cb2d476b27c016cb4bf1716cfb51b69",
+    "semantic_hash": "1cb2d476b27c016cb4bf1716cfb51b69"
+  },
+  "electron/BoardStateManager.ts": {
+    "mtime": 1783044978.7684846,
+    "ast_hash": "86d8f4b92ca91d3d00bcd989beeac44e",
+    "semantic_hash": "86d8f4b92ca91d3d00bcd989beeac44e"
+  },
+  "electron/ProcessManager.REFACTORED.ts": {
+    "mtime": 1783044118.2732913,
+    "ast_hash": "a004c7d947ecdd166d3394dabd4a7f78",
+    "semantic_hash": "a004c7d947ecdd166d3394dabd4a7f78"
+  },
+  "electron/engines/BaseChessEngine.ts": {
+    "mtime": 1783174195.7444732,
+    "ast_hash": "f8f69accb3f08003b15efb87dcbb0e97",
+    "semantic_hash": ""
+  },
+  "electron/engines/EngineFactory.test.ts": {
+    "mtime": 1783043730.7544348,
+    "ast_hash": "3f69d0c138811864252567e5fe0576dd",
+    "semantic_hash": "3f69d0c138811864252567e5fe0576dd"
+  },
+  "electron/engines/EngineFactory.ts": {
+    "mtime": 1783043697.3523188,
+    "ast_hash": "761580e7968f72be5296a6d0f3ba8a65",
+    "semantic_hash": "761580e7968f72be5296a6d0f3ba8a65"
+  },
+  "electron/engines/IChessEngine.ts": {
+    "mtime": 1783174202.7505293,
+    "ast_hash": "c57f62a0068fa740fbc06c140d93b7f1",
+    "semantic_hash": ""
+  },
+  "electron/engines/LC0Engine.ts": {
+    "mtime": 1783047908.4835057,
+    "ast_hash": "16dcdc7af1e3c94d3c05aab7e7ae85c7",
+    "semantic_hash": "16dcdc7af1e3c94d3c05aab7e7ae85c7"
+  },
+  "electron/engines/StockfishEngine.ts": {
+    "mtime": 1783043938.963514,
+    "ast_hash": "bfde37dd46d410b44dd36ee671df27d4",
+    "semantic_hash": "bfde37dd46d410b44dd36ee671df27d4"
+  },
+  "electron/utils/chessLineParser.test.ts": {
+    "mtime": 1783174175.3214831,
+    "ast_hash": "792023c348cecf190242952d1e5f6999",
+    "semantic_hash": ""
+  },
+  "electron/utils/chessLineParser.ts": {
+    "mtime": 1783174166.803682,
+    "ast_hash": "e7929f44796bb2b52f3cab5e544b2bfc",
+    "semantic_hash": ""
+  },
+  "electron/ARCHITECTURE_FINAL.md": {
+    "mtime": 1783043972.5296223,
+    "ast_hash": "7ab88fc3e2ca4ac76eefdc67bbb63710",
+    "semantic_hash": "7ab88fc3e2ca4ac76eefdc67bbb63710"
+  },
+  "electron/ARCHITECTURE_SUMMARY.md": {
+    "mtime": 1783043751.7772818,
+    "ast_hash": "4265805342d629e086a189683fcb88f1",
+    "semantic_hash": "4265805342d629e086a189683fcb88f1"
+  },
+  "electron/INTEGRATION_GUIDE.md": {
+    "mtime": 1783044095.2449908,
+    "ast_hash": "9a83007d1bd71300146f46398e65b59b",
+    "semantic_hash": "9a83007d1bd71300146f46398e65b59b"
+  },
+  "electron/REFACTORING_SUMMARY.md": {
+    "mtime": 1783044135.549979,
+    "ast_hash": "ee0d0430443aae4341c99efbf6c33130",
+    "semantic_hash": "ee0d0430443aae4341c99efbf6c33130"
+  },
+  "electron/REFACTOR_ARCHITECTURE.md": {
+    "mtime": 1783043719.473881,
+    "ast_hash": "e6c6da0816734f05a635e46e5ea60290",
+    "semantic_hash": "e6c6da0816734f05a635e46e5ea60290"
+  },
+  "electron/REFACTOR_EXAMPLE.md": {
+    "mtime": 1783043407.9899838,
+    "ast_hash": "a94e1658d4c4f786d363fdfcc915ea1e",
+    "semantic_hash": "a94e1658d4c4f786d363fdfcc915ea1e"
+  },
+  "src/components/AIImportDialog.tsx": {
+    "mtime": 1783091447.2076972,
+    "ast_hash": "7fac512e35ddaa60287f96030f22b6ca",
+    "semantic_hash": "7fac512e35ddaa60287f96030f22b6ca"
+  },
+  "src/components/NoteEditorPopup.tsx": {
+    "mtime": 1783092315.4074392,
+    "ast_hash": "fcea4549e4499512cc1db4208184adea",
+    "semantic_hash": "fcea4549e4499512cc1db4208184adea"
+  },
+  "src/utils/boardMove.test.ts": {
+    "mtime": 1783092932.6480844,
+    "ast_hash": "c377a1bb7ac9f9a9a6a02be139f3bc68",
+    "semantic_hash": "c377a1bb7ac9f9a9a6a02be139f3bc68"
+  },
+  "src/utils/boardMove.ts": {
+    "mtime": 1783092917.1218145,
+    "ast_hash": "412816700cc8bbfd7f9236f2435178b2",
+    "semantic_hash": "412816700cc8bbfd7f9236f2435178b2"
+  },
+  "src/utils/pgnNotes.test.ts": {
+    "mtime": 1783091529.07559,
+    "ast_hash": "3b6870a1d87b5be10090c22b8b2c722e",
+    "semantic_hash": "3b6870a1d87b5be10090c22b8b2c722e"
+  },
+  "src/utils/pgnNotes.ts": {
+    "mtime": 1783091515.5432642,
+    "ast_hash": "eca153fd295242754bc0606850b2d8e2",
+    "semantic_hash": "eca153fd295242754bc0606850b2d8e2"
+  },
+  "tests/integration/app-happy-path.spec.ts": {
+    "mtime": 1783175768.7938607,
+    "ast_hash": "f7f6d50e65b7105e368ed83c261d529f",
+    "semantic_hash": ""
+  },
+  "tests/integration/fixtures/electronMock.ts": {
+    "mtime": 1783099043.6265998,
+    "ast_hash": "cdb155c6bb1c2caa245903b59c210fab",
+    "semantic_hash": "cdb155c6bb1c2caa245903b59c210fab"
+  },
+  "tests/integration/mocked-backend.spec.ts": {
+    "mtime": 1783099091.8118465,
+    "ast_hash": "9766f1e489e7bcda02cd15224013a42a",
+    "semantic_hash": "9766f1e489e7bcda02cd15224013a42a"
+  },
+  "BUILD_FIX_SUMMARY.md": {
+    "mtime": 1783047606.0001833,
+    "ast_hash": "d443574dd64d1d5f74a99aeff6e7a690",
+    "semantic_hash": "d443574dd64d1d5f74a99aeff6e7a690"
+  },
+  "ENGINE_ANALYSIS_FIX.md": {
+    "mtime": 1783048141.0697513,
+    "ast_hash": "bf8f15beb28fec314482ed9e3d394c04",
+    "semantic_hash": "bf8f15beb28fec314482ed9e3d394c04"
+  },
+  "ENGINE_INITIALIZATION_FIX.md": {
+    "mtime": 1783060151.3653634,
+    "ast_hash": "e14c053f15c7cc62aa43c29304d87b1b",
+    "semantic_hash": "e14c053f15c7cc62aa43c29304d87b1b"
+  },
+  "REFACTORING_COMPLETE.md": {
+    "mtime": 1783047402.5587583,
+    "ast_hash": "a9c3b465ce57ad6e33284bee2ea1143b",
+    "semantic_hash": "a9c3b465ce57ad6e33284bee2ea1143b"
+  },
+  "UI_EVENTS_FIX.md": {
+    "mtime": 1783060788.6433342,
+    "ast_hash": "a3ad63d87d46af48c3739d0baa7dc001",
+    "semantic_hash": "a3ad63d87d46af48c3739d0baa7dc001"
+  },
+  "openspec/archive/2026-07-04-fix-analysis-engine-status-and-timing/.openspec.yaml": {
+    "mtime": 1783126196.2338133,
+    "ast_hash": "ff548009fead911022d5b7c4c25d58ae",
+    "semantic_hash": "ff548009fead911022d5b7c4c25d58ae"
+  },
+  "openspec/archive/2026-07-04-fix-analysis-engine-status-and-timing/design.md": {
+    "mtime": 1783126299.7618992,
+    "ast_hash": "4f93ba4f70b44519701c808270090053",
+    "semantic_hash": "4f93ba4f70b44519701c808270090053"
+  },
+  "openspec/archive/2026-07-04-fix-analysis-engine-status-and-timing/proposal.md": {
+    "mtime": 1783126270.172551,
+    "ast_hash": "5c74314d8c09aa1658c2222b89fc641c",
+    "semantic_hash": "5c74314d8c09aa1658c2222b89fc641c"
+  },
+  "openspec/archive/2026-07-04-fix-analysis-engine-status-and-timing/specs/analysis-and-llm-guidance/spec.md": {
+    "mtime": 1783126334.096782,
+    "ast_hash": "949e18e03750cc485f754a38187ddf32",
+    "semantic_hash": "949e18e03750cc485f754a38187ddf32"
+  },
+  "openspec/archive/2026-07-04-fix-analysis-engine-status-and-timing/specs/analysis-process-orchestration/spec.md": {
+    "mtime": 1783126345.5760396,
+    "ast_hash": "0deeb8966ab9dd673769201d7c81a9da",
+    "semantic_hash": "0deeb8966ab9dd673769201d7c81a9da"
+  },
+  "openspec/archive/2026-07-04-fix-analysis-engine-status-and-timing/tasks.md": {
+    "mtime": 1783126900.9269476,
+    "ast_hash": "9d70f7d4dc7f8b76ba19bad756323938",
+    "semantic_hash": "9d70f7d4dc7f8b76ba19bad756323938"
+  },
+  "openspec/changes/archive/2026-07-03-highlight-current-move-in-line/.openspec.yaml": {
+    "mtime": 1782792746.167983,
+    "ast_hash": "3a2e665cfb0f43d1733f16a967480b31",
+    "semantic_hash": "3a2e665cfb0f43d1733f16a967480b31"
+  },
+  "openspec/changes/archive/2026-07-03-highlight-current-move-in-line/design.md": {
+    "mtime": 1782792836.3884637,
+    "ast_hash": "21772facb25abb5c75857fe66aa02df7",
+    "semantic_hash": "21772facb25abb5c75857fe66aa02df7"
+  },
+  "openspec/changes/archive/2026-07-03-highlight-current-move-in-line/proposal.md": {
+    "mtime": 1782792766.8739364,
+    "ast_hash": "a29e8b0127da242c08eddd70f722c2e2",
+    "semantic_hash": "a29e8b0127da242c08eddd70f722c2e2"
+  },
+  "openspec/changes/archive/2026-07-03-highlight-current-move-in-line/specs/current-move-highlight/spec.md": {
+    "mtime": 1782792799.5046408,
+    "ast_hash": "fefbd56ac763ba8141789b79f31f111c",
+    "semantic_hash": "fefbd56ac763ba8141789b79f31f111c"
+  },
+  "openspec/changes/archive/2026-07-03-highlight-current-move-in-line/tasks.md": {
+    "mtime": 1782793499.4559612,
+    "ast_hash": "5ae4e02b5c0ec347f34f770ddcb71cf8",
+    "semantic_hash": "5ae4e02b5c0ec347f34f770ddcb71cf8"
+  },
+  "openspec/changes/archive/2026-07-03-improve-analysis-panel/.openspec.yaml": {
+    "mtime": 1783072192.991421,
+    "ast_hash": "02f6db0a449be79349504bc19b245e9b",
+    "semantic_hash": "02f6db0a449be79349504bc19b245e9b"
+  },
+  "openspec/changes/archive/2026-07-03-improve-analysis-panel/design.md": {
+    "mtime": 1783072369.6339865,
+    "ast_hash": "c042461b531a813272729e8e1d970079",
+    "semantic_hash": "c042461b531a813272729e8e1d970079"
+  },
+  "openspec/changes/archive/2026-07-03-improve-analysis-panel/proposal.md": {
+    "mtime": 1783072215.9189517,
+    "ast_hash": "7b93942839cd20835fb8550387a84ca8",
+    "semantic_hash": "7b93942839cd20835fb8550387a84ca8"
+  },
+  "openspec/changes/archive/2026-07-03-improve-analysis-panel/specs/analysis-and-llm-guidance/spec.md": {
+    "mtime": 1783072333.5801344,
+    "ast_hash": "f3a4c86fe0d6d3a6052b5332a0662bee",
+    "semantic_hash": "f3a4c86fe0d6d3a6052b5332a0662bee"
+  },
+  "openspec/changes/archive/2026-07-03-improve-analysis-panel/specs/llm-analysis-modal/spec.md": {
+    "mtime": 1783072319.1168,
+    "ast_hash": "5695d40131b3ec3f9cc10852b2de7e22",
+    "semantic_hash": "5695d40131b3ec3f9cc10852b2de7e22"
+  },
+  "openspec/changes/archive/2026-07-03-improve-line-detail-and-llm-analysis/.openspec.yaml": {
+    "mtime": 1782956290.0629544,
+    "ast_hash": "7f48377552c3f516e4e868cb6ea8d4f2",
+    "semantic_hash": "7f48377552c3f516e4e868cb6ea8d4f2"
+  },
+  "openspec/changes/archive/2026-07-03-improve-line-detail-and-llm-analysis/design.md": {
+    "mtime": 1782956390.9461648,
+    "ast_hash": "1431dab0177f57d444abf61f685dd1b4",
+    "semantic_hash": "1431dab0177f57d444abf61f685dd1b4"
+  },
+  "openspec/changes/archive/2026-07-03-improve-line-detail-and-llm-analysis/proposal.md": {
+    "mtime": 1782956312.5319285,
+    "ast_hash": "8635c4a6f9171f68d83f798513634eab",
+    "semantic_hash": "8635c4a6f9171f68d83f798513634eab"
+  },
+  "openspec/changes/archive/2026-07-03-improve-line-detail-and-llm-analysis/specs/board-move-tracking/spec.md": {
+    "mtime": 1782956336.5594225,
+    "ast_hash": "1a8c6ccd818b3cddf884b2627eb58837",
+    "semantic_hash": "1a8c6ccd818b3cddf884b2627eb58837"
+  },
+  "openspec/changes/archive/2026-07-03-improve-line-detail-and-llm-analysis/specs/line-detail-display/spec.md": {
+    "mtime": 1782956365.5944254,
+    "ast_hash": "79673d19d98cc1d12d8fc215e33bb566",
+    "semantic_hash": "79673d19d98cc1d12d8fc215e33bb566"
+  },
+  "openspec/changes/archive/2026-07-03-improve-line-detail-and-llm-analysis/specs/line-selection-history/spec.md": {
+    "mtime": 1782956351.7828262,
+    "ast_hash": "9f4ac35afad06dc0fea5b140b874971b",
+    "semantic_hash": "9f4ac35afad06dc0fea5b140b874971b"
+  },
+  "openspec/changes/archive/2026-07-03-improve-line-detail-and-llm-analysis/specs/line-specific-llm-analysis/spec.md": {
+    "mtime": 1782956359.3539667,
+    "ast_hash": "10028388af9916e13461aa89b07255d1",
+    "semantic_hash": "10028388af9916e13461aa89b07255d1"
+  },
+  "openspec/changes/archive/2026-07-03-improve-line-detail-and-llm-analysis/specs/selected-line-tracking/spec.md": {
+    "mtime": 1782956343.8718326,
+    "ast_hash": "5f7a9180766bfd1b1bf40e936c3f0fd2",
+    "semantic_hash": "5f7a9180766bfd1b1bf40e936c3f0fd2"
+  },
+  "openspec/changes/archive/2026-07-03-improve-line-detail-and-llm-analysis/tasks.md": {
+    "mtime": 1782956415.7854342,
+    "ast_hash": "feb8fe22617a684ec27cf8d5710b73a9",
+    "semantic_hash": "feb8fe22617a684ec27cf8d5710b73a9"
+  },
+  "openspec/changes/archive/2026-07-04-refactor-advanced-analysis-notes/.openspec.yaml": {
+    "mtime": 1783091027.2045093,
+    "ast_hash": "02f6db0a449be79349504bc19b245e9b",
+    "semantic_hash": "02f6db0a449be79349504bc19b245e9b"
+  },
+  "openspec/changes/archive/2026-07-04-refactor-advanced-analysis-notes/design.md": {
+    "mtime": 1783091114.7080064,
+    "ast_hash": "f4b8d2c870da315e36923051c8603bf5",
+    "semantic_hash": "f4b8d2c870da315e36923051c8603bf5"
+  },
+  "openspec/changes/archive/2026-07-04-refactor-advanced-analysis-notes/proposal.md": {
+    "mtime": 1783091048.3121274,
+    "ast_hash": "5cdc2a0d3e637f1c61998fa2eedc57f1",
+    "semantic_hash": "5cdc2a0d3e637f1c61998fa2eedc57f1"
+  },
+  "openspec/changes/archive/2026-07-04-refactor-advanced-analysis-notes/specs/markdown-note-editor/spec.md": {
+    "mtime": 1783091074.3292863,
+    "ast_hash": "9a5c2128eba584c226cbdf5f0f4534b3",
+    "semantic_hash": "9a5c2128eba584c226cbdf5f0f4534b3"
+  },
+  "openspec/changes/archive/2026-07-04-refactor-advanced-analysis-notes/specs/move-level-notes/spec.md": {
+    "mtime": 1783091065.4577625,
+    "ast_hash": "a4171df43452a13e7ae633a067ee73c3",
+    "semantic_hash": "a4171df43452a13e7ae633a067ee73c3"
+  },
+  "openspec/changes/archive/2026-07-04-refactor-advanced-analysis-notes/specs/pgn-export-with-notes/spec.md": {
+    "mtime": 1783091081.0125542,
+    "ast_hash": "9d8e0ad74746fb97bb4efaf39123e498",
+    "semantic_hash": "9d8e0ad74746fb97bb4efaf39123e498"
+  },
+  "openspec/changes/archive/2026-07-04-refactor-advanced-analysis-notes/tasks.md": {
+    "mtime": 1783092190.4988706,
+    "ast_hash": "e56f6aebaba0b2411f2e8dabb7dc70b6",
+    "semantic_hash": "e56f6aebaba0b2411f2e8dabb7dc70b6"
+  },
+  "openspec/specs/markdown-note-editor/spec.md": {
+    "mtime": 1783157592.2273912,
+    "ast_hash": "9a5c2128eba584c226cbdf5f0f4534b3",
+    "semantic_hash": "9a5c2128eba584c226cbdf5f0f4534b3"
+  },
+  "openspec/specs/move-level-notes/spec.md": {
+    "mtime": 1783157596.9525216,
+    "ast_hash": "a4171df43452a13e7ae633a067ee73c3",
+    "semantic_hash": "a4171df43452a13e7ae633a067ee73c3"
+  },
+  "openspec/specs/pgn-export-with-notes/spec.md": {
+    "mtime": 1783157600.5528343,
+    "ast_hash": "9d8e0ad74746fb97bb4efaf39123e498",
+    "semantic_hash": "9d8e0ad74746fb97bb4efaf39123e498"
+  },
+  "tests/integration/single-analysis-per-move.spec.ts": {
+    "mtime": 1783171638.9254084,
+    "ast_hash": "193df56f9ce93edccdf9c2441a27d126",
+    "semantic_hash": ""
+  },
+  "scripts/sync-version.js": {
+    "mtime": 1783179599.56885,
+    "ast_hash": "1e22000f0854e236a9c197c7e0cfb394",
+    "semantic_hash": ""
+  },
+  "src/components/SelectedLineMoves.tsx": {
+    "mtime": 1783180087.2542155,
+    "ast_hash": "8c091969ebd4189f1fb3de136ba5e2b5",
+    "semantic_hash": ""
+  },
+  "tests/integration/analysis-line-controls.spec.ts": {
+    "mtime": 1783180479.3323762,
+    "ast_hash": "4a4a19393cb6b087fff16d4a1727c6b1",
+    "semantic_hash": ""
+  },
+  "openspec/changes/analysis-line-controls-and-version/.openspec.yaml": {
+    "mtime": 1783177093.9602349,
+    "ast_hash": "ff548009fead911022d5b7c4c25d58ae",
+    "semantic_hash": ""
+  },
+  "openspec/changes/analysis-line-controls-and-version/design.md": {
+    "mtime": 1783177635.9891436,
+    "ast_hash": "dd5eff74164040e98544c4f7d9d6c97e",
+    "semantic_hash": ""
+  },
+  "openspec/changes/analysis-line-controls-and-version/proposal.md": {
+    "mtime": 1783177305.87778,
+    "ast_hash": "ff3c3e5a363023849269345bca36593c",
+    "semantic_hash": ""
+  },
+  "openspec/changes/analysis-line-controls-and-version/specs/analysis-and-llm-guidance/spec.md": {
+    "mtime": 1783177353.1967802,
+    "ast_hash": "a59618ef888fcffedc447da8a85f5885",
+    "semantic_hash": ""
+  },
+  "openspec/changes/analysis-line-controls-and-version/specs/build-distribution/spec.md": {
+    "mtime": 1783177357.5088854,
+    "ast_hash": "4e6653088e2b72f6e3046bcff5ba7fdf",
+    "semantic_hash": ""
+  },
+  "openspec/changes/analysis-line-controls-and-version/specs/collapsible-line-list/spec.md": {
+    "mtime": 1783177341.3369796,
+    "ast_hash": "892b410b63e779bc6de444b722e1881c",
+    "semantic_hash": ""
+  },
+  "openspec/changes/analysis-line-controls-and-version/specs/selected-line-moves-panel/spec.md": {
+    "mtime": 1783177334.408213,
+    "ast_hash": "e9bbf88f2b459e8bff59a10455fb9f8e",
+    "semantic_hash": ""
+  },
+  "openspec/changes/analysis-line-controls-and-version/tasks.md": {
+    "mtime": 1783180367.7718084,
+    "ast_hash": "99fc06b9cc14cffd0188a72ccafa7f7a",
+    "semantic_hash": ""
+  }
+}

@@ -565,7 +565,10 @@ test.describe('Full-game SAN integrity (line selection + drag mix)', () => {
     for (let i = 0; i < game.length; i++) {
       await settle();
       if (methods[i] === 'select') {
-        await page.locator('[data-testid="analysis-line"]').nth(lineIdx[i]).click({ timeout: 10000 });
+        // The mock reports the game move as the engine's bestMove, so the renderer
+        // floats that line to the top (index 0) regardless of which multipv slot
+        // (lineIdx[i]) its PV was placed in. Click the top line to play it.
+        await page.locator('[data-testid="analysis-line"]').nth(0).click({ timeout: 10000 });
       } else {
         await page.waitForTimeout(200); // let the board settle/animate before grabbing a piece
         await dragMove(game[i].from, game[i].to);
@@ -579,5 +582,137 @@ test.describe('Full-game SAN integrity (line selection + drag mix)', () => {
     const expected = game.map((g) => g.san);
     expect(rendered.map((s) => s.trim())).toEqual(expected);
     expect(rendered.length).toBeGreaterThanOrEqual(10);
+  });
+});
+
+/**
+ * Regression for the bug where dragging through 1.e4 e5 2.Nf3 Nc6 stopped sending
+ * anything to the LLM after the opening. Desired behaviour: every new board
+ * position gets its own fresh LLM explanation, but only once >= 2 plies have been
+ * played (from the position after 1.e4 e5 onward) — nothing before.
+ */
+test.describe('Per-position LLM explanation (regression: analysis stalling mid-line)', () => {
+  test('explains each new position from ply 2 onward, and stays quiet before that', async ({ page }) => {
+    // The mock engine always recommends the remaining book line as line 0, so each
+    // drag move follows the line (the case that previously suppressed the LLM).
+    const theory = ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1b5'];
+    const chess = new Chess();
+    const posMap: Record<string, string> = {};
+    posMap[chess.fen()] = theory.join(' ');
+    const fenAfter: string[] = []; // fenAfter[i] = FEN after theory[0..i]
+    for (let i = 0; i < theory.length; i++) {
+      const m = theory[i];
+      chess.move({ from: m.slice(0, 2), to: m.slice(2, 4), promotion: 'q' });
+      fenAfter.push(chess.fen());
+      posMap[chess.fen()] = theory.slice(i + 1).join(' ') || 'd2d4';
+    }
+    const startFen = new Chess().fen();
+    const fenAfterE4 = fenAfter[0];   // ply 1 — must NOT be explained
+    const fenAfterE5 = fenAfter[1];   // ply 2 — first explained
+    const fenAfterNc6 = fenAfter[3];  // ply 4 — the regression: must be explained
+
+    await page.addInitScript((cfg: { map: Record<string, string>; startFen: string }) => {
+      const norm = (f?: string) => (!f || f === 'start' ? cfg.startFen : f);
+      const build = (fen?: string) => {
+        const pv = cfg.map[norm(fen)] || 'd2d4 d7d5 c2c4 e7e6 b1c3';
+        const lines = [0, 1, 2, 3].map((i) => ({
+          rank: i + 1,
+          score: { type: 'cp', value: 30 - i * 5 },
+          pv: i === 0 ? pv : 'd2d4 d7d5 c2c4 e7e6 b1c3',
+        }));
+        return { ok: true, analysis: { bestMove: pv.split(' ')[0], lines } };
+      };
+      const bus = () => { const a: any[] = []; return { a, reg: (cb: any) => { a.push(cb); return () => { const k = a.indexOf(cb); if (k >= 0) a.splice(k, 1); }; } }; };
+      const es = bus(), ed = bus();
+      const fire = (a: any[], p: any) => a.slice().forEach((cb) => { try { cb(p); } catch { /* noop */ } });
+      const patch = () => {
+        const api = (window as any).electronAPI;
+        if (!api) { setTimeout(patch, 0); return; }
+        api.onEngineAnalysisStart = es.reg;
+        api.onEngineAnalysisDone = ed.reg;
+        (window as any).__explainFens = [];
+        const origExplain = api.explainLines.bind(api);
+        api.explainLines = async (...args: any[]) => {
+          (window as any).__explainFens.push(args[0]?.fen);
+          return origExplain(...args);
+        };
+        api.analyzePosition = async (x: any) => {
+          fire(es.a, { engine: 'stockfish' });
+          const r = build(x && x.fen);
+          fire(ed.a, { engine: 'stockfish' });
+          return r;
+        };
+        api.analyzeBoardPosition = api.analyzePosition;
+      };
+      patch();
+    }, { map: posMap, startFen });
+
+    await page.goto('/');
+    await page.waitForSelector('[data-testid="chat-panel"]', { timeout: 15000 });
+    await page.waitForSelector('[data-testid="analysis-line"]', { timeout: 15000 });
+    await page.waitForSelector('[data-testid="puzzle-board"] .square-e2 img', { timeout: 15000 });
+
+    const boardBox = (await page.locator('[data-testid="puzzle-board"]').boundingBox())!;
+    await page.waitForFunction(
+      ([x, y]) => { const el = document.elementFromPoint(x, y); return !!el && !!el.closest('[data-testid="puzzle-board"]'); },
+      [boardBox.x + boardBox.width / 2, boardBox.y + boardBox.height / 2],
+      { timeout: 15000 }
+    );
+
+    const squareHittable = async (sq: string) => {
+      const b = (await page.locator(`[data-testid="puzzle-board"] .square-${sq}`).first().boundingBox())!;
+      await page.waitForFunction(
+        ([x, y]) => { const el = document.elementFromPoint(x, y); return !!el && !!el.closest('[data-testid="puzzle-board"]'); },
+        [b.x + b.width / 2, b.y + b.height / 2],
+        { timeout: 8000 }
+      );
+    };
+
+    const dragMove = async (from: string, to: string) => {
+      await squareHittable(from);
+      await squareHittable(to);
+      const s = await page.locator(`[data-testid="puzzle-board"] .square-${from} img`).first().boundingBox();
+      const d = await page.locator(`[data-testid="puzzle-board"] .square-${to}`).first().boundingBox();
+      if (!s || !d) throw new Error(`missing square ${from}->${to}`);
+      const sx = s.x + s.width / 2, sy = s.y + s.height / 2;
+      const dx = d.x + d.width / 2, dy = d.y + d.height / 2;
+      await page.mouse.move(sx, sy);
+      await page.mouse.down();
+      await page.waitForTimeout(30);
+      await page.mouse.move((sx + dx) / 2, (sy + dy) / 2, { steps: 6 });
+      await page.waitForTimeout(30);
+      await page.mouse.move(dx, dy, { steps: 6 });
+      await page.waitForTimeout(30);
+      await page.mouse.up();
+    };
+
+    const backdrops = page.locator('.MuiBackdrop-root');
+    const settle = async () => {
+      for (let k = 0; k < await backdrops.count(); k++) {
+        await backdrops.nth(k).waitFor({ state: 'hidden', timeout: 4000 }).catch(() => {});
+      }
+    };
+
+    const explainFens = () => page.evaluate(() => (window as any).__explainFens as string[]);
+
+    // 1. e4 e5 2. Nf3 Nc6 — every ply follows the mocked "book" line exactly.
+    const moves: Array<[string, string]> = [['e2', 'e4'], ['e7', 'e5'], ['g1', 'f3'], ['b8', 'c6']];
+    for (const [from, to] of moves) {
+      await settle();
+      await page.waitForTimeout(200);
+      await dragMove(from, to);
+      await page.waitForTimeout(600);
+    }
+
+    // Ply 2 (after 1.e4 e5) is the first position that should be explained; the key
+    // regression is ply 4 (after Nc6) — a book move that used to send nothing.
+    await expect.poll(async () => (await explainFens()).includes(fenAfterE5), { timeout: 8000 }).toBe(true);
+    await expect.poll(async () => (await explainFens()).includes(fenAfterNc6), { timeout: 8000 }).toBe(true);
+
+    // Nothing before ply 2: the start position (ply 0) and after 1.e4 (ply 1) must
+    // never be sent to the LLM.
+    const fens = await explainFens();
+    expect(fens).not.toContain(startFen);
+    expect(fens).not.toContain(fenAfterE4);
   });
 });

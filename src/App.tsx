@@ -40,7 +40,6 @@ import ChatPanel from "./components/ChatPanel";
 import AIImportDialog from "./components/AIImportDialog";
 import NoteEditorPopup from "./components/NoteEditorPopup";
 import { buildPgnWithNotes } from "./utils/pgnNotes";
-import StatusBanner from "./components/StatusBanner";
 import AppStatusBar from "./components/AppStatusBar";
 import BoardPositionEditor from "./components/BoardPositionEditor";
 import ProfileIcon from "./components/ProfileIcon";
@@ -50,6 +49,7 @@ import {
   deriveFenSequence,
   parseFenOrPgnInput,
   parseStockfishLine,
+  pliesFromFen,
   sanWithGlyph,
   sortLinesByScore
 } from "./utils/analysisHelpers";
@@ -237,9 +237,10 @@ export default function App() {
   const setCurrentMoveIndex = (n: number) => setCurrentMoveIndexState(Math.max(0, n));
   const setDeepAnalysisResults = ({ lineIndex, results }: { lineIndex: number; results: Record<string, string> }) =>
     setDeepAnalysisResultsState((prev) => ({ ...prev, [lineIndex]: results }));
-  const selectEngineLine = ({ index, lineId }: { index: number; lineId?: string }) => {
+  const selectEngineLine = ({ index, lineId, baseFen }: { index: number; lineId?: string; baseFen?: string }) => {
     setSelectedEngineLineIndex(index);
     setCurrentMoveIndexState(0);
+    if (baseFen !== undefined) setSelectedLineBaseFen(baseFen);
     if (lineId) setSelectedAnalysisLineId(lineId);
   };
   const deselectEngineLine = () => {
@@ -287,7 +288,7 @@ export default function App() {
   const [selectedEngineLineData, setSelectedEngineLineData] = useState<AnalysisLine | null>(null);
   const [selectedLineAnalysisEntry, setSelectedLineAnalysisEntry] = useState<AnalysisEntry | null>(null);
   const [lineExplanations, setLineExplanations] = useState<Record<number, string>>({});
-  const [chessInstance, setChessInstance] = useState<any>(null);;
+  const [, setChessInstance] = useState<any>(null);
   const [currentOpening, setCurrentOpening] = useState<{ name: string; eco: string } | null>(null);
   const [playedMoves, setPlayedMoves] = useState<string[]>([]);
   // History stack for drilling into an engine line: selecting a line previews its first
@@ -311,6 +312,10 @@ export default function App() {
   const [appLoading, setAppLoading] = useState<boolean>(true);
   const [engineWarming, setEngineWarming] = useState<boolean>(false);
   const [engineAnalyzing, setEngineAnalyzing] = useState<boolean>(false);
+  // Single continuous "analysis busy" flag for the overlay spinner. Kept open by a
+  // brief linger so the engine→LLM handoff (a sub-frame gap where neither phase is
+  // active) doesn't flash the spinner off and back on. See the effect below.
+  const [analysisSpinnerOpen, setAnalysisSpinnerOpen] = useState<boolean>(false);
   const [profileRefreshTrigger, setProfileRefreshTrigger] = useState<number>(0);
   const [settingsLoaded, setSettingsLoaded] = useState<boolean>(false);
   const [lineDialogOpen, setLineDialogOpen] = useState<boolean>(false);
@@ -361,6 +366,13 @@ export default function App() {
   const suppressNextAutoEvalRef = useRef(false);
   // Track the FEN being analyzed when user makes a move so we can fetch LLM for it
   const lastAnalyzedFenRef = useRef<string>("");
+  // The FEN that `analysisEntries` were last computed for. The auto LLM-explanation
+  // effect only fires once the entries match the current position, so it never
+  // explains a new position using stale line data from the previous one.
+  const entriesFenRef = useRef<string>("");
+  // The FEN we last fetched an auto LLM explanation for. Dedupes the fetch so each
+  // distinct position is explained once; a new position always re-triggers.
+  const explanationFenRef = useRef<string>("");
   // Training agent state (Opening / Endgame)
   const [trainingMoves, setTrainingMoves] = useState<Array<{ uci: string; san: string; commentary: string }>>([]);
   const [trainingMoveIndex, setTrainingMoveIndex] = useState<number>(-1);
@@ -652,9 +664,8 @@ export default function App() {
     if (!electronAPI?.onEngineAnalysisStart || !electronAPI?.onEngineAnalysisDone || !electronAPI?.onLlmGenerationStart || !electronAPI?.onLlmGenerationDone) return;
 
     // Engine analysis phase
-    const offEngineStart = electronAPI.onEngineAnalysisStart(({ engine }) => {
+    const offEngineStart = electronAPI.onEngineAnalysisStart(() => {
       setAnalysisPhase('engine-running');
-      setAnalysisStatus(`Analyzing with ${engine?.toUpperCase() || 'ENGINE'}...`);
       setEngineAnalyzing(true);
     });
 
@@ -703,6 +714,22 @@ export default function App() {
     const t = setTimeout(() => setAnalysisStatus(""), 2000);
     return () => clearTimeout(t);
   }, [analysisStatus]);
+
+  // Engine and LLM phases feed one overlay spinner. Opening is immediate; closing
+  // is deferred ~300ms so the brief gap between engine-done and llm-start (or the
+  // isExplanationLoading flip) can't blink the spinner off — the two phases read as
+  // one smooth, continuous "analyzing…" state.
+  const engineSpinnerBusy = !appLoading && (engineWarming || engineAnalyzing || analysisPhase === 'engine-running');
+  const llmSpinnerBusy = isExplanationLoading || analysisPhase === 'llm-running';
+  const analysisBusy = engineSpinnerBusy || llmSpinnerBusy;
+  useEffect(() => {
+    if (analysisBusy) {
+      setAnalysisSpinnerOpen(true);
+      return;
+    }
+    const t = setTimeout(() => setAnalysisSpinnerOpen(false), 300);
+    return () => clearTimeout(t);
+  }, [analysisBusy]);
 
   // Stop the engine and clear opening label when the app mode changes
   const prevResponseTypeRef = useRef<import("./types").ResponseType | null>(null);
@@ -901,11 +928,17 @@ export default function App() {
           multiPv: 4,
         });
         if (cancelled || !response?.ok) return;
-        const lines: AnalysisLine[] = (response as any).analysis?.lines ?? [];
-        if (!lines.length) return;
+        const analysis = (response as any).analysis ?? {};
+        const rawLines: AnalysisLine[] = analysis.lines ?? [];
+        if (!rawLines.length) return;
+        // Order lines: engine bestmove first, its ponder second, then by multipv
+        // rank — same ordering the main analysis path uses, so the eval bar and
+        // line list stay consistent whichever path produced them.
+        const lines = sortLinesByScore(rawLines, analysis.bestMove, analysis.ponderMove);
         // Update lines and entries from background analysis
         setAnalysisLines(lines);
         setAnalysisEntries(lines.map((line, i) => parseStockfishLine(line, i + 1, currentFen)));
+        entriesFenRef.current = currentFen; // entries now describe this position
         setExplorationStack([]); // a real board move starts a fresh top-level analysis
 
         // Don't clear lineExplanations here — let handleAnalysisSuccess manage it based on move count
@@ -991,10 +1024,10 @@ export default function App() {
   );
 
   const handleAnalysisSuccess = useCallback(
-    (lines: AnalysisLine[], fen: string): void => {
+    (lines: AnalysisLine[], fen: string, bestMove?: string, ponderMove?: string): void => {
       if (!lines?.length) return; // keep previous eval on the bar when result is empty
-      // Sort lines by score (best first)
-      const sortedLines = sortLinesByScore(lines);
+      // Order lines: engine bestmove first, its ponder second, then by multipv rank.
+      const sortedLines = sortLinesByScore(lines, bestMove, ponderMove);
       setAnalysisLines(sortedLines);
       setSelectedEngineLineData(null);
       setDeepAnalysisResults({ lineIndex: -1, results: {} });
@@ -1003,6 +1036,9 @@ export default function App() {
         parseStockfishLine(line, index + 1, fen)
       );
       setAnalysisEntries(entries);
+      // These entries describe `fen`; record it so the auto LLM-explanation effect
+      // knows the entries are current for this position before it fetches.
+      entriesFenRef.current = fen;
       setAnalysisStatus("");
 
       // Extract move number from FEN (format: "... w KQkq - 0 1" where last number is move count)
@@ -1013,37 +1049,35 @@ export default function App() {
       // Auto-select after White plays 1 move (move number > 1, meaning Black has moved or about to move)
       const whiteHasMovedOnce = moveNumber > 1;
 
-      // Only fetch LLM after White plays 2 moves AND Black plays 1: moveNumber >= 2 AND Black to move
-      const shouldFetchLLM = moveNumber >= 2 && activeColor === 'b';
-
-      console.log(`[handleAnalysisSuccess] Move ${moveNumber}, color: ${activeColor}, shouldFetchLLM: ${shouldFetchLLM}`);
+      console.log(`[handleAnalysisSuccess] Move ${moveNumber}, color: ${activeColor}`);
 
       if (whiteHasMovedOnce) {
         // Only auto-select if the user hasn't explicitly selected a line
         // (selectedEngineLineIndex is null means no user selection, so auto-select is appropriate)
         if (selectedEngineLineIndexRef.current === null) {
           console.log(`[handleAnalysisSuccess] White has moved - auto-selecting first line (no user selection)`);
-          selectEngineLine({ index: 0 });
+          selectEngineLine({ index: 0, baseFen: fen });
         } else {
+          // A line stays selected, but `entries` above was just (re)parsed relative
+          // to this `fen` — the base must track it too, or matchMoveAgainstLine
+          // replays the new entries' moves against a stale, already-superseded base.
           console.log(`[handleAnalysisSuccess] White has moved - NOT auto-selecting (user has selected line ${selectedEngineLineIndexRef.current})`);
-        }
-
-        // Set currentMoveIndex based on how many moves have been made
-        if (chessInstance) {
-          const historyLength = chessInstance.history().length;
-          const moveIndexToHighlight = Math.max(0, historyLength - 1);
-          console.log(`[handleAnalysisSuccess] Setting currentMoveIndex to ${moveIndexToHighlight} (history length: ${historyLength})`);
-          setCurrentMoveIndex(moveIndexToHighlight);
-        }
-        if (shouldFetchLLM) {
-          console.log(`[handleAnalysisSuccess] Sufficient moves for LLM - clearing explanations for fetch`);
-          setLineExplanations({});
-        } else {
-          console.log(`[handleAnalysisSuccess] Too early for LLM - keeping old explanations`);
+          setSelectedLineBaseFen(fen);
+          setCurrentMoveIndex(0);
         }
       } else {
-        console.log(`[handleAnalysisSuccess] Starting position or White hasn't moved - deselecting`);
-        deselectEngineLine();
+        // Starting position / White hasn't moved once. Only clear an AUTO-selection.
+        // If the user explicitly selected a line (e.g. picked a line from the start
+        // position, which re-analyses the after-first-move FEN whose move number is
+        // still 1), keep that selection so the "Moves of selected line" box survives.
+        if (selectedEngineLineIndexRef.current === null) {
+          console.log(`[handleAnalysisSuccess] Starting position or White hasn't moved - deselecting`);
+          deselectEngineLine();
+        } else {
+          console.log(`[handleAnalysisSuccess] White hasn't moved but user selected line ${selectedEngineLineIndexRef.current} - keeping selection`);
+          setSelectedLineBaseFen(fen);
+          setCurrentMoveIndex(0);
+        }
       }
     },
     []
@@ -1080,8 +1114,9 @@ export default function App() {
           setAnalysisStatus((response as any)?.error || "Engine analysis failed.");
           return;
         }
-        const lines = (response as any).analysis?.lines || [];
-        handleAnalysisSuccess(lines, fen);
+        const analysis = (response as any).analysis || {};
+        const lines = analysis.lines || [];
+        handleAnalysisSuccess(lines, fen, analysis.bestMove, analysis.ponderMove);
 
         // Deep LLM pass when in advanced mode
         if (deepMode && lines.length > 0 && electronAPI?.deepAnalyzeLines) {
@@ -1324,7 +1359,10 @@ Make it detailed and exciting!`;
           setCurrentFen(newFen);
           // Append the first move from the line to playedMoves (don't replace existing moves)
           setPlayedMoves(prev => [...prev, moves[0]]);
-          // Trigger analysis on the new position
+          // Trigger analysis on the new position. Record the FEN first so the reactive
+          // "line selected" effect below sees it as already-analyzed and doesn't fire a
+          // duplicate engine + LLM pass for the same position.
+          lastAnalyzedFenRef.current = newFen;
           setTimeout(() => {
             console.log(`[handleSelectEngineLine] Calling runAnalysis after first move`);
             runAnalysis(newFen);
@@ -1351,6 +1389,7 @@ Make it detailed and exciting!`;
       setExplorationStack((stack) => stack.slice(0, -1));
       setAnalysisLines(parent.lines);
       setAnalysisEntries(parent.entries);
+      entriesFenRef.current = parent.fen; // restored entries describe the parent position
       suppressNextAutoEvalRef.current = true;
       setCurrentFen(parent.fen);
       lastListResponseRef.current = parent.listResponse;
@@ -1704,7 +1743,11 @@ Make it detailed and exciting!`;
     // follows the selected line, otherwise run a fresh analysis.
     try {
       setCurrentFen(newFen);
-      const match = matchMoveAgainstLine(newFen, selectedEngineLineIndex, analysisEntries, currentMoveIndex, currentFen);
+      // analysisEntries' moves are indexed relative to the line's fixed starting
+      // position (selectedLineBaseFen), not the ever-advancing currentFen — using
+      // currentFen here would re-replay already-played moves on top of themselves
+      // and fail to match every move after the first one following a line.
+      const match = matchMoveAgainstLine(newFen, selectedEngineLineIndex, analysisEntries, currentMoveIndex, selectedLineBaseFen);
       console.log(`[handleBoardMove] Match result:`, {
         moveMatched: match.matched,
         shouldAnalyze: match.shouldRunAnalysis,
@@ -1713,15 +1756,20 @@ Make it detailed and exciting!`;
       if (match.matched) {
         setCurrentMoveIndex(match.newMoveIndex || 0);
       }
-      if (match.shouldRunAnalysis) {
-        console.log(`[handleBoardMove] Triggering analysis for new position`);
-        lastAnalyzedFenRef.current = newFen;
-        runAnalysis(newFen);
-      }
+      // Analyze EVERY real board move, not just deviations from the selected line.
+      // The user wants fresh engine + LLM commentary on each new position as they
+      // play through a game; previously a move that followed the line skipped
+      // analysis, so nothing reached the LLM after the opening (e.g. after
+      // 1.e4 e5 2.Nf3 Nc6). Suppress the background auto-eval so this is the single
+      // analysis for this move rather than a duplicate.
+      console.log(`[handleBoardMove] Triggering analysis for new position`);
+      lastAnalyzedFenRef.current = newFen;
+      suppressNextAutoEvalRef.current = true;
+      runAnalysis(newFen);
     } catch (err) {
       console.error(`[handleBoardMove] Error handling move:`, err);
     }
-  }, [currentFen, selectedEngineLineIndex, analysisLines, analysisEntries, currentMoveIndex, advancedAnalysisMode, formState, electronAPI, runAnalysis]);
+  }, [currentFen, selectedEngineLineIndex, analysisLines, analysisEntries, currentMoveIndex, selectedLineBaseFen, advancedAnalysisMode, formState, electronAPI, runAnalysis]);
 
 
   // Auto-select engine line when moves are played
@@ -1748,36 +1796,48 @@ Make it detailed and exciting!`;
       // A line is selected and we're at the first move (which has been applied to currentFen)
       // Trigger analysis on this new position
       if (selectedEngineLineData && selectedLineBaseFen !== currentFen) {
+        // The explicit handlers (handleSelectEngineLine on click, handleBoardMove on
+        // drag) already analyze this position and record it in lastAnalyzedFenRef.
+        // Skip when this FEN was just analyzed so we don't run a duplicate engine +
+        // LLM pass; only self-drive analysis if nothing else has for this position.
+        if (lastAnalyzedFenRef.current === currentFen) return;
         console.log(`[useEffect] Line selected, analyzing position after first move`, {
           selectedEngineLineIndex,
           currentMoveIndex,
           from: selectedLineBaseFen,
           to: currentFen
         });
+        lastAnalyzedFenRef.current = currentFen;
         runAnalysis(currentFen);
       }
     }
   }, [selectedEngineLineIndex, currentMoveIndex, currentFen, selectedEngineLineData, selectedLineBaseFen, runAnalysis]);
 
-  // Fetch LLM explanations when a line is selected AND enough moves have been played
+  // Auto-fetch an LLM explanation for EACH new board position, once at least 2
+  // plies have been played (i.e. from the position after 1.e4 e5 onward). Before
+  // that we stay quiet. Every subsequent position — whether it follows the top line
+  // or leaves it — gets its own fresh explanation. Deduped by FEN so a position is
+  // explained once; a new position always re-triggers.
+  const AUTO_EXPLAIN_MIN_PLIES = 2;
   useEffect(() => {
-    if (selectedEngineLineIndex !== null && selectedEngineLineIndex >= 0) {
-      // Extract move number from FEN to check if we should fetch
-      const fenParts = currentFen.split(/\s+/);
-      const moveNumber = fenParts.length >= 6 ? parseInt(fenParts[5], 10) : 1;
-      const activeColor = fenParts.length >= 2 ? fenParts[1] : 'w';
-
-      // Only fetch after White plays 2 moves AND Black plays 1: moveNumber >= 2 AND Black to move
-      if (moveNumber >= 2 && activeColor === 'b' && !lineExplanations[selectedEngineLineIndex]) {
-        console.log(`[useEffect] Fetching explanation for line ${selectedEngineLineIndex} at move ${moveNumber}`);
-        fetchExplanations(currentFen, selectedEngineLineIndex, analysisEntries, playedMoves);
-      } else if (moveNumber >= 2 && activeColor === 'b') {
-        console.log(`[useEffect] Explanation already exists for line ${selectedEngineLineIndex}`);
-      } else {
-        console.log(`[useEffect] Too early for LLM fetch - move number: ${moveNumber}, color: ${activeColor}`);
-      }
+    if (selectedEngineLineIndex === null || selectedEngineLineIndex < 0) return;
+    if (pliesFromFen(currentFen) < AUTO_EXPLAIN_MIN_PLIES) {
+      console.log(`[autoExplain] Too early - plies: ${pliesFromFen(currentFen)}`);
+      return;
     }
-  }, [selectedEngineLineIndex, currentFen, analysisEntries, playedMoves, lineExplanations, fetchExplanations]);
+    // Wait until analysisEntries describe THIS position (they are refreshed
+    // asynchronously after the move), so we never explain a new position using the
+    // previous position's line data.
+    if (entriesFenRef.current !== currentFen) {
+      console.log(`[autoExplain] Waiting for entries to match position`);
+      return;
+    }
+    if (explanationFenRef.current === currentFen) return; // already fetched for this FEN
+    if (analysisEntries.length === 0) return;
+    explanationFenRef.current = currentFen; // mark before await to dedupe concurrent runs
+    console.log(`[autoExplain] Fetching explanation for line ${selectedEngineLineIndex} at ${currentFen}`);
+    fetchExplanations(currentFen, selectedEngineLineIndex, analysisEntries, playedMoves);
+  }, [selectedEngineLineIndex, currentFen, analysisEntries, playedMoves, fetchExplanations]);
 
   const applyPositions = useCallback(
     (positions: string[], message?: string): void => {
@@ -2610,12 +2670,13 @@ Make it detailed and exciting!`;
     const verticalPadding = 176;
     const usableWidth = Math.max(360, width - horizontalPadding);
     const usableHeight = Math.max(360, height - verticalPadding);
-    // In Advanced Analysis mode, reduce board width from 60% to 40% to make room for chat and notes panels
-    const boardWidthPercent = advancedAnalysisMode ? 0.4 : 0.6;
-    const boardWidth = usableWidth * boardWidthPercent;
+    // Board keeps the same size in every mode (including Advanced Analysis) so it
+    // never shrinks relative to the plain analysis board, and the chat column —
+    // whose height tracks the board via layoutHeight — keeps its full height too.
+    const boardWidth = usableWidth * 0.6;
     const dimension = Math.min(boardWidth, usableHeight, 760);
     return { width: dimension, height: dimension };
-  }, [windowSize.width, windowSize.height, advancedAnalysisMode]);
+  }, [windowSize.width, windowSize.height]);
   const layoutHeight = useMemo(() => boardSize.height + 110, [boardSize.height]);
   const isWideLayout = useMemo(() => {
     const width = windowSize.width || 1280;
@@ -2654,8 +2715,11 @@ Make it detailed and exciting!`;
           <ProfileIcon refreshTrigger={profileRefreshTrigger} />
         </Box>
 
+      {/* One overlay spans the whole engine→LLM analysis. It stays mounted and open
+          across both phases (see analysisSpinnerOpen), so the spinner never blinks
+          off between engine-done and llm-start — only the label swaps. */}
       <Backdrop
-        open={!appLoading && (engineWarming || engineAnalyzing || analysisPhase === 'engine-running')}
+        open={analysisSpinnerOpen}
         sx={{
           position: "absolute",
           zIndex: (theme) => theme.zIndex.drawer + 5,
@@ -2664,28 +2728,13 @@ Make it detailed and exciting!`;
       >
         <Stack spacing={2} alignItems="center">
           <CircularProgress color="inherit" />
-          {analysisPhase === 'engine-running' && (
-            <Typography variant="h6">Engine analysis in progress…</Typography>
-          )}
-          {engineWarming && (
-            <Typography variant="h6">Warming up engine…</Typography>
-          )}
-          {!engineWarming && !engineAnalyzing && analysisPhase !== 'engine-running' && (
-            <Typography variant="h6">Loading application…</Typography>
-          )}
-        </Stack>
-      </Backdrop>
-      <Backdrop
-        open={isExplanationLoading || analysisPhase === 'llm-running'}
-        sx={{
-          position: "absolute",
-          zIndex: (theme) => theme.zIndex.drawer + 4,
-          color: "common.white"
-        }}
-      >
-        <Stack spacing={2} alignItems="center">
-          <CircularProgress color="inherit" />
-          <Typography variant="h6">Generating explanation…</Typography>
+          <Typography variant="h6">
+            {engineWarming
+              ? "Warming up engine…"
+              : llmSpinnerBusy
+                ? "Generating explanation…"
+                : "Engine analysis in progress…"}
+          </Typography>
         </Stack>
       </Backdrop>
       {(viewMode === "settings" || !engineStatus?.configured) && electronAPI ? (
@@ -2740,7 +2789,6 @@ Make it detailed and exciting!`;
             overflow: "hidden"
           }}
         >
-          <StatusBanner statusMessage={statusMessage} analysisStatus={analysisStatus} />
           {analysisMode === "logs" ? (
             <Box
               sx={{

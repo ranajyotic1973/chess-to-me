@@ -227,7 +227,7 @@ Provides realistic Stockfish responses for standard positions:
 Provides realistic explanations:
 
 ```
-Opening Name (AFTER MOVE 3 ONLY): Italian Game
+Opening Name: Italian Game
 
 The move supports your central pawns and improves piece coordination. 
 This classical opening has been played by top players for centuries.

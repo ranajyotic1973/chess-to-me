@@ -132,4 +132,17 @@ export class ChessLineParser {
   static extractBestMove(line: string): string {
     return line.split(" ")[1] || "";
   }
+
+  /**
+   * Extract the ponder move from a "bestmove" line, e.g.
+   * "bestmove a7a6 ponder b5a4" → "b5a4". Returns "" when no ponder move is
+   * present (e.g. "bestmove a7a6" or "bestmove (none)").
+   */
+  static extractPonderMove(line: string): string {
+    const tokens = line.trim().split(/\s+/);
+    const ponderIdx = tokens.indexOf("ponder");
+    if (ponderIdx === -1) return "";
+    const move = tokens[ponderIdx + 1] || "";
+    return move === "(none)" ? "" : move;
+  }
 }

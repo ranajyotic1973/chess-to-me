@@ -27,6 +27,28 @@ describe("buildPgnWithNotes", () => {
     expect(pgn).toContain("note with ) brace");
   });
 
+  it("escapes literal opening braces too (PGN comments do not nest)", () => {
+    const pgn = buildPgnWithNotes(["e2e4"], { 0: "a { nested } b" });
+    expect(pgn).toBe("1. e4 { a ( nested ) b }");
+  });
+
+  it("re-numbers a Black move that follows a White move's comment", () => {
+    // A comment interrupts the movetext, so Black's move needs an "N..." label
+    // to stay compliant with PGN import/export numbering rules.
+    const pgn = buildPgnWithNotes(["e2e4", "e7e5"], { 0: "opening the game" });
+    expect(pgn).toBe("1. e4 { opening the game } 1... e5");
+  });
+
+  it("does not re-number a Black move when the White move has no comment", () => {
+    const pgn = buildPgnWithNotes(["e2e4", "e7e5"], {});
+    expect(pgn).toBe("1. e4 e5");
+  });
+
+  it("normalizes CRLF newlines inside a comment to LF", () => {
+    const pgn = buildPgnWithNotes(["e2e4"], { 0: "line1\r\nline2" });
+    expect(pgn).toBe("1. e4 { line1\nline2 }");
+  });
+
   it("ignores empty / whitespace-only notes", () => {
     const pgn = buildPgnWithNotes(["e2e4", "e7e5"], { 0: "   ", 1: "" });
     expect(pgn).toBe("1. e4 e5");

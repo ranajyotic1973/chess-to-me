@@ -1,6 +1,6 @@
 {
   "name": "chess-to-me",
-  "version": "1.6.0",
+  "version": "1.5.0",
   "private": true,
   "description": "Electron + React local Stockfish chess trainer",
   "license": "MIT",
@@ -15,7 +15,8 @@
     "dev:electron": "npm run build:electron && wait-on tcp:5173 && cross-env ELECTRON_START_URL=http://127.0.0.1:5173 electron .",
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json && node scripts/flatten-electron-dist.js",
-    "build": "npm run build:renderer && npm run build:electron",
+    "sync:version": "node scripts/sync-version.js",
+    "build": "npm run sync:version && npm run build:renderer && npm run build:electron",
     "start": "electron .",
     "test": "jest --config jest.config.js",
     "test:watch": "jest --config jest.config.js --watch",

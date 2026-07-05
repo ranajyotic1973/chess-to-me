@@ -105,7 +105,12 @@ export default function AnalysisBoard({
         setSelectedSquare(null);
         const nextFen = chess.current.fen();
         setCurrentFen(nextFen);
-        if (isAnalysisRunning) {
+        // When onBoardMove is wired, App's handleBoardMove owns analysis for this
+        // move (it runs runAnalysis with the correct playedMoves/line bookkeeping and
+        // auto-eval suppression). Firing runAnalysis here too would analyze the same
+        // position twice (double engine + double LLM). Only self-drive analysis when
+        // no board-move handler will.
+        if (isAnalysisRunning && typeof onBoardMove !== "function") {
           runAnalysis(nextFen);
         }
         if (typeof onMoveAttempt === "function") {

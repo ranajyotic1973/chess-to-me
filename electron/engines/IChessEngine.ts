@@ -12,6 +12,8 @@ export interface EngineCapability {
 
 export interface AnalysisResult {
   bestMove: string;
+  /** The engine's predicted reply to bestMove (UCI), when reported. */
+  ponderMove?: string;
   lines: Array<{
     rank: number;
     score: {

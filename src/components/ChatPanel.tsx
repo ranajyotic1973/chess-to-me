@@ -14,6 +14,8 @@ import ClearIcon from "@mui/icons-material/Clear";
 import ReplayIcon from "@mui/icons-material/Replay";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ReactMarkdown from "react-markdown";
 import { useRef, useState, useEffect } from "react";
 import type { ChatPanelProps, DeepLineAnalysis } from "../types";
@@ -21,6 +23,7 @@ import SelectableList from "./SelectableList";
 import type { SelectableListItem } from "./SelectableList";
 import { formatFieldLabel } from "../utils/formatLabel";
 import SelectedLineDetail from "./SelectedLineDetail";
+import SelectedLineMoves from "./SelectedLineMoves";
 
 interface DetectedMove {
   from: string;
@@ -86,6 +89,8 @@ export default function ChatPanel({
 }: ChatPanelProps) {
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const [selectedGameItemId, setSelectedGameItemId] = useState<string | null>(null);
+  // Collapse/expand the "Top Lines" list to reclaim vertical space. Defaults to expanded.
+  const [linesCollapsed, setLinesCollapsed] = useState(false);
 
   // Clear selection when the game list disappears entirely
   useEffect(() => {
@@ -123,6 +128,11 @@ export default function ChatPanel({
     : [];
 
   const analysisSelectedId = selectedEngineLineIndex !== null ? `line-${selectedEngineLineIndex}` : null;
+
+  // The currently selected engine line entry, for the "Moves of selected line" control.
+  const selectedEntry = selectedEngineLineIndex !== null
+    ? (selectedLineAnalysisEntry || analysisEntries[selectedEngineLineIndex] || null)
+    : null;
 
   return (
     <Paper
@@ -171,40 +181,57 @@ export default function ChatPanel({
             "& .MuiTypography-subtitle2": { fontSize: "0.85rem" }
           }}
         >
-          {/* Section 1: Analysis lines — list always visible */}
+          {/* Section 1: Analysis lines — collapsible to reclaim vertical space */}
           {showAnalysisLines && (
-            <SelectableList
-              items={analysisListItems}
-              title="1. Top Lines"
-              onSelect={(_id, idx) => onSelectEngineLine?.(idx, analysisLines[idx])}
+            <Box>
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "primary.main" }}>
+                  1. Top Lines
+                </Typography>
+                <Tooltip title={linesCollapsed ? "Expand lines" : "Collapse lines"}>
+                  <IconButton
+                    size="small"
+                    data-testid="toggle-top-lines"
+                    aria-label={linesCollapsed ? "Expand lines" : "Collapse lines"}
+                    onClick={() => setLinesCollapsed((c) => !c)}
+                  >
+                    {linesCollapsed ? <ExpandMoreIcon fontSize="small" /> : <ExpandLessIcon fontSize="small" />}
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+              {!linesCollapsed && (
+                <SelectableList
+                  items={analysisListItems}
+                  onSelect={(_id, idx) => onSelectEngineLine?.(idx, analysisLines[idx])}
+                />
+              )}
+            </Box>
+          )}
+
+          {/* Section 2: Full move sequence of the selected engine line */}
+          {selectedEntry && <SelectedLineMoves entry={selectedEntry} index={2} />}
+
+          {/* Section 3: Moves played detail */}
+          {playedMoves && playedMoves.length > 0 && (
+            <SelectedLineDetail
+              index={3}
+              playedMoves={playedMoves}
+              selectedLineIndex={selectedEngineLineIndex}
+              selectedLineEntry={selectedLineAnalysisEntry}
+              analysisEntries={analysisEntries}
+              advancedAnalysisMode={advancedAnalysisMode}
+              deepAnalysisLoading={deepAnalysisLoading}
+              deepAnalysisResults={deepAnalysisResults}
+              moveNotes={moveNotes}
+              onMoveClick={onMoveNoteClick}
             />
           )}
 
-          {/* Section 2: Selected line detail */}
-          {playedMoves && playedMoves.length > 0 && (
-            <>
-              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: "primary.main", mt: 1 }}>
-                2. Moves Played
-              </Typography>
-              <SelectedLineDetail
-                playedMoves={playedMoves}
-                selectedLineIndex={selectedEngineLineIndex}
-                selectedLineEntry={selectedLineAnalysisEntry}
-                analysisEntries={analysisEntries}
-                advancedAnalysisMode={advancedAnalysisMode}
-                deepAnalysisLoading={deepAnalysisLoading}
-                deepAnalysisResults={deepAnalysisResults}
-                moveNotes={moveNotes}
-                onMoveClick={onMoveNoteClick}
-              />
-            </>
-          )}
-
-          {/* Section 3: LLM explanation for selected line */}
+          {/* Section 4: LLM explanation for selected line */}
           {selectedEngineLineIndex !== null && lineExplanations[selectedEngineLineIndex] && (
             <>
               <Typography variant="subtitle2" sx={{ fontWeight: 700, color: "primary.main", mt: 1 }}>
-                3. Line Analysis
+                4. Line Analysis
               </Typography>
               <Box
               sx={{
@@ -232,11 +259,11 @@ export default function ChatPanel({
             </>
           )}
 
-          {/* Section 4: Chat response - only shown if user has asked questions */}
+          {/* Section 5: Chat response - only shown if user has asked questions */}
           {questionResponse && (
             <>
               <Typography variant="subtitle2" sx={{ fontWeight: 700, color: "primary.main", mt: 1 }}>
-                4. Chat Response
+                5. Chat Response
               </Typography>
             </>
           )}

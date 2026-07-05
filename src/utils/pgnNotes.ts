@@ -18,6 +18,10 @@ export function buildPgnWithNotes(
 ): string {
   const chess = new Chess();
   const tokens: string[] = [];
+  // PGN rule: a Black move must carry a "N..." move-number indication when a
+  // comment (or any token) interrupts the movetext before it. We therefore track
+  // whether the previous move emitted a comment and re-number Black accordingly.
+  let prevMoveHadComment = false;
 
   playedMoves.forEach((uci, idx) => {
     const from = uci.substring(0, 2);
@@ -49,11 +53,12 @@ export function buildPgnWithNotes(
     const isWhite = idx % 2 === 0;
     const numberLabel = isWhite ? `${moveNumber}.` : `${moveNumber}...`;
 
-    // Only emit a "N..." black number label when it starts a line; when the
-    // black move immediately follows its white counterpart, no label is needed.
+    // White moves are always numbered ("N."). Black moves normally follow their
+    // White counterpart without a label, but must be re-numbered ("N...") when
+    // they start the movetext or a comment interrupted the flow before them.
     if (isWhite) {
       tokens.push(`${numberLabel} ${san}`);
-    } else if (idx === 0) {
+    } else if (idx === 0 || prevMoveHadComment) {
       tokens.push(`${numberLabel} ${san}`);
     } else {
       tokens.push(san);
@@ -61,8 +66,18 @@ export function buildPgnWithNotes(
 
     const note = moveNotes[idx];
     if (note && note.trim().length > 0) {
-      const safe = note.replace(/}/g, ")").trim();
+      // PGN comments are delimited by "{ }" and cannot contain a brace of either
+      // kind (they neither nest nor allow a literal "}"). Substitute parentheses
+      // so the movetext stays parseable, and collapse CR/LF pairs to plain "\n".
+      const safe = note
+        .replace(/\{/g, "(")
+        .replace(/\}/g, ")")
+        .replace(/\r\n?/g, "\n")
+        .trim();
       tokens.push(`{ ${safe} }`);
+      prevMoveHadComment = true;
+    } else {
+      prevMoveHadComment = false;
     }
   });
 

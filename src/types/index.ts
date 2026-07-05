@@ -37,6 +37,8 @@ export interface AnalysisLine {
 
 export interface AnalysisResult {
   bestMove: string;
+  /** The engine's predicted reply to bestMove (UCI), when reported. */
+  ponderMove?: string;
   lines: AnalysisLine[];
 }
 
@@ -515,11 +517,6 @@ export interface AnalysisBoardProps {
   puzzleMode?: boolean;
   onReset?: () => void;
   onChessInstanceReady?: (chess: any) => void;
-}
-
-export interface StatusBannerProps {
-  statusMessage: string;
-  analysisStatus: string;
 }
 
 export interface ChatPanelProps {

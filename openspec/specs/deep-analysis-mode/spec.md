@@ -46,17 +46,6 @@ When `advancedAnalysisMode` is `true` and the engine returns analysis lines, the
 - **WHEN** the user has configured Anthropic as the LLM provider
 - **THEN** the `analysis:deep` handler SHALL call the Anthropic API and SHALL NOT fall back to Ollama
 
-### Requirement: Deep analysis results are displayed per line in the inline analysis panel
-Each analysis line displayed in the chat area SHALL show its existing SAN description plus the seven deep-analysis fields when `advancedAnalysisMode` is `true`. The fields SHALL be displayed as collapsible sections or labelled paragraphs beneath the line's SAN. When `advancedAnalysisMode` is `false`, lines SHALL display as before (SAN only).
-
-#### Scenario: Seven-dimension fields appear under each line in advanced mode
-- **WHEN** deep analysis results are returned for Line 1
-- **THEN** the inline line display SHALL show sections labelled "Strategy", "Pros & Cons", "Counter-attack", "Sacrifice", "Novelty", "Endgame chances", and "Alternatives" beneath the SAN text of Line 1
-
-#### Scenario: Deep analysis fields are loading while awaiting LLM response
-- **WHEN** engine lines have been received but the deep LLM pass is still running
-- **THEN** each line SHALL show a loading skeleton or spinner in place of the seven-dimension fields
-
 ### Requirement: Advanced Analysis mode is gated to non-game, non-puzzle contexts
 `advancedAnalysisMode` SHALL only be available when `gameMode` is falsy (i.e., the board is in free analysis mode, not in a puzzle or training game). The Advanced Analysis button SHALL be hidden when `gameMode` is truthy.
 
@@ -67,3 +56,11 @@ Each analysis line displayed in the chat area SHALL show its existing SAN descri
 #### Scenario: Button is visible in free analysis
 - **WHEN** `gameMode` is falsy and the user is in the default analysis view
 - **THEN** the Advanced Analysis button SHALL be visible and clickable
+
+### Requirement: Board size is unchanged in Advanced Analysis mode
+Entering Advanced (Deep) Analysis mode SHALL NOT change the size of the chess board. The board SHALL use the same size computation as plain analysis mode (board width fixed at 60% of the usable width), so that neither the board nor the adjacent chat column shrink when `advancedAnalysisMode` becomes `true`.
+
+#### Scenario: Board keeps its size when advanced mode is activated
+- **WHEN** the user activates Advanced Analysis mode
+- **THEN** the board dimensions SHALL remain identical to the plain analysis board
+- **AND** the chat column height (which tracks the board) SHALL NOT shrink

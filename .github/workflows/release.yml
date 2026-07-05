@@ -72,6 +72,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # need tags so scripts/sync-version.js can read the release tag
 
       - uses: actions/setup-node@v6
         with:
@@ -107,6 +109,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # need tags so scripts/sync-version.js can read the release tag
 
       - uses: actions/setup-node@v6
         with:
@@ -136,6 +140,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # need tags so scripts/sync-version.js can read the release tag
 
       - uses: actions/setup-node@v6
         with:
@@ -177,6 +183,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # need tags so scripts/sync-version.js can read the release tag
 
       - uses: docker/setup-qemu-action@v3
         with:

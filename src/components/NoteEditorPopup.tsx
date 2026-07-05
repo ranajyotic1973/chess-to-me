@@ -6,22 +6,22 @@ import {
   IconButton,
   Tooltip,
   Box,
-  ToggleButton,
-  Divider
+  Divider,
+  Menu,
+  MenuItem
 } from "@mui/material";
 import FormatBoldIcon from "@mui/icons-material/FormatBold";
 import FormatItalicIcon from "@mui/icons-material/FormatItalic";
 import TitleIcon from "@mui/icons-material/Title";
 import FormatListBulletedIcon from "@mui/icons-material/FormatListBulleted";
+import FormatListNumberedIcon from "@mui/icons-material/FormatListNumbered";
 import LinkIcon from "@mui/icons-material/Link";
-import CodeIcon from "@mui/icons-material/Code";
 import FormatQuoteIcon from "@mui/icons-material/FormatQuote";
-import VisibilityIcon from "@mui/icons-material/Visibility";
 import SaveIcon from "@mui/icons-material/Save";
 import CloseIcon from "@mui/icons-material/Close";
-import ReactMarkdown from "react-markdown";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { markdownToHtml, htmlToMarkdown } from "../utils/markdownHtml";
 
 interface NoteEditorPopupProps {
   open: boolean;
@@ -33,14 +33,11 @@ interface NoteEditorPopupProps {
   onCancel: () => void;
 }
 
-type WrapFormat = { type: "wrap"; before: string; after: string; placeholder: string };
-type LineFormat = { type: "line"; prefix: string };
-type Format = WrapFormat | LineFormat;
-
 /**
- * Popup B — a markdown note editor with an RTF-style formatting toolbar.
- * Notes are authored and stored as plain markdown; a live preview renders
- * the markdown so users see the formatted result.
+ * Popup B — an inline WYSIWYG note editor. The editing surface is a
+ * contentEditable region that renders formatted text directly (headings, bold,
+ * lists, quotes, links). Content is seeded from markdown and serialised back to
+ * markdown on save, so notes are always stored and exported as markdown.
  */
 export default function NoteEditorPopup({
   open,
@@ -49,74 +46,73 @@ export default function NoteEditorPopup({
   onSave,
   onCancel
 }: NoteEditorPopupProps) {
-  const [value, setValue] = useState<string>(initialContent);
-  const [showPreview, setShowPreview] = useState<boolean>(false);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const [headingAnchor, setHeadingAnchor] = useState<HTMLElement | null>(null);
+  // Bumped every time the editor opens so the contentEditable surface remounts
+  // with freshly-seeded HTML (via `dangerouslySetInnerHTML`) for the new move.
+  const [openSeq, setOpenSeq] = useState(0);
 
-  // Reset editor content each time the popup opens for a (possibly) different move.
   useEffect(() => {
-    if (open) {
-      setValue(initialContent);
-      setShowPreview(false);
-    }
-  }, [open, initialContent]);
+    if (open) setOpenSeq((s) => s + 1);
+  }, [open]);
 
-  // Focus the editor and place the cursor once the dialog has rendered.
+  // Once the (re)mounted editor is on screen, focus it and place the cursor.
   useEffect(() => {
     if (!open) return;
-    const el = textareaRef.current;
-    if (!el) return;
     const id = window.setTimeout(() => {
+      const el = editorRef.current;
+      if (!el) return;
       el.focus();
-      const pos = cursorAtStart ? 0 : el.value.length;
-      el.setSelectionRange(pos, pos);
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(cursorAtStart);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
     }, 50);
     return () => window.clearTimeout(id);
-  }, [open, cursorAtStart]);
+  }, [open, openSeq, cursorAtStart]);
 
-  const applyFormat = (format: Format) => {
-    const el = textareaRef.current;
-    if (!el) return;
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const selected = value.slice(start, end);
-
-    let nextValue: string;
-    let nextStart: number;
-    let nextEnd: number;
-
-    if (format.type === "wrap") {
-      const inner = selected || format.placeholder;
-      nextValue = value.slice(0, start) + format.before + inner + format.after + value.slice(end);
-      nextStart = start + format.before.length;
-      nextEnd = nextStart + inner.length;
-    } else {
-      // Line format: prefix the start of the line containing the selection start.
-      const lineStart = value.lastIndexOf("\n", start - 1) + 1;
-      nextValue = value.slice(0, lineStart) + format.prefix + value.slice(lineStart);
-      nextStart = start + format.prefix.length;
-      nextEnd = end + format.prefix.length;
-    }
-
-    setValue(nextValue);
-    // Restore focus + selection after React re-renders.
-    window.setTimeout(() => {
-      const node = textareaRef.current;
-      if (!node) return;
-      node.focus();
-      node.setSelectionRange(nextStart, nextEnd);
-    }, 0);
+  // Run a document.execCommand against the focused editor. Toolbar buttons
+  // suppress their default mousedown so the editor keeps focus + selection.
+  const exec = (command: string, value?: string) => {
+    editorRef.current?.focus();
+    document.execCommand(command, false, value);
   };
 
-  const toolbarButtons: Array<{ title: string; icon: ReactNode; format: Format }> = [
-    { title: "Bold", icon: <FormatBoldIcon fontSize="small" />, format: { type: "wrap", before: "**", after: "**", placeholder: "bold" } },
-    { title: "Italic", icon: <FormatItalicIcon fontSize="small" />, format: { type: "wrap", before: "*", after: "*", placeholder: "italic" } },
-    { title: "Heading", icon: <TitleIcon fontSize="small" />, format: { type: "line", prefix: "## " } },
-    { title: "Bulleted list", icon: <FormatListBulletedIcon fontSize="small" />, format: { type: "line", prefix: "- " } },
-    { title: "Link", icon: <LinkIcon fontSize="small" />, format: { type: "wrap", before: "[", after: "](url)", placeholder: "text" } },
-    { title: "Inline code", icon: <CodeIcon fontSize="small" />, format: { type: "wrap", before: "`", after: "`", placeholder: "code" } },
-    { title: "Blockquote", icon: <FormatQuoteIcon fontSize="small" />, format: { type: "line", prefix: "> " } }
+  const applyHeading = (level: number) => {
+    setHeadingAnchor(null);
+    exec("formatBlock", `<h${level}>`);
+  };
+
+  const applyLink = () => {
+    const url = window.prompt("Link URL", "https://");
+    if (!url) return;
+    const sel = window.getSelection();
+    if (sel && sel.toString().length > 0) {
+      exec("createLink", url);
+    } else {
+      // No selection — insert the URL as its own linked text.
+      exec("insertHTML", `<a href="${url}">${url}</a>`);
+    }
+  };
+
+  const inlineButtons: Array<{ title: string; icon: ReactNode; run: () => void }> = [
+    { title: "Bold", icon: <FormatBoldIcon fontSize="small" />, run: () => exec("bold") },
+    { title: "Italic", icon: <FormatItalicIcon fontSize="small" />, run: () => exec("italic") },
+    { title: "Bulleted list", icon: <FormatListBulletedIcon fontSize="small" />, run: () => exec("insertUnorderedList") },
+    { title: "Numbered list", icon: <FormatListNumberedIcon fontSize="small" />, run: () => exec("insertOrderedList") },
+    { title: "Blockquote", icon: <FormatQuoteIcon fontSize="small" />, run: () => exec("formatBlock", "<blockquote>") },
+    { title: "Link", icon: <LinkIcon fontSize="small" />, run: applyLink }
   ];
+
+  const handleSave = () => {
+    const html = editorRef.current?.innerHTML ?? "";
+    onSave(htmlToMarkdown(html));
+  };
+
+  // Keep toolbar clicks from stealing focus / clearing the editor selection.
+  const keepFocus = (e: React.MouseEvent) => e.preventDefault();
 
   return (
     <Dialog open={open} onClose={onCancel} maxWidth="md" fullWidth>
@@ -124,71 +120,81 @@ export default function NoteEditorPopup({
       <DialogContent dividers>
         {/* Formatting toolbar */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 1, flexWrap: "wrap" }}>
-          {toolbarButtons.map((btn) => (
+          <Tooltip title="Heading">
+            <IconButton
+              size="small"
+              onMouseDown={keepFocus}
+              onClick={(e) => setHeadingAnchor(e.currentTarget)}
+              aria-label="heading"
+              data-testid="note-heading-menu"
+            >
+              <TitleIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Menu anchorEl={headingAnchor} open={Boolean(headingAnchor)} onClose={() => setHeadingAnchor(null)}>
+            {[1, 2, 3, 4, 5, 6].map((level) => (
+              <MenuItem
+                key={level}
+                onMouseDown={keepFocus}
+                onClick={() => applyHeading(level)}
+                data-testid={`note-heading-${level}`}
+                sx={{ fontWeight: 700, fontSize: `${1.15 - (level - 1) * 0.08}rem` }}
+              >
+                Heading {level}
+              </MenuItem>
+            ))}
+          </Menu>
+          <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+          {inlineButtons.map((btn) => (
             <Tooltip key={btn.title} title={btn.title}>
-              <IconButton size="small" onClick={() => applyFormat(btn.format)} aria-label={btn.title.toLowerCase()}>
+              <IconButton
+                size="small"
+                onMouseDown={keepFocus}
+                onClick={btn.run}
+                aria-label={btn.title.toLowerCase()}
+              >
                 {btn.icon}
               </IconButton>
             </Tooltip>
           ))}
-          <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-          <Tooltip title={showPreview ? "Hide preview" : "Show preview"}>
-            <ToggleButton
-              value="preview"
-              selected={showPreview}
-              size="small"
-              onChange={() => setShowPreview((p) => !p)}
-              sx={{ border: "none", p: 0.5 }}
-              aria-label="toggle preview"
-            >
-              <VisibilityIcon fontSize="small" />
-            </ToggleButton>
-          </Tooltip>
         </Box>
 
-        {/* Editor */}
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder="Write your notes in markdown…"
-          style={{
-            width: "100%",
+        {/* WYSIWYG editing surface — renders formatted markdown directly. The
+            `key` remounts it on each open so the seeded HTML is always current. */}
+        <Box
+          key={openSeq}
+          ref={editorRef}
+          contentEditable
+          suppressContentEditableWarning
+          data-testid="note-editor"
+          dangerouslySetInnerHTML={{ __html: markdownToHtml(initialContent) }}
+          sx={{
             minHeight: 220,
-            resize: "vertical",
-            fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
-            fontSize: "0.85rem",
-            lineHeight: 1.5,
-            padding: "10px",
+            maxHeight: 400,
+            overflowY: "auto",
+            p: 1.5,
             border: "1px solid #ccc",
-            borderRadius: 4,
-            boxSizing: "border-box",
-            outline: "none"
+            borderRadius: 1,
+            outline: "none",
+            fontSize: "0.9rem",
+            lineHeight: 1.6,
+            "&:focus": { borderColor: "primary.main" },
+            "& h1, & h2, & h3, & h4, & h5, & h6": { margin: "0.5rem 0", fontWeight: 700, lineHeight: 1.3 },
+            "& p": { margin: "0.4rem 0" },
+            "& ul, & ol": { margin: "0.4rem 0", paddingLeft: "1.5rem" },
+            "& blockquote": {
+              borderLeft: "3px solid #ddd",
+              margin: "0.4rem 0",
+              paddingLeft: "12px",
+              color: "#666"
+            },
+            "& a": { color: "primary.main" },
+            "&:empty::before": {
+              content: '"Write your notes here…"',
+              color: "#aaa"
+            }
           }}
         />
-
-        {/* Live markdown preview */}
-        {showPreview && (
-          <Box
-            sx={{
-              mt: 1.5,
-              p: 1.5,
-              backgroundColor: "#f9f9f9",
-              borderRadius: 1,
-              border: 1,
-              borderColor: "divider",
-              fontSize: "0.875rem",
-              lineHeight: 1.6,
-              color: "#333",
-              "& p": { margin: "0.5rem 0" },
-              "& ul, & ol": { marginLeft: "1.5rem", margin: "0.5rem 0" },
-              "& code": { backgroundColor: "#e8e8e8", padding: "2px 6px", borderRadius: "3px", fontFamily: "monospace" },
-              "& blockquote": { borderLeft: "3px solid #ddd", marginLeft: 0, paddingLeft: "12px", color: "#666" }
-            }}
-          >
-            <ReactMarkdown>{value || "_Nothing to preview yet._"}</ReactMarkdown>
-          </Box>
-        )}
       </DialogContent>
       <DialogActions>
         <Tooltip title="Cancel">
@@ -197,7 +203,7 @@ export default function NoteEditorPopup({
           </IconButton>
         </Tooltip>
         <Tooltip title="Save">
-          <IconButton onClick={() => onSave(value)} color="primary" aria-label="save note">
+          <IconButton onClick={handleSave} color="primary" aria-label="save note">
             <SaveIcon />
           </IconButton>
         </Tooltip>

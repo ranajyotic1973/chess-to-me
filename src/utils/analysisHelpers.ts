@@ -295,12 +295,26 @@ const scoreToComparable = (score: AnalysisLine["score"]): number => {
   return 0;
 };
 
+const firstMoveOf = (line: AnalysisLine): string =>
+  (line.pv || line.line || "").trim().split(/\s+/)[0] || "";
+
 /**
  * Sorts analysis lines by their engine multipv ranking (from "rank" field).
  * The engine's multipv number (1 = best, 2 = 2nd best, etc.) is stored in rank.
+ *
+ * When the engine reports a `bestMove` (and optionally a `ponderMove`), those
+ * take priority over the multipv ranking: the line whose first move matches
+ * `bestMove` is placed first, the line matching `ponderMove` second, and the
+ * remaining lines keep the existing rank/score ordering. This matters because an
+ * engine's chosen bestmove/ponder can differ from the raw multipv order (notably
+ * for LC0).
  */
-export const sortLinesByScore = (lines: AnalysisLine[]): AnalysisLine[] => {
-  return [...lines].sort((a, b) => {
+export const sortLinesByScore = (
+  lines: AnalysisLine[],
+  bestMove?: string,
+  ponderMove?: string
+): AnalysisLine[] => {
+  const byRank = [...lines].sort((a, b) => {
     // Sort by rank (multipv ranking) - lower rank = better evaluation
     const rankA = a.rank ?? Infinity;
     const rankB = b.rank ?? Infinity;
@@ -314,6 +328,23 @@ export const sortLinesByScore = (lines: AnalysisLine[]): AnalysisLine[] => {
     const scoreB = scoreToComparable(b.score);
     return scoreB - scoreA; // Descending order (best first)
   });
+
+  if (!bestMove && !ponderMove) return byRank;
+
+  const prioritized: AnalysisLine[] = [];
+  const used = new Set<AnalysisLine>();
+  // Order matters: bestMove first, then ponderMove. Skip a move that matches no
+  // line, and never place the same line twice (e.g. best === ponder).
+  for (const move of [bestMove, ponderMove]) {
+    if (!move) continue;
+    const match = byRank.find((line) => !used.has(line) && firstMoveOf(line) === move);
+    if (match) {
+      prioritized.push(match);
+      used.add(match);
+    }
+  }
+  const rest = byRank.filter((line) => !used.has(line));
+  return [...prioritized, ...rest];
 };
 
 export const parseFenOrPgnInput = (
@@ -342,3 +373,28 @@ export const parseFenOrPgnInput = (
   }
   return { error: "Unable to parse input. Provide a valid FEN or PGN string." };
 };
+
+/**
+ * Number of half-moves (plies) played to reach a position, derived from the FEN's
+ * fullmove counter and side-to-move. Start = 0 plies; after 1.e4 = 1; after
+ * 1.e4 e5 = 2; after 1.e4 e5 2.Nf3 = 3, etc. Used to hold the auto LLM
+ * explanation until enough of the opening is on the board to be identifiable.
+ */
+export const pliesFromFen = (fen: string): number => {
+  const parts = fen.split(/\s+/);
+  if (parts.length < 6) return 0;
+  const fullmove = parseInt(parts[5], 10);
+  if (!Number.isFinite(fullmove) || fullmove < 1) return 0;
+  const blackToMove = parts[1] === "b";
+  return (fullmove - 1) * 2 + (blackToMove ? 1 : 0);
+};
+
+/**
+ * SAN move sequence (with move numbers) for a selected engine line, sourced from
+ * the already-parsed entry's `description`. Returns "" when there is no entry or
+ * the line has no moves, so the "Moves of selected line" control can hide itself.
+ * `parseStockfishLine` guarantees `description` only contains legal, parsed moves,
+ * so this never surfaces a raw/unparseable token.
+ */
+export const selectedLineMovesText = (entry: AnalysisEntry | null | undefined): string =>
+  entry && entry.moves.length > 0 ? entry.description || "" : "";
