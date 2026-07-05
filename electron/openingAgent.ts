@@ -1,6 +1,7 @@
 import { Chess } from "chess.js";
 import { lookupOpeningByMoves } from "./ecoLookup";
 import type { ConversationMessage, TrainingMove } from "../src/types";
+import { withGuardrail } from "./agentPrompts";
 
 export type LlmCaller = (params: {
   messages: Array<{ role: string; content: string }>;
@@ -116,7 +117,7 @@ export async function handleOpeningRequest(
   }));
 
   const messages: Array<{ role: string; content: string }> = [
-    { role: "system", content: OPENING_SYSTEM_PROMPT },
+    { role: "system", content: withGuardrail(OPENING_SYSTEM_PROMPT) },
     ...recentHistory,
     { role: "user", content: question }
   ];

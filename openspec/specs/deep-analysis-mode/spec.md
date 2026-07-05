@@ -1,5 +1,9 @@
-## ADDED Requirements
+# deep-analysis-mode Specification
 
+## Purpose
+Deep (Advanced) Analysis mode: full-depth, multi-line engine analysis with a per-line LLM deep-dive, ten-plus lines, and novelty flagging.
+
+## Requirements
 ### Requirement: Analysis button is renamed to Advanced Analysis and toggles a dedicated mode state
 The system SHALL rename the analysis button tooltip from "Start Analysis" / "Stop Analysis" to "Advanced Analysis" / "Stop Analysis" and update its aria-label accordingly. Clicking the button while it is off SHALL set `advancedAnalysisMode` to `true` and begin analysis. Clicking it again SHALL set `advancedAnalysisMode` to `false` and stop analysis.
 
@@ -64,3 +68,14 @@ Entering Advanced (Deep) Analysis mode SHALL NOT change the size of the chess bo
 - **WHEN** the user activates Advanced Analysis mode
 - **THEN** the board dimensions SHALL remain identical to the plain analysis board
 - **AND** the chat column height (which tracks the board) SHALL NOT shrink
+
+### Requirement: Deep Analysis surfaces at least ten lines and flags novel ones
+When Deep (Advanced) Analysis mode runs, the engine SHALL be configured to return at least 10 principal variations when that many legal lines exist (per the engine-mode-tuning capability), and lines that are novel (per the novelty-line-detection capability) SHALL be rendered with the novelty icon in the analysis list.
+
+#### Scenario: Deep analysis returns ten or more lines
+- **WHEN** Deep Analysis runs on a rich middlegame position
+- **THEN** the analysis list SHALL contain at least 10 lines (or all legal lines if fewer than 10 exist)
+
+#### Scenario: Novel deep-analysis line shows the icon
+- **WHEN** one of the deep-analysis lines qualifies as novel
+- **THEN** that line SHALL display the novelty icon in the analysis list

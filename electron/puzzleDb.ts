@@ -86,28 +86,86 @@ export function initPuzzleDb(dbPath: string): Database.Database {
 
     CREATE VIRTUAL TABLE IF NOT EXISTS puzzles_fts
       USING fts5(puzzle_id UNINDEXED, themes, opening_tags, content=puzzles, content_rowid=rowid);
+
+    CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
   `);
 
   return db;
 }
 
-export function importPuzzlesFromCsv(
+function getPuzzleMeta(db: Database.Database, key: string): string | undefined {
+  try {
+    const row = db.prepare("SELECT value FROM meta WHERE key = ?").get(key) as { value: string } | undefined;
+    return row?.value;
+  } catch {
+    return undefined;
+  }
+}
+
+function setPuzzleMeta(db: Database.Database, key: string, value: string): void {
+  db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run(key, value);
+}
+
+/**
+ * True only when a puzzle import ran all the way to the end. A partial import
+ * (app closed / crashed mid-way) reads false, so the caller re-imports instead
+ * of trusting a truncated database.
+ *
+ * Legacy DBs imported before completion-tracking existed have no flag at all;
+ * if such a DB already has puzzles we treat it as complete (and record that),
+ * so existing users are never forced to re-download. A partial import from this
+ * version writes the flag as "false" explicitly, so it is never mistaken for legacy.
+ */
+export function isPuzzleImportComplete(db: Database.Database): boolean {
+  const flag = getPuzzleMeta(db, "puzzle_import_complete");
+  if (flag === "true") return true;
+  if (flag === undefined && hasPuzzles(db)) {
+    setPuzzleMeta(db, "puzzle_import_complete", "true");
+    return true;
+  }
+  return false;
+}
+
+const pausePuzzle = (ms: number) =>
+  new Promise<void>(resolve => (ms > 0 ? setTimeout(resolve, ms) : setImmediate(resolve)));
+
+export interface PuzzleImportOptions {
+  onProgress?: (pct: number) => void;
+  /** Return true to stop cleanly at the next batch boundary (import stays incomplete). */
+  shouldAbort?: () => boolean;
+  /** Idle delay (ms) between batches to cap CPU / keep the UI responsive. */
+  throttleMs?: number;
+}
+
+export interface PuzzleImportResult {
+  imported: number;
+  completed: boolean;
+}
+
+/**
+ * Import puzzles from the Lichess CSV. Runs cooperatively (async): each batch
+ * commits synchronously, then yields to the event loop so the app stays
+ * responsive and `shouldAbort()` (set on quit) can stop it cleanly. The FTS
+ * index is rebuilt once at the end rather than per row, and a completion flag is
+ * only set when the whole file was consumed — so an interrupted import is
+ * re-run next time instead of leaving a silently-truncated database.
+ */
+export async function importPuzzlesFromCsv(
   db: Database.Database,
   csvBuffer: Buffer,
-  onProgress: (pct: number) => void
-): number {
+  opts: PuzzleImportOptions = {}
+): Promise<PuzzleImportResult> {
+  const { onProgress, shouldAbort, throttleMs = 0 } = opts;
   const total = csvBuffer.length;
   let imported = 0;
   let lastReported = 0;
+
+  setPuzzleMeta(db, "puzzle_import_complete", "false");
 
   const insert = db.prepare(`
     INSERT OR REPLACE INTO puzzles
       (puzzle_id, fen, moves, rating, rating_deviation, popularity, nb_plays, themes, game_url, opening_tags)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const insertFts = db.prepare(`
-    INSERT OR REPLACE INTO puzzles_fts(puzzle_id, themes, opening_tags)
-    VALUES (?, ?, ?)
   `);
 
   const insertBatch = db.transaction((batch: string[][]) => {
@@ -116,7 +174,6 @@ export function importPuzzlesFromCsv(
       const [puzzle_id, fen, moves, rating, rd, pop, plays, themes, game_url, opening_tags = ""] = cols;
       insert.run(puzzle_id, fen, moves, parseInt(rating) || 0, parseInt(rd) || 0,
         parseInt(pop) || 0, parseInt(plays) || 0, themes, game_url, opening_tags);
-      insertFts.run(puzzle_id, themes, opening_tags);
       imported++;
     }
   });
@@ -139,17 +196,18 @@ export function importPuzzlesFromCsv(
       if (firstLine) {
         firstLine = false; // skip CSV header
       } else {
-        const cols = parseCSVLine(line);
-        batch.push(cols);
+        batch.push(parseCSVLine(line));
 
         if (batch.length >= BATCH_SIZE) {
           insertBatch(batch);
           batch = [];
           const pct = Math.min(99, Math.floor((offset / total) * 100));
           if (pct >= lastReported + 5) {
-            onProgress(pct);
+            onProgress?.(pct);
             lastReported = pct;
           }
+          if (shouldAbort?.()) return { imported, completed: false };
+          await pausePuzzle(throttleMs);
         }
       }
     }
@@ -158,8 +216,13 @@ export function importPuzzlesFromCsv(
   }
 
   if (batch.length > 0) insertBatch(batch);
-  onProgress(100);
-  return imported;
+
+  // Rebuild the FTS index once from the fully-loaded content table (much faster
+  // than per-row inserts) and only now mark the import complete.
+  db.exec("INSERT INTO puzzles_fts(puzzles_fts) VALUES('rebuild')");
+  setPuzzleMeta(db, "puzzle_import_complete", "true");
+  onProgress?.(100);
+  return { imported, completed: true };
 }
 
 function parseCSVLine(line: string): string[] {

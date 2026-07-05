@@ -41,6 +41,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     const { userMessage, question, ...rest } = payload || {};
     return ipcRenderer.invoke("llm:ask-question", { userMessage, question, ...rest }) as Promise<IpcResponses["askQuestion"]>;
   },
+  getLinePreviewInsights: (payload: IpcPayloads["getLinePreviewInsights"]) =>
+    ipcRenderer.invoke("llm:line-insights", payload) as Promise<IpcResponses["getLinePreviewInsights"]>,
   getAvailableModels: (payload: IpcPayloads["getAvailableModels"]) =>
     ipcRenderer.invoke("getAvailableModels", payload) as Promise<IpcResponses["getAvailableModels"]>,
 
@@ -128,6 +130,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("db:download-puzzles") as Promise<IpcResponses["db:download-puzzles"]>,
   dbCheckPuzzleUpdate: () =>
     ipcRenderer.invoke("db:check-puzzle-update") as Promise<IpcResponses["db:check-puzzle-update"]>,
+  dbBrowsePuzzleFile: () =>
+    ipcRenderer.invoke("db:browse-puzzle-file") as Promise<IpcResponses["db:browse-puzzle-file"]>,
+  dbImportPuzzleFile: (filePath: string) =>
+    ipcRenderer.invoke("db:import-puzzle-file", { filePath }) as Promise<IpcResponses["db:import-puzzle-file"]>,
   dbBrowseGamesFile: () =>
     ipcRenderer.invoke("db:browse-games-file") as Promise<IpcResponses["db:browse-games-file"]>,
   dbImportGames7z: (filePath: string) =>

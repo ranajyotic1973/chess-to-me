@@ -1,5 +1,6 @@
 import { Chess } from "chess.js";
 import type { ConversationMessage, TrainingMove } from "../src/types";
+import { withGuardrail } from "./agentPrompts";
 
 export type LlmCaller = (params: {
   messages: Array<{ role: string; content: string }>;
@@ -114,7 +115,7 @@ export async function handleMiddlegameRequest(
     : "";
 
   const messages: Array<{ role: string; content: string }> = [
-    { role: "system", content: MIDDLEGAME_SYSTEM_PROMPT },
+    { role: "system", content: withGuardrail(MIDDLEGAME_SYSTEM_PROMPT) },
     ...recentHistory,
     { role: "user", content: question + fenContext }
   ];

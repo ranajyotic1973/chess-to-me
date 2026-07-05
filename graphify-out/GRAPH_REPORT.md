@@ -1,16 +1,16 @@
 # Graph Report - chess-to-me  (2026-07-05)
 
 ## Corpus Check
-- 438 files · ~995,377 words
+- 468 files · ~1,017,171 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 4749 nodes · 4893 edges · 419 communities (379 shown, 40 thin omitted)
-- Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 2 edges (avg confidence: 0.5)
+- 5052 nodes · 5352 edges · 423 communities (389 shown, 34 thin omitted)
+- Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 4 edges (avg confidence: 0.65)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `ce7d5591`
+- Built from commit: `d4513b1e`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -177,6 +177,9 @@
 - [[_COMMUNITY_UI Events Fix — Logs and Status Now Working|UI Events Fix — Logs and Status Now Working]]
 - [[_COMMUNITY_ADDED Requirements|ADDED Requirements]]
 - [[_COMMUNITY_ADDED Requirements|ADDED Requirements]]
+- [[_COMMUNITY_BaseChessEngine.ts|BaseChessEngine.ts]]
+- [[_COMMUNITY_ADDED Requirements|ADDED Requirements]]
+- [[_COMMUNITY_ADDED Requirements|ADDED Requirements]]
 - [[_COMMUNITY_ADDED Requirements|ADDED Requirements]]
 - [[_COMMUNITY_tasks|tasks.md]]
 - [[_COMMUNITY_tasks|tasks.md]]
@@ -196,6 +199,7 @@
 - [[_COMMUNITY_Requirements|Requirements]]
 - [[_COMMUNITY_Redux Migration Plan|Redux Migration Plan]]
 - [[_COMMUNITY_build-icons.js|build-icons.js]]
+- [[_COMMUNITY_ADDED Requirements|ADDED Requirements]]
 - [[_COMMUNITY_SKILL|SKILL.md]]
 - [[_COMMUNITY_SKILL|SKILL.md]]
 - [[_COMMUNITY_OPSX Explore|OPSX: Explore]]
@@ -358,10 +362,15 @@
 - [[_COMMUNITY_pgnNotes.ts|pgnNotes.ts]]
 - [[_COMMUNITY_⏱️ Time Investment|⏱️ Time Investment]]
 - [[_COMMUNITY_tasks|tasks.md]]
+- [[_COMMUNITY_design|design.md]]
+- [[_COMMUNITY_proposal|proposal.md]]
 - [[_COMMUNITY_tasks|tasks.md]]
 - [[_COMMUNITY_tasks|tasks.md]]
 - [[_COMMUNITY_tasks|tasks.md]]
 - [[_COMMUNITY_tasks|tasks.md]]
+- [[_COMMUNITY_tasks|tasks.md]]
+- [[_COMMUNITY_twoStepLLMProcessing.ts|twoStepLLMProcessing.ts]]
+- [[_COMMUNITY_AIImportDialog.tsx|AIImportDialog.tsx]]
 - [[_COMMUNITY_SKILL|SKILL.md]]
 - [[_COMMUNITY_SKILL|SKILL.md]]
 - [[_COMMUNITY_SKILL|SKILL.md]]
@@ -375,6 +384,12 @@
 - [[_COMMUNITY_StockfishEngine|StockfishEngine]]
 - [[_COMMUNITY_EngineDetectionResult|EngineDetectionResult]]
 - [[_COMMUNITY_ProcessManager|ProcessManager]]
+- [[_COMMUNITY_MockStatement|MockStatement]]
+- [[_COMMUNITY_design|design.md]]
+- [[_COMMUNITY_proposal|proposal.md]]
+- [[_COMMUNITY_ADDED Requirements|ADDED Requirements]]
+- [[_COMMUNITY_Requirement Deep Analysis surfaces at least ten lines and flags novel ones|Requirement: Deep Analysis surfaces at least ten lines and flags novel ones]]
+- [[_COMMUNITY_pgnNotes.ts|pgnNotes.ts]]
 - [[_COMMUNITY_tailwind.config.ts|tailwind.config.ts]]
 - [[_COMMUNITY_vite.config.ts|vite.config.ts]]
 - [[_COMMUNITY_⏱️ Time Investment|⏱️ Time Investment]]
@@ -394,43 +409,35 @@
 - [[_COMMUNITY_ADDED Requirements (chess-puzzle-and-analysis-features)|ADDED Requirements (chess-puzzle-and-analysis-features)]]
 - [[_COMMUNITY_Requirement Move navigation uses UpDown arrow keys instead of LeftRight arrow keys|Requirement: Move navigation uses Up/Down arrow keys instead of Left/Right arrow keys]]
 - [[_COMMUNITY_Requirement PASS 1 classifier recognises opening and endgame training intents|Requirement: PASS 1 classifier recognises opening and endgame training intents]]
-- [[_COMMUNITY_chessNotationParser.test.ts|chessNotationParser.test.ts]]
 - [[_COMMUNITY_proposal|proposal.md]]
-- [[_COMMUNITY_note-editor.spec.ts|note-editor.spec.ts]]
 - [[_COMMUNITY_spec|spec.md]]
 - [[_COMMUNITY_tasks|tasks.md]]
 - [[_COMMUNITY_Archived Changes|Archived Changes]]
-- [[_COMMUNITY_electronMock.ts|electronMock.ts]]
 - [[_COMMUNITY_design|design.md]]
-- [[_COMMUNITY_SelectableList.tsx|SelectableList.tsx]]
-- [[_COMMUNITY_AIImportDialog.tsx|AIImportDialog.tsx]]
-- [[_COMMUNITY_MoveWarningDialog.tsx|MoveWarningDialog.tsx]]
-- [[_COMMUNITY_formatLabel.ts|formatLabel.ts]]
-- [[_COMMUNITY_app-happy-path.spec.ts|app-happy-path.spec.ts]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `ElectronAPI` - 69 edges
-2. `ElectronAPI` - 37 edges
-3. `registerIpcHandlers()` - 35 edges
+1. `ElectronAPI` - 72 edges
+2. `registerIpcHandlers()` - 41 edges
+3. `ElectronAPI` - 38 edges
 4. `scripts` - 27 edges
 5. `compilerOptions` - 26 edges
 6. `BaseChessEngine` - 24 edges
 7. `ProcessManager` - 24 edges
-8. `IChessEngine` - 19 edges
-9. `ProcessManager` - 19 edges
+8. `ProcessManager` - 19 edges
+9. `IChessEngine` - 19 edges
 10. `IChessEngine` - 18 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `markdownToHtml()` --indirect_call--> `line()`  [INFERRED]
+  src/utils/markdownHtml.ts → electron/endgameAgent.test.ts
+- `EndgameContext` --references--> `AnalysisLine`  [EXTRACTED]
+  electron/endgameAgent.ts → src/types/index.ts
 - `AnalysisCache` --references--> `AnalysisLine`  [EXTRACTED]
   electron/main.ts → src/types/index.ts
+- `App()` --indirect_call--> `loadConversationHistory()`  [INFERRED]
+  src/App.tsx → src/utils/conversationMemory.ts
 - `Window` --references--> `ElectronAPI`  [EXTRACTED]
   src/electron-api.d.ts → src/types/index.ts
-- `BaseChessEngine` --references--> `EngineCapability`  [EXTRACTED]
-  electron/engines/BaseChessEngine.ts → electron/engines/IChessEngine.ts
-- `BaseChessEngine` --implements--> `IChessEngine`  [EXTRACTED]
-  electron/engines/BaseChessEngine.ts → electron/engines/IChessEngine.ts
-- `LC0Engine` --inherits--> `BaseChessEngine`  [EXTRACTED]
-  electron/engines/LC0Engine.ts → electron/engines/BaseChessEngine.ts
 
 ## Import Cycles
 - None detected.
@@ -440,19 +447,19 @@
 - **Engine Analysis Call Chain (IPC -> ProcessManager -> engine -> parser)** — electron_integration_guide_processmanager, electron_architecture_summary_ichessengine, electron_architecture_final_basechessengine, electron_refactor_example_chesslineparser [EXTRACTED 1.00]
 - **EngineRunner-to-New-Architecture Migration** — electron_refactor_architecture_enginerunner, electron_integration_guide_processmanager, electron_architecture_summary_enginefactory, electron_refactoring_summary_integration_gap [EXTRACTED 1.00]
 
-## Communities (419 total, 40 thin omitted)
+## Communities (423 total, 34 thin omitted)
 
 ### Community 1 - "Renderer Engine Wrappers"
-Cohesion: 0.18
-Nodes (15): buildPositionBook(), defaultEcoDataDir(), ECO_DATA_FILES, EcoMatch, findOpening(), initEcoLookup(), isEcoAvailable(), isValidOpeningPosition() (+7 more)
+Cohesion: 0.15
+Nodes (19): buildPositionBook(), defaultEcoDataDir(), ECO_DATA_FILES, EcoMatch, findOpening(), initEcoLookup(), isEcoAvailable(), isValidOpeningPosition() (+11 more)
 
 ### Community 2 - "Preload Bridge & Eval Bar"
 Cohesion: 0.07
 Nodes (10): AnalysisResult, BoardAnalysisResult, IChessEngine, ConcreteEngine, IncompleteEngine, EngineRouter, getAPI(), LC0Engine (+2 more)
 
 ### Community 3 - "LLM Agent Prompts"
-Cohesion: 0.11
-Nodes (19): dependencies, 7zip-bin, adm-zip, chess.js, @chess-openings/eco.json, chessboardjs, @emotion/react, @emotion/styled (+11 more)
+Cohesion: 0.10
+Nodes (20): dependencies, 7zip-bin, adm-zip, better-sqlite3, chess.js, @chess-openings/eco.json, chessboardjs, @emotion/react (+12 more)
 
 ### Community 4 - "Shared Type Definitions"
 Cohesion: 0.04
@@ -503,8 +510,8 @@ Cohesion: 0.06
 Nodes (30): 5.2 Test explain-lines flow with Stockfish, 5.3 Test explain-lines flow with LC0, 5.4 Test ask-question with auto-fetch FEN, 5.5 Test best-move recommendations, 5.6 Test move-by-move explanations, 5.7 Test cache hit/miss scenarios, 5.8 Test multiple languages, 6.1 Verify system prompt explains grandmaster role (+22 more)
 
 ### Community 17 - "Board Redux Slice"
-Cohesion: 0.10
-Nodes (21): AppStatusBar(), AppStatusBarProps, BgSlot, DbCounts, fmtCount(), MODE_COLORS, MODE_LABELS, LLMResponse (+13 more)
+Cohesion: 0.13
+Nodes (17): AppStatusBar(), AppStatusBarProps, BgSlot, DbCounts, fmtCount(), MODE_COLORS, MODE_LABELS, LLMResponse (+9 more)
 
 ### Community 18 - "Chess Line Parser"
 Cohesion: 0.07
@@ -515,8 +522,8 @@ Cohesion: 0.07
 Nodes (29): compilerOptions, allowImportingTsExtensions, allowJs, baseUrl, checkJs, declaration, declarationMap, esModuleInterop (+21 more)
 
 ### Community 20 - "Engine Architecture Concepts"
-Cohesion: 0.10
-Nodes (27): analysisAgentSystemPrompt(), buildIncorrectAnswerPrompt(), buildPuzzlePresentationPrompt(), buildThemeDescription(), CLASSIFIER_RESPONSE_FORMAT, ENDGAME_RESPONSE_FORMAT, explainLinesSystemPrompt(), GAME_SEARCH_PARAMS_FORMAT (+19 more)
+Cohesion: 0.38
+Nodes (5): hideSplashWhenReady(), logRenderer(), root, startTime, theme
 
 ### Community 21 - "Games Database"
 Cohesion: 0.07
@@ -547,8 +554,8 @@ Cohesion: 0.08
 Nodes (24): 1. **Engine Interface** (`IChessEngine`), 2. **Concrete Implementations**, 3. **Dependency Injection** (`EngineFactory`), 4. **Shared Utilities** (`ChessLineParser`), 🚀 Benefits, 📋 Checklist for Full Migration, Chess Engine Architecture Refactoring - Complete Package, Code Updates (+16 more)
 
 ### Community 28 - "Conversation Memory"
-Cohesion: 0.09
-Nodes (21): AnalysisBoard(), AnalysisBoardProps, FormState, GamesDbStats, GamesImportState, IpcPayloads, IpcResponses, LLMToolCall (+13 more)
+Cohesion: 0.06
+Nodes (34): getApiKeyMask(), getEnginePath(), PROVIDER_DEFAULT_MODELS, PROVIDER_DOCS, PROVIDER_ENDPOINTS, SettingsPanel(), AgentProgressEvent, AppSettings (+26 more)
 
 ### Community 29 - "Puzzle Utilities"
 Cohesion: 0.08
@@ -559,8 +566,8 @@ Cohesion: 0.07
 Nodes (26): Requirement: Build targets cover all supported platforms and architectures, Requirement: Displayed app version is sourced from the git tag, Requirement: GitHub Actions release workflow builds and publishes all platforms, Requirement: Icon assets exist for all target platforms, Requirement: Local per-platform build scripts are available, Requirement: Native modules are excluded from the asar archive, Requirement: Native modules are rebuilt per target architecture before packaging, Scenario: All artifacts are attached to the GitHub Release (+18 more)
 
 ### Community 32 - "Engine Discovery"
-Cohesion: 0.09
-Nodes (22): ADDED Requirements, Requirement: Arrow-key navigation steps through opening moves with per-move commentary, Requirement: Opening agent uses an independent system prompt and LLM pipeline, Requirement: Opening training is triggered by natural-language requests, Requirement: Opening training response includes a per-move commentary array, Requirement: Opening training response includes ECO identification, Requirement: Opening training uses its own conversation memory file, Scenario: Each move has meaningful commentary (+14 more)
+Cohesion: 0.07
+Nodes (29): opening-training-agent Specification, Purpose, Requirement: Arrow-key navigation steps through opening moves with per-move commentary, Requirement: Opening agent uses an independent system prompt and LLM pipeline, Requirement: Opening-mode engine analysis uses deep, novelty-aware tuning, Requirement: Opening mode entry is driven by the conversation intent classifier, Requirement: Opening training is triggered by natural-language requests, Requirement: Opening training response includes a per-move commentary array (+21 more)
 
 ### Community 33 - "Engine Type Contracts"
 Cohesion: 0.09
@@ -587,16 +594,16 @@ Cohesion: 0.09
 Nodes (22): ADDED Requirements, Requirement: Arrow-key navigation steps through opening moves with per-move commentary, Requirement: Opening agent uses an independent system prompt and LLM pipeline, Requirement: Opening training is triggered by natural-language requests, Requirement: Opening training response includes a per-move commentary array, Requirement: Opening training response includes ECO identification, Requirement: Opening training uses its own conversation memory file, Scenario: Each move has meaningful commentary (+14 more)
 
 ### Community 39 - "Board Position Editor"
-Cohesion: 0.09
-Nodes (21): ADDED Requirements, Requirement: Arrow-key navigation steps through endgame moves with per-move commentary, Requirement: Endgame agent uses an independent system prompt and LLM pipeline, Requirement: Endgame position FEN is validated before being applied to the board, Requirement: Endgame training is triggered by natural-language requests, Requirement: Endgame training response includes a per-move commentary array, Requirement: Endgame training uses its own conversation memory file, Scenario: Endgame agent generates a legal position (+13 more)
+Cohesion: 0.06
+Nodes (30): endgame-training-agent Specification, Purpose, Requirement: Arrow-key navigation steps through endgame moves with per-move commentary, Requirement: Endgame agent uses an independent system prompt and LLM pipeline, Requirement: Endgame analysis reasons over the engine's numeric line evaluations, Requirement: Endgame mode entry is driven by the conversation intent classifier, Requirement: Endgame position FEN is validated before being applied to the board, Requirement: Endgame training is triggered by natural-language requests (+22 more)
 
 ### Community 40 - "LLM Response Parser"
 Cohesion: 0.09
 Nodes (21): ADDED Requirements, Requirement: Failed puzzle attempts deduct 25 points with a floor of zero, Requirement: In-memory points survive accidental file deletion at runtime, Requirement: Puzzle points are persisted in a dedicated file beside the settings file, Requirement: Puzzle points are seeded from the ELO rating of the first successful solve, Requirement: Successful puzzle solves award points based on difficulty, Scenario: Failure deducts 25 points, Scenario: Failure does not go below zero (+13 more)
 
 ### Community 41 - "Stockfish Engine"
-Cohesion: 0.11
-Nodes (14): App(), DEFAULT_FORM, determinePreferredModel(), GamePlayerInfo, normalizeModelList(), normalizeModelName(), VALID_PROVIDERS, AgentProgressEvent (+6 more)
+Cohesion: 0.08
+Nodes (16): DEFAULT_FORM, determinePreferredModel(), GamePlayerInfo, normalizeModelList(), normalizeModelName(), VALID_PROVIDERS, AIImportDialogProps, AnalysisBoard() (+8 more)
 
 ### Community 42 - "SAN Formatting"
 Cohesion: 0.10
@@ -683,16 +690,16 @@ Cohesion: 0.11
 Nodes (17): ADDED Requirements, Requirement: SelectableList detail view pins its header during content scroll, Requirement: Selecting an Engine Analysis line drills into a fresh analysis of the resulting position, Requirement: Status and analysis messages auto-dismiss after a fixed delay, Scenario: A new status message replaces a pending one before it expires, Scenario: A real board move or new question clears the drill-down history, Scenario: A status message is shown and times out, Scenario: analysisStatus dismisses independently of statusMessage (+9 more)
 
 ### Community 64 - "Integration Tests for Chess To Me"
-Cohesion: 0.12
-Nodes (16): ADDED Requirements, Requirement: Advanced Analysis mode is gated to non-game, non-puzzle contexts, Requirement: After engine lines return, a deep LLM pass is triggered per line in Advanced Analysis mode, Requirement: Analysis button is renamed to Advanced Analysis and toggles a dedicated mode state, Requirement: Board size is unchanged in Advanced Analysis mode, Requirement: Engine analysis in Advanced Analysis mode uses the full depth from settings, Scenario: Auto-eval depth is unchanged, Scenario: Board keeps its size when advanced mode is activated (+8 more)
+Cohesion: 0.09
+Nodes (21): deep-analysis-mode Specification, Purpose, Requirement: Advanced Analysis mode is gated to non-game, non-puzzle contexts, Requirement: After engine lines return, a deep LLM pass is triggered per line in Advanced Analysis mode, Requirement: Analysis button is renamed to Advanced Analysis and toggles a dedicated mode state, Requirement: Board size is unchanged in Advanced Analysis mode, Requirement: Deep Analysis surfaces at least ten lines and flags novel ones, Requirement: Engine analysis in Advanced Analysis mode uses the full depth from settings (+13 more)
 
 ### Community 65 - "LC0 Chess Engine Setup Guide"
 Cohesion: 0.12
 Nodes (16): Analysis State Management, Architecture, Chess To Me — Project Rules, Code Architecture, Code Rules, graphify, Integration Tests Required, Language and Content (+8 more)
 
 ### Community 66 - "ADDED Requirements"
-Cohesion: 0.09
-Nodes (13): buildExtraConditions(), getGamesDbStats(), importPgnText(), ParsedGame, parsePgn(), rebuildFts(), searchGames(), { DatabaseSync } (+5 more)
+Cohesion: 0.15
+Nodes (20): extract7z(), findPgnFiles(), buildExtraConditions(), getGamesDbStats(), importPgnFile(), importPgnText(), initGamesDb(), ParsedGame (+12 more)
 
 ### Community 67 - "ADDED Requirements"
 Cohesion: 0.12
@@ -855,8 +862,8 @@ Cohesion: 0.25
 Nodes (12): GameMemoryEntry, addGameToMemory(), applyAnnotationsToPgn(), clearGameMemory(), deleteGameFromMemory(), exportGameAsPgn(), formatAnnotationSymbol(), loadGameMemory() (+4 more)
 
 ### Community 108 - "ADDED Requirements"
-Cohesion: 0.33
-Nodes (9): backoffMs(), checkPuzzleUpdate(), downloadParallel(), downloadPuzzleCsv(), downloadRange(), downloadRangeOnce(), downloadSingle(), downloadSingleOnce() (+1 more)
+Cohesion: 0.20
+Nodes (12): backoffMs(), checkPuzzleUpdate(), downloadParallel(), downloadPuzzleCsv(), downloadRange(), downloadRangeOnce(), downloadSingle(), downloadSingleOnce() (+4 more)
 
 ### Community 109 - "ADDED Requirements"
 Cohesion: 0.39
@@ -942,9 +949,13 @@ Nodes (12): ADDED Requirements, Requirement: Lichess puzzle CSV is downloaded an
 Cohesion: 0.15
 Nodes (12): 1. Added Engine Analysis Events, 2. Added Real-Time Log Broadcasting, Build Status, Engine Analysis Flow (Updated), Files Modified, Implementation Details, Log Flow (Updated), Problem (+4 more)
 
+### Community 130 - "tasks.md"
+Cohesion: 0.09
+Nodes (22): line-preview-popup Specification, Purpose, Requirement: Critical-move insights appear as a balloon while that move is displayed, Requirement: Each engine line has a play icon that opens a stateless preview popup, Requirement: Opening the preview requests LLM critical-move insights for the line, Requirement: The popup is closable at any time with the X button, Requirement: The preview popup shows a board, an active evaluation bar, and instruction text, Requirement: The previewed line is navigated only by keyboard arrow keys (+14 more)
+
 ### Community 131 - "Decisions"
-Cohesion: 0.40
-Nodes (8): addToConversationHistory(), clearConversationHistory(), formatConversationForContext(), getConversationCount(), getElectronAPI(), loadConversationHistory(), saveConversationHistory(), localStorageMock
+Cohesion: 0.10
+Nodes (20): ADDED Requirements, Requirement: Critical-move insights appear as a balloon while that move is displayed, Requirement: Each engine line has a play icon that opens a stateless preview popup, Requirement: Opening the preview requests LLM critical-move insights for the line, Requirement: The popup is closable at any time with the X button, Requirement: The preview popup shows a board, an active evaluation bar, and instruction text, Requirement: The previewed line is navigated only by keyboard arrow keys, Scenario: Arrow keys step through the line (+12 more)
 
 ### Community 132 - "Decisions"
 Cohesion: 0.27
@@ -1059,12 +1070,24 @@ Cohesion: 0.18
 Nodes (10): Check for context, Ending Discovery, Guardrails, Handling Different Entry Points, OpenSpec Awareness, The Stance, What You Don't Have To Do, What You Might Do (+2 more)
 
 ### Community 160 - "ADDED Requirements"
-Cohesion: 0.33
-Nodes (3): Move, matchMoveAgainstLine(), MoveMatchResult
+Cohesion: 0.11
+Nodes (18): novelty-line-detection Specification, Purpose, Requirement: An opening-line index is derived from the games database and persisted, Requirement: Novel lines are flagged with an icon in the analysis list, Requirement: Novelty is determined from the games database, Requirement: The opening-line index is built without blocking the UI when needed, Requirements, Scenario: Common book move is not novel (+10 more)
+
+### Community 161 - "ADDED Requirements"
+Cohesion: 0.12
+Nodes (16): ADDED Requirements, Requirement: An opening-line index is derived from the games database and persisted, Requirement: Novel lines are flagged with an icon in the analysis list, Requirement: Novelty is determined from the games database, Requirement: The opening-line index is built without blocking the UI when needed, Scenario: Common book move is not novel, Scenario: Index build starts for an unindexed database, Scenario: Index is queried during analysis (+8 more)
+
+### Community 162 - "BaseChessEngine.ts"
+Cohesion: 0.30
+Nodes (7): clampMultiPv(), explorationOptions(), isLc0(), AnalysisParams, AnalysisResult, EngineCapability, GPUBackend
 
 ### Community 163 - "ADDED Requirements"
 Cohesion: 0.18
 Nodes (9): Debugging Output, Engine Initialization Fix — Analysis Now Works, Files Modified, Key Fix Details, Next Steps, Problem, Root Cause, Solution (+1 more)
+
+### Community 164 - "ADDED Requirements"
+Cohesion: 0.12
+Nodes (16): conversation-mode-detection Specification, Purpose, Requirement: Chat message assembly depends on whether the app is in Analysis mode, Requirement: Chat messages switch mode by classified intent, not keyword presence, Requirement: Chat requests are guardrailed to chess-only, age-appropriate content, Requirement: The active mode is shown in the leftmost status-bar pill, Requirements, Scenario: A question about the current opening stays in Analysis (+8 more)
 
 ### Community 165 - "ADDED Requirements"
 Cohesion: 0.18
@@ -1142,6 +1165,10 @@ Nodes (9): 1. Version from git tag — build-time propagation via package.json, 
 Cohesion: 0.20
 Nodes (9): Changes Made, Engine Analysis Fix — Initialization Issue Resolved, Files Modified, Impact, Problem, Root Cause, Solution, Testing (+1 more)
 
+### Community 184 - "ADDED Requirements"
+Cohesion: 0.13
+Nodes (14): ADDED Requirements, Requirement: Chat message assembly depends on whether the app is in Analysis mode, Requirement: Chat messages switch mode by classified intent, not keyword presence, Requirement: Chat requests are guardrailed to chess-only, age-appropriate content, Requirement: The active mode is shown in the leftmost status-bar pill, Scenario: A question about the current opening stays in Analysis, Scenario: A request to learn an opening switches to Opening, Scenario: A request to learn endgame technique switches to Endgame (+6 more)
+
 ### Community 185 - "SKILL.md"
 Cohesion: 0.20
 Nodes (9): ADDED Requirements, Requirement: Re-render board when FEN is provided, Requirement: Render a draggable start position via chessboardjs, Requirement: Stockfish + LLM analysis from FEN, Requirement: User questions remain tied to the current position, Scenario: Analysis pipeline invocation, Scenario: Ask a position-specific question, Scenario: Initial load of chessboard (+1 more)
@@ -1211,8 +1238,8 @@ Cohesion: 0.20
 Nodes (9): author, email, name, description, license, main, name, private (+1 more)
 
 ### Community 202 - "ADDED Requirements"
-Cohesion: 0.13
-Nodes (17): handleMiddlegameRequest(), LlmCaller, MiddlegameAgentResponse, parseMiddlegameResponse(), mockRunLlm, VALID_MIDDLEGAME_JSON, validateFen(), validateUciMoves() (+9 more)
+Cohesion: 0.14
+Nodes (17): withGuardrail(), handleMiddlegameRequest(), LlmCaller, MiddlegameAgentResponse, parseMiddlegameResponse(), mockRunLlm, VALID_MIDDLEGAME_JSON, validateFen() (+9 more)
 
 ### Community 203 - "ADDED Requirements"
 Cohesion: 0.38
@@ -1227,8 +1254,8 @@ Cohesion: 0.20
 Nodes (9): Check for context, Ending Discovery, Guardrails, OpenSpec Awareness, The Stance, What You Don't Have To Do, What You Might Do, When a change exists (+1 more)
 
 ### Community 207 - "explore.md"
-Cohesion: 0.29
-Nodes (8): EndgameAgentResponse, handleEndgameRequest(), LlmCaller, parseEndgameResponse(), mockRunLlm, VALID_ENDGAME_JSON, validateFen(), validateUciMoves()
+Cohesion: 0.17
+Nodes (11): middlegame-analysis-mode Specification, Purpose, Requirement: Middlegame agent answers strategic and tactical questions, Requirement: Middlegame mode is gated to positions past 20 plies, Requirement: Middlegame mode is shown in the status bar, Requirements, Scenario: Middlegame question after 20 plies switches to Middlegame, Scenario: Middlegame question before 20 plies stays in Analysis (+3 more)
 
 ### Community 209 - "Engine Analysis Fix — Initialization Issue Resolved"
 Cohesion: 0.33
@@ -1283,16 +1310,16 @@ Cohesion: 0.44
 Nodes (7): EngineInfo, detectEngine(), discoverEngines(), getAPI(), getAvailableEngines(), getDefaultEngine(), validateEnginePath()
 
 ### Community 222 - "Requirements"
-Cohesion: 0.33
-Nodes (3): buildPosMap(), installPositionAwareMock(), THEORY
+Cohesion: 0.08
+Nodes (15): buildPosMap(), installPositionAwareMock(), THEORY, generateGame(), mulberry32(), DEFAULT_MOCK, MockConfig, test (+7 more)
 
 ### Community 223 - "Requirements"
-Cohesion: 0.22
-Nodes (9): getApiKeyMask(), getEnginePath(), PROVIDER_DEFAULT_MODELS, PROVIDER_DOCS, PROVIDER_ENDPOINTS, SettingsPanel(), DbProgressEvent, DbStatus (+1 more)
+Cohesion: 0.18
+Nodes (10): engine-mode-tuning Specification, Purpose, Requirement: Deep modes enable engine exploration for novel moves, Requirement: MultiPV clamp allows at least 10 lines in deep modes, Requirements, Scenario: Deep analysis requests ten lines, Scenario: Exploration options are applied per engine, Scenario: Exploration options are reverted for plain analysis (+2 more)
 
 ### Community 224 - "Requirements"
-Cohesion: 0.27
-Nodes (9): AnalysisCache, AnalysisLine, convertUCIToMoves(), createLineHashMap(), createMoveSequenceHash(), findMatchingLine(), getGenericResponse(), getMockEngineResponse() (+1 more)
+Cohesion: 0.14
+Nodes (21): EndgameAgentResponse, EndgameContext, EndgameOutcome, EndgameSide, formatEndgameLines(), formatEval(), handleEndgameRequest(), lineValueForWhite() (+13 more)
 
 ### Community 225 - "Requirement: Markdown editor with formatting toolbar"
 Cohesion: 0.25
@@ -1375,16 +1402,16 @@ Cohesion: 0.25
 Nodes (7): ADDED Requirements, Requirement: PostCSS pipeline compiles Tailwind outputs, Requirement: Stylesheet is imported before the React tree, Requirement: Tailwind rebuild script documented, Scenario: Building or running the renderer, Scenario: Changing Tailwind config, Scenario: Renderer startup
 
 ### Community 245 - "ADDED Requirements"
-Cohesion: 0.54
-Nodes (5): EvalBar(), EvalBarProps, Score, scoreToLabel(), scoreToWhitePct()
+Cohesion: 0.08
+Nodes (35): buildOpeningIndex(), BuildOpeningIndexOptions, createOpeningIndexTable(), feedHash(), feedString(), firstMoveOf(), getMeta(), hashHex() (+27 more)
 
 ### Community 247 - "ADDED Requirements"
-Cohesion: 0.08
-Nodes (33): extract7z(), findPgnFiles(), importPgnFile(), initGamesDb(), setGamesSource(), boardManager, checkGamesUpdatePrompt(), createWindow() (+25 more)
+Cohesion: 0.06
+Nodes (41): analysisAgentSystemPrompt(), buildIncorrectAnswerPrompt(), buildPuzzlePresentationPrompt(), buildThemeDescription(), CLASSIFIER_RESPONSE_FORMAT, ENDGAME_RESPONSE_FORMAT, explainLinesSystemPrompt(), GAME_SEARCH_PARAMS_FORMAT (+33 more)
 
 ### Community 248 - "ADDED Requirements"
-Cohesion: 0.62
-Nodes (5): computeOverallPercent(), getOtbTrackingFilePath(), readOtbTracking(), scanOtbFiles(), writeOtbTracking()
+Cohesion: 0.20
+Nodes (9): ADDED Requirements, Requirement: Middlegame agent answers strategic and tactical questions, Requirement: Middlegame mode is gated to positions past 20 plies, Requirement: Middlegame mode is shown in the status bar, Scenario: Middlegame question after 20 plies switches to Middlegame, Scenario: Middlegame question before 20 plies stays in Analysis, Scenario: Status bar shows Middlegame, Scenario: Strategic question is answered in Middlegame mode (+1 more)
 
 ### Community 249 - "ADDED Requirements"
 Cohesion: 0.29
@@ -1599,12 +1626,12 @@ Cohesion: 0.29
 Nodes (3): BoardPositionEditorProps, PIECE_SYMBOLS, STARTING_POSITION
 
 ### Community 302 - "proposal.md"
-Cohesion: 0.23
-Nodes (10): ChatPanel(), DetectedMove, detectMovesInResponse(), SelectedLineDetailProps, SelectedLineMoves(), SelectedLineMovesProps, AnalysisEntry, ChatPanelProps (+2 more)
+Cohesion: 0.11
+Nodes (16): ChatPanel(), DetectedMove, detectMovesInResponse(), SelectableListItem, SelectableListProps, SelectedLineDetailProps, SelectedLineMoves(), SelectedLineMovesProps (+8 more)
 
 ### Community 303 - "proposal.md"
-Cohesion: 0.20
-Nodes (7): EngineDetectionResult, AnalysisParams, AnalysisResult, EngineCapability, GPUBackend, StockfishEngine, LogEntry
+Cohesion: 0.16
+Nodes (4): EngineDetectionResult, EngineFactory, StockfishEngine, LogEntry
 
 ### Community 304 - "tasks.md"
 Cohesion: 0.33
@@ -1691,8 +1718,12 @@ Cohesion: 0.40
 Nodes (4): dest, fs, path, src
 
 ### Community 325 - "proposal.md"
-Cohesion: 0.38
-Nodes (5): hideSplashWhenReady(), logRenderer(), root, startTime, theme
+Cohesion: 0.14
+Nodes (3): { DatabaseSync }, MockDatabase, MockStatement
+
+### Community 327 - "Requirement: Imported OTB archive filenames are tracked to enable incremental updates"
+Cohesion: 0.32
+Nodes (10): App(), ConversationMessage, addToConversationHistory(), clearConversationHistory(), formatConversationForContext(), getConversationCount(), getElectronAPI(), loadConversationHistory() (+2 more)
 
 ### Community 328 - "tasks.md"
 Cohesion: 0.50
@@ -1734,6 +1765,18 @@ Nodes (4): getInitials(), ProfileIcon(), ProfileIconProps, PuzzlePointsState
 Cohesion: 0.50
 Nodes (4): 🔍 ACTION_REFERENCE.md, How to Use, Organization, What It Contains
 
+### Community 346 - "tasks.md"
+Cohesion: 0.22
+Nodes (8): ADDED Requirements, Requirement: Endgame analysis reasons over the engine's numeric line evaluations, Requirement: Endgame mode entry is driven by the conversation intent classifier, Scenario: Analysis targets a win for the requested side, Scenario: Endgame analysis is fed UCI lines with evaluations, Scenario: Evaluation question stays in Analysis, Scenario: Falls back to holding a draw, Scenario: Winning-strategy request enters Endgame mode
+
+### Community 347 - "design.md"
+Cohesion: 0.22
+Nodes (8): ADDED Requirements, Requirement: Deep modes enable engine exploration for novel moves, Requirement: MultiPV clamp allows at least 10 lines in deep modes, Scenario: Deep analysis requests ten lines, Scenario: Exploration options are applied per engine, Scenario: Exploration options are reverted for plain analysis, Scenario: Fewer legal lines than requested, Scenario: Plain analysis is unaffected
+
+### Community 348 - "proposal.md"
+Cohesion: 0.25
+Nodes (7): 1. Conversation mode detection & guardrails, 2. Middlegame mode (20-ply gate), 3. Engine tuning: MultiPV + exploration, 4. Novelty detection from the games database, 4b. Line preview popup, 5. Endgame result-oriented analysis, 6. Verification
+
 ### Community 350 - "tasks.md"
 Cohesion: 0.50
 Nodes (4): Diagrams Included, 🎨 VISUAL_OVERVIEW.md, What It Contains, When to Use
@@ -1741,6 +1784,34 @@ Nodes (4): Diagrams Included, 🎨 VISUAL_OVERVIEW.md, What It Contains, When to
 ### Community 352 - "tasks.md"
 Cohesion: 0.50
 Nodes (4): How to Use, ✅ IMPLEMENTATION_CHECKLIST.md, Total Effort, What It Contains
+
+### Community 362 - "twoStepLLMProcessing.ts"
+Cohesion: 0.67
+Nodes (4): convertUCIToMoves(), createLineHashMap(), createMoveSequenceHash(), findMatchingLine()
+
+### Community 366 - "AIImportDialog.tsx"
+Cohesion: 0.53
+Nodes (4): determineRequestType(), parseRequestTypeResponse(), quickDetectAnalysisRequired(), LLM_CONFIG
+
+### Community 381 - "MockStatement"
+Cohesion: 0.17
+Nodes (17): getPuzzleDb(), extractAndStoreThemes(), getPuzzleDbStats(), getPuzzleMeta(), hasPuzzles(), importPuzzlesFromCsv(), initPuzzleDb(), isPuzzleImportComplete() (+9 more)
+
+### Community 382 - "design.md"
+Cohesion: 0.29
+Nodes (6): Context, Decisions, Goals / Non-Goals, Open Questions, Resolved Decisions, Risks / Trade-offs
+
+### Community 383 - "proposal.md"
+Cohesion: 0.29
+Nodes (6): Capabilities, Impact, Modified Capabilities, New Capabilities, What Changes, Why
+
+### Community 384 - "ADDED Requirements"
+Cohesion: 0.29
+Nodes (6): ADDED Requirements, Requirement: Opening-mode engine analysis uses deep, novelty-aware tuning, Requirement: Opening mode entry is driven by the conversation intent classifier, Scenario: Analysis question mentioning "opening" stays in Analysis, Scenario: Learning request enters Opening mode, Scenario: Opening-mode analysis shows deep lines with novelty flags
+
+### Community 385 - "Requirement: Deep Analysis surfaces at least ten lines and flags novel ones"
+Cohesion: 0.40
+Nodes (4): ADDED Requirements, Requirement: Deep Analysis surfaces at least ten lines and flags novel ones, Scenario: Deep analysis returns ten or more lines, Scenario: Novel deep-analysis line shows the icon
 
 ### Community 402 - "tailwind.config.ts"
 Cohesion: 0.50
@@ -1780,7 +1851,7 @@ Nodes (7): ADDED Requirements, Requirement: analysis:deep IPC handler performs a
 
 ### Community 411 - "AIImportDialog.tsx"
 Cohesion: 0.21
-Nodes (14): NoteEditorPopup(), NoteEditorPopupProps, BLOCK_TAGS, blockToMarkdown(), decodeEntities(), escapeHtml(), htmlToMarkdown(), inlineToHtml() (+6 more)
+Nodes (15): line(), NoteEditorPopup(), NoteEditorPopupProps, BLOCK_TAGS, blockToMarkdown(), decodeEntities(), escapeHtml(), htmlToMarkdown() (+7 more)
 
 ### Community 412 - "MoveWarningDialog.tsx"
 Cohesion: 0.25
@@ -1818,17 +1889,9 @@ Nodes (5): MODIFIED Requirements, Requirement: Move navigation uses Up/Down arro
 Cohesion: 0.40
 Nodes (5): Requirement: PASS 1 classifier recognises opening and endgame training intents, Scenario: Ambiguous message uses LLM classifier, Scenario: Clear opening request is pre-screened without LLM classifier round-trip, Scenario: General analysis question is not misrouted, Scenario: Puzzle request is not misrouted
 
-### Community 427 - "chessNotationParser.test.ts"
-Cohesion: 0.39
-Nodes (6): looksLikeMoveAttempt(), parseChessNotation(), parsePuzzlePlayerMoves(), FULL_SOLUTION, PLAYER_UCI, uciSequenceToSan()
-
 ### Community 428 - "proposal.md"
 Cohesion: 0.29
 Nodes (6): Capabilities, Impact, Modified Capabilities, New Capabilities, What Changes, Why
-
-### Community 429 - "note-editor.spec.ts"
-Cohesion: 0.33
-Nodes (3): buildPosMap(), installPositionAwareMock(), THEORY
 
 ### Community 430 - "spec.md"
 Cohesion: 0.33
@@ -1842,33 +1905,29 @@ Nodes (5): 1. Selected-line moves panel, 2. Deep analysis mode layout, 3. WYSIWY
 Cohesion: 0.33
 Nodes (5): 2026-04, 2026-05, 2026-06, 2026-07, Archived Changes
 
-### Community 433 - "electronMock.ts"
-Cohesion: 0.47
-Nodes (3): DEFAULT_MOCK, MockConfig, test
-
 ### Community 434 - "design.md"
 Cohesion: 0.40
 Nodes (4): Context, Decisions, Goals / Non-Goals, Risks / Trade-offs
 
 ## Knowledge Gaps
-- **2718 isolated node(s):** `Overview`, `1. Board Move Input (✅ Complete)`, `2. Move Highlighting (✅ Complete)`, `3. Engine Analysis Lines (✅ Complete)`, `4. LLM Explanations (✅ Complete)` (+2713 more)
+- **2860 isolated node(s):** `{ DatabaseSync }`, `LogEntry`, `TRAINING_MOVE_SCHEMA`, `THEME_LABELS`, `openingTrainingSignals` (+2855 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **40 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **34 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `AnalysisLine` connect `Requirements` to `Stockfish Engine`, `helpers.ts`, `Conversation Memory`, `ADDED Requirements`?**
+- **Why does `AnalysisLine` connect `Requirements` to `Stockfish Engine`, `twoStepLLMProcessing.ts`, `ADDED Requirements`, `ADDED Requirements`, `helpers.ts`, `Conversation Memory`?**
+  _High betweenness centrality (0.008) - this node is a cross-community bridge._
+- **Why does `ElectronAPI` connect `Electron API Surface` to `Conversation Memory`, `tasks.md`?**
   _High betweenness centrality (0.007) - this node is a cross-community bridge._
-- **Why does `dependencies` connect `LLM Agent Prompts` to `ADDED Requirements`, `ADDED Requirements`?**
-  _High betweenness centrality (0.006) - this node is a cross-community bridge._
-- **Why does `better-sqlite3` connect `ADDED Requirements` to `LLM Agent Prompts`?**
-  _High betweenness centrality (0.006) - this node is a cross-community bridge._
-- **What connects `Overview`, `1. Board Move Input (✅ Complete)`, `2. Move Highlighting (✅ Complete)` to the rest of the system?**
-  _2720 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Why does `dependencies` connect `LLM Agent Prompts` to `ADDED Requirements`?**
+  _High betweenness centrality (0.005) - this node is a cross-community bridge._
+- **What connects `{ DatabaseSync }`, `LogEntry`, `TRAINING_MOVE_SCHEMA` to the rest of the system?**
+  _2862 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Electron API Surface` be split into smaller, more focused modules?**
-  _Cohesion score 0.030303030303030304 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.028985507246376812 - nodes in this community are weakly interconnected._
 - **Should `Preload Bridge & Eval Bar` be split into smaller, more focused modules?**
   _Cohesion score 0.06666666666666667 - nodes in this community are weakly interconnected._
 - **Should `LLM Agent Prompts` be split into smaller, more focused modules?**
-  _Cohesion score 0.10526315789473684 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.1 - nodes in this community are weakly interconnected._

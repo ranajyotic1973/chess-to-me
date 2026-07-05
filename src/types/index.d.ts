@@ -227,6 +227,8 @@ export interface IpcPayloads {
         fen: string;
         depth?: number;
         multiPv?: number;
+        /** Deep modes: widen the engine search toward creative-but-sound moves. */
+        explore?: boolean;
     };
     updateAppSettings: Partial<AppSettings>;
     explainLines: {
@@ -254,6 +256,8 @@ export interface IpcPayloads {
         llmApiKey?: string;
         responseType?: ResponseType;
         conversationHistory?: ConversationMessage[];
+        /** Half-moves played so far; gates mode transitions (e.g. Middlegame ≥20). */
+        plies?: number;
     };
     setOllamaModel: string;
     getAvailableModels: {
@@ -510,6 +514,7 @@ export interface ChatPanelProps {
     llmProvider?: string;
     analysisLines?: AnalysisLine[];
     onSelectEngineLine?: (lineIndex: number, line: AnalysisLine) => void;
+    onPreviewLine?: (lineIndex: number) => void;
     selectedEngineLineIndex?: number | null;
     currentMoveIndex?: number;
     responseType?: ResponseType;
@@ -580,6 +585,7 @@ export interface ElectronAPI {
         fen: string;
         depth?: number;
         multiPv?: number;
+        explore?: boolean;
     }): Promise<{
         ok: true;
         analysis: AnalysisResult;
@@ -587,6 +593,15 @@ export interface ElectronAPI {
         ok: false;
         error: string;
     }>;
+    getLinePreviewInsights?(payload: {
+        fen: string;
+        pv: string;
+        score?: Score | null;
+        llmProvider?: string;
+        model?: string;
+        baseUrl?: string;
+        llmApiKey?: string;
+    }): Promise<{ ok: boolean; insights?: Array<{ moveIndex: number; text: string }>; error?: string }>;
     updateAppSettings(payload: Partial<AppSettings>): Promise<{
         ok: true;
         settings: Partial<AppSettings>;

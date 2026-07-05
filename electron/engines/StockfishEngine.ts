@@ -6,6 +6,7 @@
 
 import { BaseChessEngine } from "./BaseChessEngine";
 import { EngineCapability } from "./IChessEngine";
+import { clampMultiPv, explorationOptions } from "./engineTuning";
 
 const STOCKFISH_TIMEOUT_MS = 30000;
 const STOCKFISH_DEFAULT_DEPTH = 20;
@@ -34,14 +35,15 @@ export class StockfishEngine extends BaseChessEngine {
   }
 
   /**
-   * Stockfish options before analysis
-   * Supports: MultiPV, hash size, threads
+   * Stockfish options before analysis.
+   * Supports MultiPV (up to MAX_MULTIPV). Stockfish variety comes from MultiPV;
+   * it has no safe creativity knob, so `explore` adds no extra options here.
    */
-  protected sendEngineOptions(multiPv: number): void {
-    this.sendCommand(`setoption name MultiPV value ${Math.max(1, Math.min(4, multiPv))}`);
-    // Can add more options here:
-    // this.sendCommand("setoption name Hash value 256");
-    // this.sendCommand("setoption name Threads value 4");
+  protected sendEngineOptions(multiPv: number, explore: boolean): void {
+    this.sendCommand(`setoption name MultiPV value ${clampMultiPv(multiPv)}`);
+    for (const cmd of explorationOptions(this.name, explore)) {
+      this.sendCommand(cmd);
+    }
   }
 
   /**

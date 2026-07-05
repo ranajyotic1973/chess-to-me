@@ -1,6 +1,7 @@
 import {
   Box,
   Button,
+  Chip,
   CircularProgress,
   IconButton,
   Paper,
@@ -16,6 +17,8 @@ import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import ReactMarkdown from "react-markdown";
 import { useRef, useState, useEffect } from "react";
 import type { ChatPanelProps, DeepLineAnalysis } from "../types";
@@ -60,6 +63,7 @@ export default function ChatPanel({
   lineExplanations = {},
   currentOpening = null,
   onSelectEngineLine,
+  onPreviewLine,
   onDeselectLine,
   canGoBackToParentLines = false,
   isDrillLoading = false,
@@ -123,6 +127,36 @@ export default function ChatPanel({
           id: `line-${idx}`,
           label: moveSequence,
           sublabel: "",
+          // Play icon opens the stateless line-preview popup without selecting the line.
+          // A spark marks a novel line: rare-but-sound vs the imported games DB.
+          badge: (
+            <Stack direction="row" alignItems="center" spacing={0}>
+              {line.novel && (
+                <Tooltip title="Novelty — a rare but sound move the engine likes">
+                  <AutoAwesomeIcon
+                    fontSize="small"
+                    color="warning"
+                    data-testid="novelty-icon"
+                    aria-label="novelty"
+                    sx={{ mr: 0.25 }}
+                  />
+                </Tooltip>
+              )}
+              <Tooltip title="Preview this line">
+                <IconButton
+                  size="small"
+                  data-testid="preview-line"
+                  aria-label="preview line"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPreviewLine?.(idx);
+                  }}
+                >
+                  <PlayArrowIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          ),
         };
       })
     : [];

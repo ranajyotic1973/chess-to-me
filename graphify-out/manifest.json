@@ -10,9 +10,9 @@
     "semantic_hash": "f63512ddb9e91614759b810bc67a9058"
   },
   "__mocks__/better-sqlite3.js": {
-    "mtime": 1781233618.7741535,
-    "ast_hash": "9560b72704b04a81c2cbc5548a01981d",
-    "semantic_hash": "9560b72704b04a81c2cbc5548a01981d"
+    "mtime": 1783235348.8302524,
+    "ast_hash": "886956c18e2f553d65fcf7f77b45dc71",
+    "semantic_hash": ""
   },
   "data/eco/ecoA.json": {
     "mtime": 1781881926.3647902,
@@ -45,8 +45,8 @@
     "semantic_hash": "f4a8d74f5061c2068ef2bc6689bcb7dc"
   },
   "electron/agentPrompts.ts": {
-    "mtime": 1783170117.8087149,
-    "ast_hash": "96fc6a92b2def17a2951916944a6fdbc",
+    "mtime": 1783225931.3647735,
+    "ast_hash": "00bb4bd57cc078c62d5f485c1ff27f4e",
     "semantic_hash": ""
   },
   "electron/classifier.test.ts": {
@@ -55,14 +55,14 @@
     "semantic_hash": "06f91b4d71f7c6c327e22050731671ed"
   },
   "electron/downloader.test.ts": {
-    "mtime": 1781489946.0844457,
-    "ast_hash": "232e696a436b67320f81a7e71d88d546",
-    "semantic_hash": "232e696a436b67320f81a7e71d88d546"
+    "mtime": 1783262256.904355,
+    "ast_hash": "3e05349e0cef66a801e9ad7908f6ccf2",
+    "semantic_hash": ""
   },
   "electron/downloader.ts": {
-    "mtime": 1781711639.697929,
-    "ast_hash": "80ac9fe854da855218fac658cbf90d04",
-    "semantic_hash": "80ac9fe854da855218fac658cbf90d04"
+    "mtime": 1783262201.873778,
+    "ast_hash": "ad638d4e20d3a2261daa3bb36a66b636",
+    "semantic_hash": ""
   },
   "electron/ecoLookup.test.ts": {
     "mtime": 1781882184.5602345,
@@ -75,14 +75,14 @@
     "semantic_hash": "d91b4ed778847b9b9d4c391d5effb36e"
   },
   "electron/endgameAgent.test.ts": {
-    "mtime": 1781359522.8756206,
-    "ast_hash": "be5269788f644cc1167893f2b37200cb",
-    "semantic_hash": "be5269788f644cc1167893f2b37200cb"
+    "mtime": 1783235158.7993388,
+    "ast_hash": "88cba8be95022fabb0e2347c4a2146b1",
+    "semantic_hash": ""
   },
   "electron/endgameAgent.ts": {
-    "mtime": 1781359502.8412187,
-    "ast_hash": "ccea67e30e81e0a656e0661557c94e91",
-    "semantic_hash": "ccea67e30e81e0a656e0661557c94e91"
+    "mtime": 1783235078.2947948,
+    "ast_hash": "e2d1d8a5e33ff34c18d004309a12419c",
+    "semantic_hash": ""
   },
   "electron/gamesDb.test.ts": {
     "mtime": 1781233091.607672,
@@ -100,9 +100,9 @@
     "semantic_hash": "2f449b4767e07d856f07ca323aadf48e"
   },
   "electron/main.ts": {
-    "mtime": 1783127990.058298,
-    "ast_hash": "33465a583d8e58995d33a749a18b2478",
-    "semantic_hash": "33465a583d8e58995d33a749a18b2478"
+    "mtime": 1783262300.0398374,
+    "ast_hash": "ea4d0b40091125209997bb18a619b334",
+    "semantic_hash": ""
   },
   "electron/middlegameAgent.test.ts": {
     "mtime": 1781527203.2441003,
@@ -110,9 +110,9 @@
     "semantic_hash": "b2fd26c48465732b4c7c6b24fb251f3f"
   },
   "electron/middlegameAgent.ts": {
-    "mtime": 1781526906.8903139,
-    "ast_hash": "d60e85724bcea4bc5bab7bef0e65c71c",
-    "semantic_hash": "d60e85724bcea4bc5bab7bef0e65c71c"
+    "mtime": 1783224733.907712,
+    "ast_hash": "e6aea8489f8c4214fa89553c06ad2c14",
+    "semantic_hash": ""
   },
   "electron/openingAgent.test.ts": {
     "mtime": 1781359472.068642,
@@ -120,9 +120,9 @@
     "semantic_hash": "3220ef1b25a6464e79b62015f843de68"
   },
   "electron/openingAgent.ts": {
-    "mtime": 1782530965.8735604,
-    "ast_hash": "3e2c7bdbbadf4b94ed48f91481946dbe",
-    "semantic_hash": "3e2c7bdbbadf4b94ed48f91481946dbe"
+    "mtime": 1783224762.7161274,
+    "ast_hash": "ab316640544f21196ce65483cbc24083",
+    "semantic_hash": ""
   },
   "electron/otbImport.test.ts": {
     "mtime": 1781834479.448336,
@@ -135,14 +135,14 @@
     "semantic_hash": "e444670860449a2b7eb65f1afc272a36"
   },
   "electron/preload.ts": {
-    "mtime": 1783097094.7004087,
-    "ast_hash": "55352bc1d8c17a2c5ed618aa6ff54b35",
-    "semantic_hash": "55352bc1d8c17a2c5ed618aa6ff54b35"
+    "mtime": 1783262307.6669495,
+    "ast_hash": "73330f0fe062307d348a28aed7e86655",
+    "semantic_hash": ""
   },
   "electron/puzzleDb.ts": {
-    "mtime": 1782556853.891323,
-    "ast_hash": "26b913049dec2d253d22ade7f4a56b41",
-    "semantic_hash": "26b913049dec2d253d22ade7f4a56b41"
+    "mtime": 1783260584.500701,
+    "ast_hash": "30d97e0a868eec27381040ba0c50aff1",
+    "semantic_hash": ""
   },
   "electron/puzzlePoints.test.ts": {
     "mtime": 1781353017.3395529,
@@ -210,8 +210,8 @@
     "semantic_hash": "90000cd3ae0b2aa2ee97028052e2f9fe"
   },
   "src/App.tsx": {
-    "mtime": 1783219035.5441241,
-    "ast_hash": "aff706221cf18b536f7c5f8376aeda53",
+    "mtime": 1783246065.8713179,
+    "ast_hash": "155ca683c0d012b412b80e264a2aaaee",
     "semantic_hash": ""
   },
   "src/components/AnalysisBoard.tsx": {
@@ -230,8 +230,8 @@
     "semantic_hash": "2f778fe7d6a6fb54e03e8f47192785d3"
   },
   "src/components/ChatPanel.tsx": {
-    "mtime": 1783216496.5977504,
-    "ast_hash": "163b483444c3561f332b5361c88c0df9",
+    "mtime": 1783235489.7607179,
+    "ast_hash": "f051df259ed2458913780dde5777cb71",
     "semantic_hash": ""
   },
   "src/components/EvalBar.test.ts": {
@@ -265,9 +265,9 @@
     "semantic_hash": ""
   },
   "src/components/SettingsPanel.tsx": {
-    "mtime": 1782996558.808036,
-    "ast_hash": "f757244706b9296df1063acde5fbb98b",
-    "semantic_hash": "f757244706b9296df1063acde5fbb98b"
+    "mtime": 1783262350.2314734,
+    "ast_hash": "c04655c05a5805936031f64e15b42e98",
+    "semantic_hash": ""
   },
   "src/components/TitleBar.tsx": {
     "mtime": 1782625651.7148983,
@@ -295,8 +295,8 @@
     "semantic_hash": "fb84e00f40ec2b88be317968299277d0"
   },
   "src/types/index.d.ts": {
-    "mtime": 1783174215.2770238,
-    "ast_hash": "060f4254e3d5b5b1f8ac1bdd3f384522",
+    "mtime": 1783226173.562388,
+    "ast_hash": "3a488933d90495474cb63a92b6de04d3",
     "semantic_hash": ""
   },
   "src/types/index.js": {
@@ -305,8 +305,8 @@
     "semantic_hash": "fe02646b3583145d4216796135896611"
   },
   "src/types/index.ts": {
-    "mtime": 1783174210.2775192,
-    "ast_hash": "7875f9aae6be98d8ffdf24074f632ba4",
+    "mtime": 1783262331.6941383,
+    "ast_hash": "fe0fb604eb9b5e47b14a6b75e43707cb",
     "semantic_hash": ""
   },
   "src/utils/ChessEngine.test.ts": {
@@ -505,9 +505,9 @@
     "semantic_hash": ""
   },
   "tsconfig.electron.json": {
-    "mtime": 1781325341.2231164,
+    "mtime": 1783250462.4960873,
     "ast_hash": "28492d5837af240bab4a646ec3ca718a",
-    "semantic_hash": "28492d5837af240bab4a646ec3ca718a"
+    "semantic_hash": ""
   },
   "tsconfig.json": {
     "mtime": 1780808570.1779478,
@@ -1820,8 +1820,8 @@
     "semantic_hash": "8963716ff0bb33ab78d9a25bb7f6f4e3"
   },
   "openspec/specs/deep-analysis-mode/spec.md": {
-    "mtime": 1783220850.0052223,
-    "ast_hash": "a25791e63dad9996a3dc22cae797dc4a",
+    "mtime": 1783255778.8219512,
+    "ast_hash": "a2d3fbd3b61390866cfa8f4c7abdb193",
     "semantic_hash": ""
   },
   "openspec/specs/eco-opening-library/spec.md": {
@@ -1830,9 +1830,9 @@
     "semantic_hash": "04e63aac47c58d42486ae0a2ec11b0cc"
   },
   "openspec/specs/endgame-training-agent/spec.md": {
-    "mtime": 1781408944.3332381,
-    "ast_hash": "ba043556255b13301c94680e575998e9",
-    "semantic_hash": "ba043556255b13301c94680e575998e9"
+    "mtime": 1783255781.2972734,
+    "ast_hash": "7575d29f2b8cc278b430364cc70725a3",
+    "semantic_hash": ""
   },
   "openspec/specs/engine-abstraction/spec.md": {
     "mtime": 1780808570.0685725,
@@ -1880,9 +1880,9 @@
     "semantic_hash": "c0bdb2c31dbbb620f01006dc155850e0"
   },
   "openspec/specs/opening-training-agent/spec.md": {
-    "mtime": 1781408915.5704546,
-    "ast_hash": "28e7fa15a6199047b5660644146ebb46",
-    "semantic_hash": "28e7fa15a6199047b5660644146ebb46"
+    "mtime": 1783255783.532678,
+    "ast_hash": "fe27b32ff11be5ca6a2242a26afa5d43",
+    "semantic_hash": ""
   },
   "openspec/specs/otb-games-import/spec.md": {
     "mtime": 1781834479.4779003,
@@ -2040,8 +2040,8 @@
     "semantic_hash": "a004c7d947ecdd166d3394dabd4a7f78"
   },
   "electron/engines/BaseChessEngine.ts": {
-    "mtime": 1783174195.7444732,
-    "ast_hash": "f8f69accb3f08003b15efb87dcbb0e97",
+    "mtime": 1783224220.4397671,
+    "ast_hash": "0264c279208ccc9484bc0b53bbdfbdd5",
     "semantic_hash": ""
   },
   "electron/engines/EngineFactory.test.ts": {
@@ -2055,19 +2055,19 @@
     "semantic_hash": "761580e7968f72be5296a6d0f3ba8a65"
   },
   "electron/engines/IChessEngine.ts": {
-    "mtime": 1783174202.7505293,
-    "ast_hash": "c57f62a0068fa740fbc06c140d93b7f1",
+    "mtime": 1783224192.898412,
+    "ast_hash": "47c5cc682fa8b4814ef37990916fa678",
     "semantic_hash": ""
   },
   "electron/engines/LC0Engine.ts": {
-    "mtime": 1783047908.4835057,
-    "ast_hash": "16dcdc7af1e3c94d3c05aab7e7ae85c7",
-    "semantic_hash": "16dcdc7af1e3c94d3c05aab7e7ae85c7"
+    "mtime": 1783224253.9744976,
+    "ast_hash": "dd1f4985c7d0b4e472e2b84d63ec1207",
+    "semantic_hash": ""
   },
   "electron/engines/StockfishEngine.ts": {
-    "mtime": 1783043938.963514,
-    "ast_hash": "bfde37dd46d410b44dd36ee671df27d4",
-    "semantic_hash": "bfde37dd46d410b44dd36ee671df27d4"
+    "mtime": 1783224241.5944033,
+    "ast_hash": "d78edb368cc3e86711e400b5ed8c3e29",
+    "semantic_hash": ""
   },
   "electron/utils/chessLineParser.test.ts": {
     "mtime": 1783174175.3214831,
@@ -2492,6 +2492,161 @@
   "openspec/changes/archive/README.md": {
     "mtime": 1783221079.0603642,
     "ast_hash": "00a98c901e057e505e04839cb51895f4",
+    "semantic_hash": ""
+  },
+  "electron/engines/engineTuning.test.ts": {
+    "mtime": 1783224266.0813456,
+    "ast_hash": "a40b1921ab58557fe5c8b3c38d263d9b",
+    "semantic_hash": ""
+  },
+  "electron/engines/engineTuning.ts": {
+    "mtime": 1783224187.0441976,
+    "ast_hash": "0f08cd754087468b7ef19823ac8c2ea6",
+    "semantic_hash": ""
+  },
+  "electron/modeRouting.test.ts": {
+    "mtime": 1783224662.654854,
+    "ast_hash": "22b6231b8318f108bcf7191a817bbb8c",
+    "semantic_hash": ""
+  },
+  "electron/modeRouting.ts": {
+    "mtime": 1783224650.2508044,
+    "ast_hash": "a75ac9e53263aa08481e3cddc5b3a1e9",
+    "semantic_hash": ""
+  },
+  "src/components/LinePreviewPopup.tsx": {
+    "mtime": 1783225724.465844,
+    "ast_hash": "b9ea1148d4e9ad035c06569aac8c9668",
+    "semantic_hash": ""
+  },
+  "src/components/MiniBoard.tsx": {
+    "mtime": 1783225614.4987874,
+    "ast_hash": "e27594e84d5c721ea454e7152ae1c0cd",
+    "semantic_hash": ""
+  },
+  "src/utils/linePreview.test.ts": {
+    "mtime": 1783225665.7318716,
+    "ast_hash": "9c616464d9310e029221fc8d5bbe7c6c",
+    "semantic_hash": ""
+  },
+  "src/utils/linePreview.ts": {
+    "mtime": 1783225650.743238,
+    "ast_hash": "758ac2378558b2084aa44c6b6c6d331d",
+    "semantic_hash": ""
+  },
+  "tests/integration/line-preview.spec.ts": {
+    "mtime": 1783226593.08293,
+    "ast_hash": "bb7c485d94796a096112dee0b383556a",
+    "semantic_hash": ""
+  },
+  "electron/noveltyIndex.test.ts": {
+    "mtime": 1783257446.1669526,
+    "ast_hash": "226f06b127cc533d451855197adfc240",
+    "semantic_hash": ""
+  },
+  "electron/noveltyIndex.ts": {
+    "mtime": 1783257390.4184282,
+    "ast_hash": "37dd6aa7255fe3b3db35f1b1f6b5f159",
+    "semantic_hash": ""
+  },
+  "tests/integration/mode-response-render.spec.ts": {
+    "mtime": 1783227894.2418022,
+    "ast_hash": "1b8c46188dc19ad5a86014ce11ddc494",
+    "semantic_hash": ""
+  },
+  "tests/integration/novelty-icon.spec.ts": {
+    "mtime": 1783235654.0039778,
+    "ast_hash": "e20bf3227ad970135cc4ee191080cf83",
+    "semantic_hash": ""
+  },
+  "electron/puzzleDb.test.ts": {
+    "mtime": 1783261055.4036338,
+    "ast_hash": "ec9ffb5e6e2d85b511f72a13a7cf60bd",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-07-05-conversation-driven-modes-and-engine-tuning/.openspec.yaml": {
+    "mtime": 1783222729.6499062,
+    "ast_hash": "80abc064fb03c04c055eb3363f6520a5",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-07-05-conversation-driven-modes-and-engine-tuning/design.md": {
+    "mtime": 1783223934.28423,
+    "ast_hash": "31100bca49813e827b3865291e993977",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-07-05-conversation-driven-modes-and-engine-tuning/proposal.md": {
+    "mtime": 1783223941.2617345,
+    "ast_hash": "31bd0c8a8647874cf2f18adf52e0cedb",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-07-05-conversation-driven-modes-and-engine-tuning/specs/conversation-mode-detection/spec.md": {
+    "mtime": 1783223662.2294805,
+    "ast_hash": "1e3670aa4d43b201488047bd86d6a5cf",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-07-05-conversation-driven-modes-and-engine-tuning/specs/deep-analysis-mode/spec.md": {
+    "mtime": 1783223715.854913,
+    "ast_hash": "666425fd8a321ef0aea60117dca5debf",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-07-05-conversation-driven-modes-and-engine-tuning/specs/endgame-training-agent/spec.md": {
+    "mtime": 1783222880.7369986,
+    "ast_hash": "240d66075f177e3f985dfa07c265b7fb",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-07-05-conversation-driven-modes-and-engine-tuning/specs/engine-mode-tuning/spec.md": {
+    "mtime": 1783223682.587998,
+    "ast_hash": "bb35376762e5edc8565e18dd64485371",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-07-05-conversation-driven-modes-and-engine-tuning/specs/line-preview-popup/spec.md": {
+    "mtime": 1783223756.4629562,
+    "ast_hash": "85813ec0ef47489e61d7318ded457aeb",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-07-05-conversation-driven-modes-and-engine-tuning/specs/middlegame-analysis-mode/spec.md": {
+    "mtime": 1783223668.1464803,
+    "ast_hash": "6b471c44d707b1c2d424bdd723be16fa",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-07-05-conversation-driven-modes-and-engine-tuning/specs/novelty-line-detection/spec.md": {
+    "mtime": 1783255163.629601,
+    "ast_hash": "b49df822d73eb52ec7adc50811de6243",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-07-05-conversation-driven-modes-and-engine-tuning/specs/opening-training-agent/spec.md": {
+    "mtime": 1783223722.6536043,
+    "ast_hash": "3ba27f94ace47deb0e201980e36623e1",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-07-05-conversation-driven-modes-and-engine-tuning/tasks.md": {
+    "mtime": 1783254917.7709236,
+    "ast_hash": "884ecf5c54fa98e7d97109be94ede893",
+    "semantic_hash": ""
+  },
+  "openspec/specs/conversation-mode-detection/spec.md": {
+    "mtime": 1783255313.6916878,
+    "ast_hash": "4e7ff27395a7049df2f299e4cdaa100d",
+    "semantic_hash": ""
+  },
+  "openspec/specs/engine-mode-tuning/spec.md": {
+    "mtime": 1783255325.1902487,
+    "ast_hash": "de501775ae1848c53fba3a67f7918a44",
+    "semantic_hash": ""
+  },
+  "openspec/specs/line-preview-popup/spec.md": {
+    "mtime": 1783255345.8397288,
+    "ast_hash": "b9476aad4dd2c8595368e84ba07aaa32",
+    "semantic_hash": ""
+  },
+  "openspec/specs/middlegame-analysis-mode/spec.md": {
+    "mtime": 1783255357.6621583,
+    "ast_hash": "62b1c6018f245a8bb8ac42d0f926c4bd",
+    "semantic_hash": ""
+  },
+  "openspec/specs/novelty-line-detection/spec.md": {
+    "mtime": 1783255376.7061994,
+    "ast_hash": "d7be95642787623999469efb413609b0",
     "semantic_hash": ""
   }
 }

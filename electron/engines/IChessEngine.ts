@@ -31,6 +31,11 @@ export interface AnalysisParams {
   depth?: number;
   multiPv?: number;
   timeoutMs?: number;
+  /**
+   * When true (Deep Analysis / Opening / Endgame modes), the engine widens its
+   * search toward creative-but-sound moves. Defaults to false (objective best).
+   */
+  explore?: boolean;
 }
 
 export interface LogEntry {

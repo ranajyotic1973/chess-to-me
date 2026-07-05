@@ -110,6 +110,41 @@ describe("downloader timeout and retry behaviour", () => {
     });
   });
 
+  describe("local puzzle-file reading (no network)", () => {
+    it("isZstFile detects .zst paths case-insensitively", () => {
+      const { isZstFile } = require("./downloader");
+      expect(isZstFile("lichess_db_puzzle.csv.zst")).toBe(true);
+      expect(isZstFile("C:/dl/puzzles.ZST")).toBe(true);
+      expect(isZstFile("  puzzles.csv.zst  ")).toBe(true);
+      expect(isZstFile("lichess_db_puzzle.csv")).toBe(false);
+      expect(isZstFile("puzzles.txt")).toBe(false);
+    });
+
+    it("reads a plain .csv file as-is (no decompression)", () => {
+      const fs = require("node:fs");
+      const fzstd = require("fzstd");
+      fs.readFileSync = jest.fn().mockReturnValue(Buffer.from("PuzzleId,FEN\np1,8/8 w - - 0 1\n"));
+      fzstd.decompress = jest.fn();
+      const { readLocalPuzzleCsv } = require("./downloader");
+
+      const buf = readLocalPuzzleCsv("C:/dl/puzzles.csv");
+      expect(buf.toString("utf8")).toBe("PuzzleId,FEN\np1,8/8 w - - 0 1\n");
+      expect(fzstd.decompress).not.toHaveBeenCalled();
+    });
+
+    it("decompresses a .zst file via fzstd", () => {
+      const fs = require("node:fs");
+      const fzstd = require("fzstd");
+      fs.readFileSync = jest.fn().mockReturnValue(Buffer.from([0x28, 0xb5, 0x2f, 0xfd]));
+      fzstd.decompress = jest.fn().mockReturnValue(new Uint8Array(Buffer.from("decompressed-csv")));
+      const { readLocalPuzzleCsv } = require("./downloader");
+
+      const buf = readLocalPuzzleCsv("C:/dl/lichess_db_puzzle.csv.zst");
+      expect(fzstd.decompress).toHaveBeenCalledTimes(1);
+      expect(buf.toString("utf8")).toBe("decompressed-csv");
+    });
+  });
+
   describe("retry backoff constants", () => {
     it("SOCKET_TIMEOUT_MS is between 30 and 120 seconds", () => {
       // These are the values baked into the module; we verify them via the source

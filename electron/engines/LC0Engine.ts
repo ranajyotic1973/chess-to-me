@@ -6,6 +6,7 @@
 
 import { BaseChessEngine } from "./BaseChessEngine";
 import { EngineCapability } from "./IChessEngine";
+import { clampMultiPv, explorationOptions } from "./engineTuning";
 
 const LC0_TIMEOUT_MS = 60000;
 const LC0_DEFAULT_DEPTH = 30;
@@ -58,13 +59,15 @@ export class LC0Engine extends BaseChessEngine {
   }
 
   /**
-   * LC0 options before analysis
-   * Supports: MultiPV, cache size
+   * LC0 options before analysis.
+   * Supports MultiPV (up to MAX_MULTIPV). In deep modes (`explore`), widens the
+   * search via PolicyTemperature/CPuct; otherwise resets them to defaults.
    */
-  protected sendEngineOptions(multiPv: number): void {
-    this.sendCommand(`setoption name MultiPV value ${Math.max(1, Math.min(4, multiPv))}`);
-    // Can add more options here:
-    // this.sendCommand("setoption name CacheSizeGiB value 4");
+  protected sendEngineOptions(multiPv: number, explore: boolean): void {
+    this.sendCommand(`setoption name MultiPV value ${clampMultiPv(multiPv)}`);
+    for (const cmd of explorationOptions(this.name, explore)) {
+      this.sendCommand(cmd);
+    }
   }
 
   /**

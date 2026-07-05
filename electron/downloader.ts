@@ -269,6 +269,29 @@ export async function downloadPuzzleCsv(
   return csvBuffer;
 }
 
+/** True when a path is a zstandard-compressed file (Lichess ships `.csv.zst`). */
+export function isZstFile(filePath: string): boolean {
+  return /\.zst$/i.test(filePath.trim());
+}
+
+/**
+ * Read an already-downloaded Lichess puzzle file from disk and return the plain
+ * CSV bytes — decompressing zstandard (`.csv.zst`) files, or reading `.csv`
+ * files as-is. No network access. Mirrors the buffer that `downloadPuzzleCsv`
+ * produces so the same importer can consume it.
+ */
+export function readLocalPuzzleCsv(
+  filePath: string,
+  onProgress?: (phase: "decompressing", pct: number, msg: string) => void
+): Buffer {
+  const raw = fs.readFileSync(filePath);
+  if (!isZstFile(filePath)) return raw; // plain .csv already
+  onProgress?.("decompressing", 0, "Decompressing…");
+  const decompressed = decompress(new Uint8Array(raw));
+  onProgress?.("decompressing", 100, `Decompressed ${(decompressed.byteLength / 1024 / 1024).toFixed(0)} MB`);
+  return Buffer.from(decompressed.buffer, decompressed.byteOffset, decompressed.byteLength);
+}
+
 export async function checkPuzzleUpdate(versionPath: string): Promise<{ hasUpdate: boolean; serverDate: string }> {
   const storedDate = fs.existsSync(versionPath)
     ? fs.readFileSync(versionPath, "utf8").trim()

@@ -33,6 +33,8 @@ export interface AnalysisLine {
   line?: string;
   text?: string;
   id?: string;
+  /** Set by novelty detection: a rare-but-sound move vs the imported games DB. */
+  novel?: boolean;
 }
 
 export interface AnalysisResult {
@@ -298,7 +300,7 @@ export interface IpcPayloads {
   detectEngine: { engine: string };
   browseForEngine: { engine: string };
   setEnginePath: { engine: string; path: string };
-  analyzePosition: { engine?: string; fen: string; depth?: number; multiPv?: number };
+  analyzePosition: { engine?: string; fen: string; depth?: number; multiPv?: number; explore?: boolean; playedMoves?: string[] };
   updateAppSettings: Partial<AppSettings>;
   explainLines: {
     lines: AnalysisLine[];
@@ -327,6 +329,18 @@ export interface IpcPayloads {
     llmApiKey?: string;
     responseType?: ResponseType;
     conversationHistory?: ConversationMessage[];
+    /** Half-moves played so far; gates mode transitions (e.g. Middlegame ≥20). */
+    plies?: number;
+  };
+  getLinePreviewInsights: {
+    fen: string;
+    /** Space-separated UCI moves of the line. */
+    pv: string;
+    score?: Score | null;
+    llmProvider?: "ollama" | "openai" | "anthropic" | "gemini" | "grok";
+    model?: string;
+    baseUrl?: string;
+    llmApiKey?: string;
   };
   setOllamaModel: string;
   getAvailableModels: {
@@ -342,6 +356,8 @@ export interface IpcPayloads {
   "db:status": Record<string, never>;
   "db:download-puzzles": Record<string, never>;
   "db:check-puzzle-update": Record<string, never>;
+  "db:browse-puzzle-file": Record<string, never>;
+  "db:import-puzzle-file": { filePath: string };
   "db:browse-games-file": Record<string, never>;
   "db:import-games-7z": { filePath: string };
   "db:import-status": Record<string, never>;
@@ -385,6 +401,7 @@ export interface IpcResponses {
   getProcessLogs: ProcessLogs;
   explainLines: { ok: boolean; explanations?: Array<{ rank: number; text: string }>; error?: string };
   askQuestion: { ok: boolean; answer?: string; linesUsed?: number; error?: string };
+  getLinePreviewInsights: { ok: boolean; insights?: Array<{ moveIndex: number; text: string }>; error?: string };
   setOllamaModel: { ok: boolean; activeModel?: string; error?: string };
   openExternalUrl: { ok: boolean };
   getSystemStatus: SystemStatus;
@@ -397,6 +414,8 @@ export interface IpcResponses {
   "db:status": DbStatus;
   "db:download-puzzles": { ok: boolean; count?: number; error?: string };
   "db:check-puzzle-update": { hasUpdate: boolean; serverDate: string };
+  "db:browse-puzzle-file": { filePath: string | null };
+  "db:import-puzzle-file": { ok: boolean; count?: number; error?: string };
   "db:browse-games-file": { filePath: string | null };
   "db:import-games-7z": { ok: boolean; started?: boolean; count?: number; error?: string };
   "db:import-status": GamesImportState;
@@ -541,6 +560,8 @@ export interface ChatPanelProps {
   currentOpening?: { name: string; eco: string } | null;
   onSelectEngineLine?: (lineIndex: number, line: AnalysisLine) => void;
   onDeselectLine?: () => void;
+  /** Open the stateless preview popup for the engine line at this index. */
+  onPreviewLine?: (lineIndex: number) => void;
   /** True when there's a parent level to return to (the user has drilled into a line). */
   canGoBackToParentLines?: boolean;
   /** True while a fresh analysis of the drilled-into position is being fetched. */
@@ -617,7 +638,11 @@ export interface ElectronAPI {
     fen: string;
     depth?: number;
     multiPv?: number;
+    explore?: boolean;
+    /** UCI moves played to reach this position — used for opening novelty. */
+    playedMoves?: string[];
   }): Promise<{ ok: true; analysis: AnalysisResult } | { ok: false; error: string }>;
+  getLinePreviewInsights?(payload: IpcPayloads["getLinePreviewInsights"]): Promise<IpcResponses["getLinePreviewInsights"]>;
   ecoLookupFen(fen: string): Promise<{ eco: string; name: string } | null>;
 
   // Settings
@@ -689,6 +714,8 @@ export interface ElectronAPI {
   dbStatus(): Promise<DbStatus>;
   dbDownloadPuzzles(): Promise<{ ok: boolean; count?: number; error?: string }>;
   dbCheckPuzzleUpdate(): Promise<{ hasUpdate: boolean; serverDate: string }>;
+  dbBrowsePuzzleFile(): Promise<{ filePath: string | null }>;
+  dbImportPuzzleFile(filePath: string): Promise<{ ok: boolean; count?: number; error?: string }>;
   dbBrowseGamesFile(): Promise<{ filePath: string | null }>;
   dbImportGames7z(filePath: string): Promise<{ ok: boolean; started?: boolean; count?: number; error?: string }>;
   dbImportStatus(): Promise<GamesImportState>;

@@ -8,17 +8,22 @@ import { loadPoints, getPoints, recordSolve as recordPuzzleSolve } from "./puzzl
 import { Chess } from "chess.js";
 import type { AnalysisLine, PuzzleRow, ConversationMessage } from "../src/types";
 import { sanLineWithGlyphs } from "./sanFormat";
-import { initEcoLookup, lookupOpeningByFen, lookupOpeningByMoves, isValidOpeningPosition } from "./ecoLookup";
+import { initEcoLookup, lookupOpeningByFen, lookupOpeningByMoves, isValidOpeningPosition, isEcoAvailable } from "./ecoLookup";
 import { handleOpeningRequest } from "./openingAgent";
 import { handleMiddlegameRequest } from "./middlegameAgent";
-import { handleEndgameRequest } from "./endgameAgent";
+import { handleEndgameRequest, sideToMoveFromFen } from "./endgameAgent";
+import { clampMultiPv } from "./engines/engineTuning";
+import { resolveMode, MIDDLEGAME_MIN_PLIES } from "./modeRouting";
 import { readOtbTracking, writeOtbTracking, scanOtbFiles, computeOverallPercent } from "./otbImport";
 import { settings } from "./settings";
-import { initPuzzleDb, importPuzzlesFromCsv, searchPuzzles, getPuzzleDbStats, hasPuzzles, normalizeThemeKeyword, extractAndStoreThemes } from "./puzzleDb";
+import { initPuzzleDb, importPuzzlesFromCsv, searchPuzzles, getPuzzleDbStats, isPuzzleImportComplete, normalizeThemeKeyword, extractAndStoreThemes } from "./puzzleDb";
 import { initGamesDb, importPgnFile, searchGames, getGamesDbStats, rebuildFts, setGamesSource } from "./gamesDb";
-import { downloadPuzzleCsv, checkPuzzleUpdate, extract7z, findPgnFiles } from "./downloader";
+import { tagNovelLines, isOpeningIndexStale, buildOpeningIndex } from "./noveltyIndex";
+import { downloadPuzzleCsv, checkPuzzleUpdate, extract7z, findPgnFiles, readLocalPuzzleCsv } from "./downloader";
 import {
   CLASSIFIER_SYSTEM_PROMPT,
+  LINE_INSIGHTS_SYSTEM_PROMPT,
+  withGuardrail,
   analysisAgentSystemPrompt,
   analysisLineAgentSystemPrompt,
   explainLinesSystemPrompt,
@@ -155,6 +160,85 @@ function getGamesDb(): Database.Database | null {
     console.error("[DB] Failed to open games DB:", err);
     return null;
   }
+}
+
+let noveltyBuildInProgress = false;
+// Set on app quit so long-running index builds stop cleanly at the next batch
+// boundary instead of touching a torn-down window / closing DB (which crashed).
+let indexingAbort = false;
+let puzzleImportAbort = false;
+
+/**
+ * Send to the renderer only when the window and its webContents are still alive.
+ * During shutdown a background job's progress callback would otherwise call
+ * `webContents.send` on a destroyed window and throw ("Object has been destroyed").
+ */
+function sendToRenderer(channel: string, payload?: unknown): void {
+  const wc = mainWindow?.webContents;
+  if (!mainWindow || mainWindow.isDestroyed() || !wc || wc.isDestroyed()) return;
+  try {
+    wc.send(channel, payload);
+  } catch {
+    /* window went away between the check and the send — ignore */
+  }
+}
+
+/**
+ * Build the opening / novelty index when a games DB exists but the index is
+ * missing or stale. The build runs in-process (the native SQLite addon cannot be
+ * dlopen'd inside an Electron utility/worker child) but cooperatively — it
+ * commits small batches and yields to the event loop between them, so the UI and
+ * engine IPC stay responsive throughout. Progress is relayed to the status bar's
+ * `db:progress` slot. Skips entirely when there is no games DB.
+ */
+function maybeBuildNoveltyIndex(reason: string): void {
+  if (noveltyBuildInProgress || indexingAbort) return; // already running, or shutting down
+
+  const { gamesDbPath } = getDbPaths();
+  if (!fs.existsSync(gamesDbPath)) return; // no games DB → novelty unavailable
+
+  const db = getGamesDb();
+  if (!db) return;
+  let gameCount = 0;
+  let stale = true;
+  try {
+    gameCount = (db.prepare("SELECT COUNT(*) AS c FROM games").get() as { c: number }).c;
+    stale = isOpeningIndexStale(db, gameCount);
+  } catch {
+    return; // games table not present yet
+  }
+  if (gameCount === 0 || !stale) return;
+
+  noveltyBuildInProgress = true;
+  console.log(`[Novelty] Building opening index (${reason}) over ${gameCount.toLocaleString()} games…`);
+
+  // Label lines with their opening when the ECO book is loaded.
+  const identify = isEcoAvailable() ? (fen: string) => lookupOpeningByFen(fen) : undefined;
+
+  void buildOpeningIndex(db, {
+    identify,
+    // Small idle gap between batches keeps this background job from pinning a CPU core.
+    throttleMs: 8,
+    shouldAbort: () => indexingAbort,
+    onProgress: (pct, message) => {
+      sendToRenderer("db:progress", { phase: "novelty", percent: pct, message });
+    }
+  })
+    .then(result => {
+      if (result.completed) {
+        console.log(`[Novelty] Index build complete (${result.total} games).`);
+        sendToRenderer("db:refresh-status");
+      } else {
+        // Stopped for shutdown — progress is persisted; it resumes next launch.
+        console.log(`[Novelty] Index build paused at ${result.processed}/${result.total} (will resume).`);
+      }
+    })
+    .catch(err => {
+      console.error(`[Novelty] Index build failed: ${(err as Error).message}`);
+    })
+    .finally(() => {
+      noveltyBuildInProgress = false;
+    });
 }
 
 const PROVIDER_ENDPOINTS = {
@@ -1579,11 +1663,16 @@ ipcMain.handle("getAvailableModels", async (_event, payload) => {
   return { ok: false, error: `Unknown provider: ${provider}` };
 });
 
-async function performAnalysis(engine: string, fen: string, depth?: number, multiPv?: number) {
+async function performAnalysis(engine: string, fen: string, depth?: number, multiPv?: number, explore?: boolean, playedMoves?: string[]) {
   const selectedEngine = engine || settings.get("selectedEngine") || "lc0";
 
   const finalDepth = Math.max(1, Math.min(30, Number(depth) || Number(settings.get("analysisDepth")) || 16));
-  const finalMultiPv = Math.max(1, Math.min(4, Number(multiPv) || 4));
+  // Deep modes request 10+ lines; clampMultiPv bounds it at the engine-safe ceiling.
+  const finalMultiPv = clampMultiPv(Number(multiPv) || 4);
+  // Engine hard-timeout comes from user settings (advanced/opening/middlegame/endgame
+  // all analyse through here) — never the engine's hardcoded default. Floor at 120s
+  // to match the settings UI so deep searches are not cut short.
+  const finalTimeoutMs = Math.max(120000, Number(settings.get("engineTimeoutMs")) || 120000);
 
   try {
     // Emit engine analysis start event
@@ -1596,12 +1685,25 @@ async function performAnalysis(engine: string, fen: string, depth?: number, mult
     const analysis = await processManager!.analyze({
       fen,
       depth: finalDepth,
-      multiPv: finalMultiPv
+      multiPv: finalMultiPv,
+      explore: !!explore,
+      timeoutMs: finalTimeoutMs
     });
 
     // Emit engine analysis done event
     if (mainWindow?.webContents) {
       mainWindow.webContents.send("engine:analysis-done", { engine: selectedEngine, ok: true });
+    }
+
+    // Flag novel lines (rare-but-sound vs the imported games DB), keyed by the
+    // opening line played to reach this position. No-op when the games DB /
+    // opening index is unavailable or we are past the opening window.
+    if (analysis?.lines?.length) {
+      try {
+        analysis.lines = tagNovelLines(getGamesDb(), Array.isArray(playedMoves) ? playedMoves : [], analysis.lines);
+      } catch (err) {
+        console.warn(`[Novelty] Tagging skipped: ${(err as Error).message}`);
+      }
     }
 
     return { ok: true, analysis };
@@ -1618,12 +1720,12 @@ async function performAnalysis(engine: string, fen: string, depth?: number, mult
 }
 
 ipcMain.handle("analyzePosition", async (_event, payload) => {
-  const { engine, fen, depth, multiPv } = payload || {};
+  const { engine, fen, depth, multiPv, explore, playedMoves } = payload || {};
   if (!fen || typeof fen !== "string") {
     return { ok: false, error: "Invalid FEN input." };
   }
 
-  return performAnalysis(engine, fen, depth, multiPv);
+  return performAnalysis(engine, fen, depth, multiPv, explore, Array.isArray(playedMoves) ? playedMoves : []);
 });
 
 ipcMain.handle("stockfish:analyze", async (_event, payload) => {
@@ -3252,9 +3354,13 @@ ipcMain.handle("llm:ask-question", async (_event, payload) => {
 
     const classified = parseClassificationRaw(classification);
     const validCategories = ["ANALYSIS", "PUZZLE", "POSITION", "PLAYER_GAMES", "HISTORIC_GAME", "LOCAL_GAMES", "OTHER", "OPENING_TRAINING", "MIDDLEGAME_ANALYSIS", "ENDGAME_TRAINING"];
-    const requestType = validCategories.includes(classified) ? classified : "ANALYSIS";
+    const rawCategory = validCategories.includes(classified) ? classified : "ANALYSIS";
+    // Gate mode transitions the classifier can't judge on its own (e.g. Middlegame
+    // requires ≥20 plies). Ply count comes from the renderer's played moves.
+    const plies = Number(payload?.plies) || (Array.isArray(payload?.playedMoves) ? payload.playedMoves.length : 0);
+    const requestType = resolveMode(rawCategory, plies);
 
-    console.log(`[LLM] PASS 1: Classification Result: "${classified}" (${requestType})`);
+    console.log(`[LLM] PASS 1: Classification Result: "${classified}" (raw: ${rawCategory}, resolved: ${requestType}, plies: ${plies})`);
 
     // PASS 2: Route to appropriate handler based on classification
     let result;
@@ -3297,7 +3403,12 @@ ipcMain.handle("llm:ask-question", async (_event, payload) => {
         const endgameFormat = getStructuredOutputFormat(llmProvider, model, ENDGAME_RESPONSE_FORMAT);
         const runLlmEndgame = ({ messages, timeoutMs }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number }) =>
           runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat: endgameFormat, includeTools: false });
-        result = await handleEndgameRequest(question, convHistory, runLlmEndgame);
+        // Result-oriented endgame: feed the engine's evaluated lines so the coach
+        // reasons toward a win for the side to move (else the best draw).
+        const endgameCtx = (typeof fen === "string" && Array.isArray(lines) && lines.length > 0)
+          ? { fen, side: sideToMoveFromFen(fen), lines: lines as AnalysisLine[] }
+          : undefined;
+        result = await handleEndgameRequest(question, convHistory, runLlmEndgame, endgameCtx);
         break;
       }
       case "OTHER":
@@ -3344,6 +3455,60 @@ ipcMain.handle("llm:ask-question", async (_event, payload) => {
       mainWindow.webContents.send("llm:generation-done", { provider: llmProvider, error: true });
     }
     return { ok: false, error: errorMsg };
+  }
+});
+
+// Line-preview critical-move insights: given a single line (start FEN + UCI PV +
+// evaluation), ask the LLM which moves decide the game and return per-move insights.
+ipcMain.handle("llm:line-insights", async (_event, payload) => {
+  const fen = String(payload?.fen || "").trim();
+  const pv = String(payload?.pv || "").trim();
+  if (!fen || !pv) return { ok: false, error: "Missing line data.", insights: [] };
+
+  const savedProvider = ((settings.get("llmProvider") as string) || "").trim() || null;
+  const llmProvider = (payload?.llmProvider?.trim?.() || savedProvider || "ollama") as string;
+  const llmApiKey = payload?.llmApiKey || settings.get("llmApiKey") || "";
+  let model = payload?.model;
+  if (!model) {
+    model = llmProvider === "ollama"
+      ? (settings.get("ollamaModel") || DEFAULT_OLLAMA_MODEL)
+      : (settings.get("llmModel") || getModelForProvider(llmProvider));
+  }
+  const baseUrl = (payload?.baseUrl || (llmProvider === "ollama" ? settings.get("ollamaBaseUrl") : null) || PROVIDER_ENDPOINTS[llmProvider] || "http://localhost:11434/api").replace(/\/$/, "");
+
+  const s = payload?.score;
+  const scoreText = !s ? "unknown"
+    : s.type === "mate" ? `mate in ${s.value}`
+    : s.type === "cp" && typeof s.value === "number" ? `${(s.value / 100).toFixed(2)} pawns`
+    : s.type === "wdl" && typeof s.winProb === "number" ? `win probability ${Math.round(s.winProb * 100)}%`
+    : "unknown";
+
+  const userContent = `Starting position (FEN): ${fen}\nLine (UCI moves): ${pv}\nEngine evaluation of the line: ${scoreText}`;
+
+  try {
+    const raw = await runLlmChat({
+      provider: llmProvider,
+      baseUrl,
+      model,
+      apiKey: llmApiKey,
+      messages: [
+        { role: "system", content: withGuardrail(LINE_INSIGHTS_SYSTEM_PROMPT) },
+        { role: "user", content: userContent }
+      ],
+      timeoutMs: llmProvider === "ollama" ? 60000 : 120000,
+      includeTools: false
+    });
+    const match = String(raw || "").match(/\{[\s\S]*\}/);
+    if (!match) return { ok: true, insights: [] };
+    const parsed = JSON.parse(match[0]);
+    const insights = Array.isArray(parsed?.insights)
+      ? parsed.insights
+          .map((x: any) => ({ moveIndex: Number(x?.moveIndex), text: String(x?.text || "").trim() }))
+          .filter((x: any) => Number.isFinite(x.moveIndex) && x.text)
+      : [];
+    return { ok: true, insights };
+  } catch (err) {
+    return { ok: false, error: (err as Error)?.message || "Insight generation failed.", insights: [] };
   }
 });
 
@@ -3422,15 +3587,18 @@ ipcMain.handle("db:download-puzzles", async (event) => {
   const send = (phase: string, percent: number, message: string) =>
     event.sender.send("db:progress", { phase, percent, message });
 
-  // Skip download if DB already has puzzles — user must use Re-download to refresh
+  // Skip only when a PRIOR import finished completely. A partial import (app
+  // closed mid-way) must be re-run, not trusted — INSERT OR REPLACE makes the
+  // re-import idempotent.
   const existingDb = getPuzzleDb();
-  if (existingDb && hasPuzzles(existingDb)) {
+  if (existingDb && isPuzzleImportComplete(existingDb)) {
     const row = existingDb.prepare("SELECT COUNT(*) as cnt FROM puzzles").get() as { cnt: number };
     send("complete", 100, `Database already contains ${row.cnt.toLocaleString()} puzzles. Use Re-download to update.`);
     return { ok: true, count: row.cnt, skipped: true };
   }
 
   downloadInProgress = true;
+  puzzleImportAbort = false;
   try {
     if (puzzleDb) { puzzleDb.close(); puzzleDb = null; }
     const csvText = await downloadPuzzleCsv(
@@ -3439,11 +3607,19 @@ ipcMain.handle("db:download-puzzles", async (event) => {
     );
     send("importing", 0, "Importing puzzles into database…");
     puzzleDb = initPuzzleDb(puzzleDbPath);
-    const count = importPuzzlesFromCsv(puzzleDb, csvText, (pct) => send("importing", pct, `Importing… ${pct}%`));
-    console.log(`[DB] Puzzle import complete: ${count} rows`);
+    const { imported, completed } = await importPuzzlesFromCsv(puzzleDb, csvText, {
+      onProgress: (pct) => send("importing", pct, `Importing… ${pct}%`),
+      shouldAbort: () => puzzleImportAbort,
+      throttleMs: 4
+    });
+    if (!completed) {
+      console.log(`[DB] Puzzle import interrupted at ${imported} rows — will re-run next launch.`);
+      return { ok: false, count: imported, error: "Import interrupted." };
+    }
+    console.log(`[DB] Puzzle import complete: ${imported} rows`);
     // Extract and cache available themes for LLM reference
     extractAndStoreThemes(puzzleDb, path.join(app.getPath("userData"), "puzzle-cache"));
-    return { ok: true, count };
+    return { ok: true, count: imported };
   } catch (err) {
     console.error("[DB] Puzzle download/import failed:", err);
     return { ok: false, error: (err as Error).message };
@@ -3458,6 +3634,58 @@ ipcMain.handle("db:check-puzzle-update", async () => {
     return await checkPuzzleUpdate(puzzleVersionPath);
   } catch (err) {
     return { hasUpdate: false, serverDate: "" };
+  }
+});
+
+// Pick an already-downloaded Lichess puzzle file (no automated fetch).
+ipcMain.handle("db:browse-puzzle-file", async () => {
+  const result = await dialog.showOpenDialog({
+    title: "Select Lichess puzzle file",
+    filters: [
+      { name: "Lichess puzzle CSV", extensions: ["zst", "csv"] },
+      { name: "All files", extensions: ["*"] },
+    ],
+    properties: ["openFile"],
+  });
+  return { filePath: result.canceled ? null : (result.filePaths[0] ?? null) };
+});
+
+// Import (index) a locally-downloaded puzzle file into the app's puzzle DB.
+ipcMain.handle("db:import-puzzle-file", async (event, { filePath }: { filePath: string }) => {
+  if (!filePath || typeof filePath !== "string") return { ok: false, error: "No file selected." };
+  if (downloadInProgress) return { ok: false, error: "Another import is already running." };
+
+  const { puzzleDbPath } = getDbPaths();
+  const send = (phase: string, percent: number, message: string) =>
+    event.sender.send("db:progress", { phase, percent, message });
+
+  downloadInProgress = true;
+  puzzleImportAbort = false;
+  try {
+    if (puzzleDb) { puzzleDb.close(); puzzleDb = null; }
+    send("decompressing", 0, "Reading puzzle file…");
+    const csv = readLocalPuzzleCsv(filePath, (phase, pct, msg) => send(phase, pct, msg));
+
+    send("importing", 0, "Importing puzzles into database…");
+    puzzleDb = initPuzzleDb(puzzleDbPath);
+    const { imported, completed } = await importPuzzlesFromCsv(puzzleDb, csv, {
+      onProgress: (pct) => send("importing", pct, `Importing… ${pct}%`),
+      shouldAbort: () => puzzleImportAbort,
+      throttleMs: 4,
+    });
+    if (!completed) {
+      console.log(`[DB] Puzzle file import interrupted at ${imported} rows — will re-run next launch.`);
+      return { ok: false, count: imported, error: "Import interrupted." };
+    }
+    extractAndStoreThemes(puzzleDb, path.join(app.getPath("userData"), "puzzle-cache"));
+    send("complete", 100, `Import complete: ${imported.toLocaleString()} puzzles`);
+    console.log(`[DB] Puzzle file import complete: ${imported} rows from ${filePath}`);
+    return { ok: true, count: imported };
+  } catch (err) {
+    console.error("[DB] Puzzle file import failed:", err);
+    return { ok: false, error: (err as Error).message };
+  } finally {
+    downloadInProgress = false;
   }
 });
 
@@ -3496,6 +3724,7 @@ ipcMain.handle("db:import-games-7z", (event, { filePath }: { filePath: string })
       : { status: "error", count: 0, message: result.error ?? "Import failed" };
     mainWindow?.webContents.send("db:import-complete", { ok: result.ok, count: result.count, error: result.error });
     mainWindow?.webContents.send("db:refresh-status");
+    if (result.ok) maybeBuildNoveltyIndex("games imported");
   }).catch(err => {
     gamesImportState = { status: "error", count: 0, message: (err as Error).message };
     mainWindow?.webContents.send("db:import-complete", { ok: false, error: (err as Error).message });
@@ -3711,6 +3940,7 @@ ipcMain.handle("db:import-otb-dir", async (event, { dirPath }: { dirPath: string
       firstError: errorMessages[0] ?? null,
     });
     mainWindow?.webContents.send("db:refresh-status");
+    if (imported > 0) maybeBuildNoveltyIndex("otb imported");
   })();
 
   return { ok: true, started: true };
@@ -3893,7 +4123,13 @@ ipcMain.handle("endgame:ask", async (_event, payload) => {
   const runLlm = ({ messages, timeoutMs }: { messages: Array<{ role: string; content: string }>; timeoutMs?: number }) =>
     runLlmChat({ provider: llmProvider, baseUrl, model, apiKey: llmApiKey, messages, timeoutMs, responseFormat: endgameFormat, includeTools: false });
 
-  return handleEndgameRequest(question, conversationHistory, runLlm);
+  const endgameFen = typeof payload?.fen === "string" ? payload.fen : undefined;
+  const endgameLines = Array.isArray(payload?.lines) ? (payload.lines as AnalysisLine[]) : [];
+  const endgameCtx = (endgameFen && endgameLines.length > 0)
+    ? { fen: endgameFen, side: sideToMoveFromFen(endgameFen), lines: endgameLines }
+    : undefined;
+
+  return handleEndgameRequest(question, conversationHistory, runLlm, endgameCtx);
 });
 
 ipcMain.handle("opening:identify", async (_event, payload) => {
@@ -4246,10 +4482,12 @@ app.whenReady().then(async () => {
   logToFile("INFO", "main", "Window created successfully");
 
   // Copy bundled games DB to userData on first run (runs in background after window opens)
-  setupBundledGamesDb().catch(err => {
-    const msg = err instanceof Error ? err.message : String(err);
-    logToFile("ERROR", "main", "First-run setup error", { error: msg });
-  });
+  setupBundledGamesDb()
+    .then(() => maybeBuildNoveltyIndex("startup"))
+    .catch(err => {
+      const msg = err instanceof Error ? err.message : String(err);
+      logToFile("ERROR", "main", "First-run setup error", { error: msg });
+    });
 
   // Load ECO opening book in the background — non-fatal if unavailable
   initEcoLookup(getBundledEcoDataDir()).catch(err => {
@@ -4285,6 +4523,10 @@ app.whenReady().then(async () => {
 
   app.on("before-quit", async () => {
     logToFile("INFO", "main", "App closing, shutting down");
+    // Signal background indexers to stop at their next batch boundary so they
+    // never touch a torn-down window or a closing DB (previously crashed on exit).
+    indexingAbort = true;
+    puzzleImportAbort = true;
     await processManager!.shutdown();
     closeLogger();
   });

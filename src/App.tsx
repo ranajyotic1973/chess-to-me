@@ -37,6 +37,7 @@ import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import SettingsPanel from "./components/SettingsPanel";
 import AnalysisBoard from "./components/AnalysisBoard";
 import ChatPanel from "./components/ChatPanel";
+import LinePreviewPopup from "./components/LinePreviewPopup";
 import AIImportDialog from "./components/AIImportDialog";
 import NoteEditorPopup from "./components/NoteEditorPopup";
 import { buildPgnWithNotes } from "./utils/pgnNotes";
@@ -287,6 +288,10 @@ export default function App() {
   const [noteEditorCursorAtStart, setNoteEditorCursorAtStart] = useState<boolean>(false);
   const [selectedEngineLineData, setSelectedEngineLineData] = useState<AnalysisLine | null>(null);
   const [selectedLineAnalysisEntry, setSelectedLineAnalysisEntry] = useState<AnalysisEntry | null>(null);
+  // Stateless line-preview popup: previews a single engine line without touching
+  // the main board or selection. `previewLine` holds the line + the FEN it starts from.
+  const [previewOpen, setPreviewOpen] = useState<boolean>(false);
+  const [previewLine, setPreviewLine] = useState<{ pv: string; score: AnalysisLine["score"] | null; label: string; startFen: string } | null>(null);
   const [lineExplanations, setLineExplanations] = useState<Record<number, string>>({});
   const [, setChessInstance] = useState<any>(null);
   const [currentOpening, setCurrentOpening] = useState<{ name: string; eco: string } | null>(null);
@@ -357,6 +362,10 @@ export default function App() {
   const currentResponseTypeRef = useRef(currentResponseType);
   const selectedEngineLineIndexRef = useRef<number | null>(selectedEngineLineIndex);
   const advancedAnalysisModeRef = useRef(advancedAnalysisMode);
+  // UCI moves played to reach the current position — passed to analyzePosition so
+  // the main process can flag opening novelties. Kept in a ref for the ref-based
+  // auto-eval effect below (avoids stale-closure move history).
+  const playedMovesRef = useRef<string[]>(playedMoves);
   // Incremented on every drill-in attempt and on "back" — lets an in-flight drill
   // analysis detect that the user has navigated away and discard its stale result.
   const drillRequestIdRef = useRef(0);
@@ -863,6 +872,7 @@ export default function App() {
   currentResponseTypeRef.current = currentResponseType;
   selectedEngineLineIndexRef.current = selectedEngineLineIndex;
   advancedAnalysisModeRef.current = advancedAnalysisMode;
+  playedMovesRef.current = playedMoves;
 
   // Reset puzzle conversation every time a new puzzle is presented
   useEffect(() => {
@@ -926,6 +936,7 @@ export default function App() {
           fen: currentFen,
           depth: 5, // shallow depth for fast bar updates after each move
           multiPv: 4,
+          playedMoves: playedMovesRef.current,
         });
         if (cancelled || !response?.ok) return;
         const analysis = (response as any).analysis ?? {};
@@ -1107,7 +1118,10 @@ export default function App() {
           engine: formState.selectedEngine,
           fen,
           depth: analysisDepth,
-          multiPv: multiPvLines
+          multiPv: multiPvLines,
+          // Deep modes widen the search toward creative-but-sound moves.
+          explore: advancedAnalysisMode || deepMode,
+          playedMoves: playedMovesRef.current,
         });
         if (!response?.ok) {
           setAnalysisPhase('error');
@@ -1327,6 +1341,21 @@ Make it detailed and exciting!`;
       setIsExplanationLoading(false);
     }
   }, [formState.explainLanguage, formState.ollamaModel, formState.ollamaBaseUrl, formState.llmProvider, formState.llmApiKey, formState.llmModel]);
+
+  // Open the stateless preview popup for an engine line. Does NOT select the line
+  // or change the board — it only previews the line's moves in an isolated popup.
+  const handlePreviewLine = useCallback((lineIndex: number) => {
+    const line = analysisLines[lineIndex];
+    if (!line) return;
+    const entry = analysisEntries[lineIndex];
+    setPreviewLine({
+      pv: line.pv || line.line || "",
+      score: line.score ?? null,
+      label: entry?.description || line.pv || line.line || "",
+      startFen: currentFen,
+    });
+    setPreviewOpen(true);
+  }, [analysisLines, analysisEntries, currentFen]);
 
   const handleSelectEngineLine = useCallback((lineIndex: number, line: AnalysisLine) => {
     console.log(`[handleSelectEngineLine] Selected line ${lineIndex}`, { lineIndex, currentFen, analysisEntries: analysisEntries.length });
@@ -2442,6 +2471,8 @@ Make it detailed and exciting!`;
         llmApiKey: formState.llmApiKey,
         puzzleRatingMin: formState.puzzleRatingMin ?? 1000,
         puzzleRatingMax: formState.puzzleRatingMax ?? 1500,
+        // Ply count gates mode transitions (e.g. Middlegame requires ≥20 plies).
+        plies: pliesFromFen(currentFen),
         conversationHistory
       });
 
@@ -3230,6 +3261,7 @@ Make it detailed and exciting!`;
                   lineExplanations={lineExplanations}
                   currentOpening={currentOpening}
                   onSelectEngineLine={handleSelectEngineLine}
+                  onPreviewLine={handlePreviewLine}
                   onDeselectLine={handleBackFromLine}
                   canGoBackToParentLines={explorationStack.length > 0}
                   isDrillLoading={isDrillLoading}
@@ -3304,6 +3336,14 @@ Make it detailed and exciting!`;
         cursorAtStart={noteEditorCursorAtStart}
         onSave={handleNoteSave}
         onCancel={handleNoteCancel}
+      />
+      <LinePreviewPopup
+        open={previewOpen}
+        startFen={previewLine?.startFen || currentFen}
+        pv={previewLine?.pv || ""}
+        score={previewLine?.score ?? null}
+        lineLabel={previewLine?.label}
+        onClose={() => setPreviewOpen(false)}
       />
       <input
         ref={importFileInput}

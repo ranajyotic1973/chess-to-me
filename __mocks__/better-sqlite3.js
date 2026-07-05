@@ -50,6 +50,22 @@ class MockDatabase {
     return new MockStatement(this._db.prepare(sql));
   }
 
+  // better-sqlite3 transaction(fn) returns a function that runs fn wrapped in
+  // BEGIN/COMMIT (ROLLBACK on throw). Mirror that with node:sqlite exec().
+  transaction(fn) {
+    return (...args) => {
+      this._db.exec("BEGIN");
+      try {
+        const result = fn(...args);
+        this._db.exec("COMMIT");
+        return result;
+      } catch (err) {
+        this._db.exec("ROLLBACK");
+        throw err;
+      }
+    };
+  }
+
   // better-sqlite3 pragma() returns an array for most pragmas; tests don't
   // actually inspect the return value so returning null is safe.
   pragma(_str) {

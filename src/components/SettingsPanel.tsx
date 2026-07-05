@@ -243,6 +243,29 @@ export default function SettingsPanel({
     }
   };
 
+  const handleImportPuzzleFile = async () => {
+    if (!electronAPI?.dbBrowsePuzzleFile || !electronAPI?.dbImportPuzzleFile) return;
+    const { filePath } = await electronAPI.dbBrowsePuzzleFile();
+    if (!filePath) return;
+    setDbActionLoading("puzzles");
+    setDbProgress(null);
+    setDbActionMessage("");
+    subscribeToProgress();
+    try {
+      const result = await electronAPI.dbImportPuzzleFile(filePath);
+      setDbActionMessage(result.ok
+        ? `Import complete: ${result.count?.toLocaleString()} puzzles`
+        : `Error: ${result.error}`);
+    } catch (err: any) {
+      setDbActionMessage(`Error: ${err.message}`);
+    } finally {
+      setDbActionLoading(null);
+      setDbProgress(null);
+      if (dbProgressUnsubRef.current) { dbProgressUnsubRef.current(); dbProgressUnsubRef.current = null; }
+      fetchDbStatus();
+    }
+  };
+
   const handleCheckPuzzleUpdate = async () => {
     if (!electronAPI?.dbCheckPuzzleUpdate) return;
     setDbActionLoading("puzzles");
@@ -718,9 +741,16 @@ export default function SettingsPanel({
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Not downloaded</Typography>
               )}
               <Stack direction="row" spacing={0.5} sx={{ mt: 1.5 }}>
+                <Tooltip title="Import a downloaded Lichess puzzle file (.csv or .csv.zst)">
+                  <span>
+                    <IconButton onClick={handleImportPuzzleFile} disabled={!!dbActionLoading} color="primary" size="small">
+                      <UploadFileIcon />
+                    </IconButton>
+                  </span>
+                </Tooltip>
                 <Tooltip title={dbStatus?.puzzles ? "Re-download puzzle database" : "Download puzzle database"}>
                   <span>
-                    <IconButton onClick={handleDownloadPuzzles} disabled={!!dbActionLoading} color="primary" size="small">
+                    <IconButton onClick={handleDownloadPuzzles} disabled={!!dbActionLoading} size="small">
                       <CloudDownloadIcon />
                     </IconButton>
                   </span>

@@ -161,6 +161,43 @@ Examples:
 "Carlsen Sicilian" → {"player":"Carlsen","opening_name":"Sicilian"}`;
 
 // ============================================================================
+// Shared child-safe, chess-only guardrail
+// ============================================================================
+
+/**
+ * Prepended to every conversational agent's system prompt so the chess-only and
+ * age-appropriate (4–18) constraints cannot be bypassed by any single mode.
+ */
+export const CHILD_SAFE_GUARDRAIL =
+  `You are a chess assistant for children aged 4–18. These rules always apply:
+- ONLY discuss chess. If the user asks about anything not related to chess, gently and encouragingly steer them back to chess and do not answer the off-topic request.
+- Keep all language, examples, and stories appropriate for children aged 4–18 — friendly and encouraging, never scary, adult, or discouraging.`;
+
+/** Prepend the shared guardrail to an agent-specific system prompt. */
+export function withGuardrail(systemPrompt: string): string {
+  return `${CHILD_SAFE_GUARDRAIL}\n\n${systemPrompt}`;
+}
+
+// ============================================================================
+// Line-preview critical-move insights
+// ============================================================================
+
+/**
+ * System prompt for the line-preview popup: given a line (start FEN + UCI moves
+ * + engine evaluation), pick the few moves that decide the game from here on and
+ * give a short, child-friendly insight for each.
+ */
+export const LINE_INSIGHTS_SYSTEM_PROMPT =
+  `You are given one chess line: a starting position (FEN) and its moves in UCI notation, plus the engine's evaluation of the line. Identify the CRITICAL moves — the few turning points that most decide the game from here on (a key tactic, the move that wins or throws away the advantage, or where the evaluation swings). Usually there are only 1–4 such moves.
+
+For each critical move, write ONE short, encouraging insight (1–2 sentences) that a child can understand.
+
+Respond with ONLY a JSON object, no other text:
+{"insights":[{"moveIndex":<1-based position of the move within the line>,"text":"<short insight>"}]}
+
+"moveIndex" counts the moves of the line starting at 1 (1 = after the first move). Include only genuinely critical moves.`;
+
+// ============================================================================
 // Classifier
 // ============================================================================
 

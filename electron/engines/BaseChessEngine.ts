@@ -149,7 +149,7 @@ export abstract class BaseChessEngine implements IChessEngine {
       throw new Error(`${this.name} is not running`);
     }
 
-    const { fen, depth = this.getDefaultDepth(), multiPv = 4 } = params;
+    const { fen, depth = this.getDefaultDepth(), multiPv = 4, explore = false } = params;
     const timeoutMs = params.timeoutMs || this.getDefaultTimeoutMs();
 
     return new Promise((resolve, reject) => {
@@ -288,7 +288,7 @@ export abstract class BaseChessEngine implements IChessEngine {
         let depthCheckTimer = setTimeout(checkDepth, 500);
 
         this.sendCommand("ucinewgame");
-        this.sendEngineOptions(multiPv);
+        this.sendEngineOptions(multiPv, explore);
         this.sendPositionCommand(fen);
         this.sendAnalysisCommand(depth);
       } catch (err) {
@@ -348,9 +348,10 @@ export abstract class BaseChessEngine implements IChessEngine {
   }
 
   /**
-   * Send engine-specific options before analysis
+   * Send engine-specific options before analysis.
+   * @param explore widen the search toward creative-but-sound moves (deep modes)
    */
-  protected abstract sendEngineOptions(multiPv: number): void;
+  protected abstract sendEngineOptions(multiPv: number, explore: boolean): void;
 
   /**
    * Send position command to engine
