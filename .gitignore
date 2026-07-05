@@ -12,3 +12,8 @@ data/puzzles/*.db
 data/puzzles/.version
 data/games/*.db
 data/games/.version
+
+# Test reports and artifacts (keep the repo compact — never upload these)
+playwright-report/
+test-results/
+coverage/
