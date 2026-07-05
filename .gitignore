@@ -17,3 +17,7 @@ data/games/.version
 playwright-report/
 test-results/
 coverage/
+
+# Graphify regenerable cache (AST/semantic) — rebuilt locally, not needed in git.
+# The queryable graph (graph.json, GRAPH_REPORT.md, etc.) stays tracked.
+graphify-out/cache/

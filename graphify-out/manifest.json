@@ -559,66 +559,6 @@
     "ast_hash": "5fe13ada44751b3ff94f56c22c383749",
     "semantic_hash": "5fe13ada44751b3ff94f56c22c383749"
   },
-  ".cline/skills/openspec-apply-change/SKILL.md": {
-    "mtime": 1783185559.5547636,
-    "ast_hash": "ef62fef14cd5c347e2be60d2af4ea59f",
-    "semantic_hash": ""
-  },
-  ".cline/skills/openspec-archive-change/SKILL.md": {
-    "mtime": 1783185559.556767,
-    "ast_hash": "a853b3ce25149061a7f13f05b127350c",
-    "semantic_hash": ""
-  },
-  ".cline/skills/openspec-explore/SKILL.md": {
-    "mtime": 1783185559.5537653,
-    "ast_hash": "61496eebbad91c2af8b3e5bf7fc9d256",
-    "semantic_hash": ""
-  },
-  ".cline/skills/openspec-propose/SKILL.md": {
-    "mtime": 1783185559.5577655,
-    "ast_hash": "5fe13ada44751b3ff94f56c22c383749",
-    "semantic_hash": ""
-  },
-  ".clinerules/workflows/opsx-apply.md": {
-    "mtime": 1783185559.5597672,
-    "ast_hash": "829c993b86216f9c8148c029666bf491",
-    "semantic_hash": ""
-  },
-  ".clinerules/workflows/opsx-archive.md": {
-    "mtime": 1783185559.5647905,
-    "ast_hash": "d7b7edefff3460f47cf822a97f93cd2d",
-    "semantic_hash": ""
-  },
-  ".clinerules/workflows/opsx-explore.md": {
-    "mtime": 1783185559.5587654,
-    "ast_hash": "59a3e67ceadf7d5afd431d6460b4ab4d",
-    "semantic_hash": ""
-  },
-  ".clinerules/workflows/opsx-propose.md": {
-    "mtime": 1783185559.5657654,
-    "ast_hash": "bd41e3cd34938624856e99481c1bbb1d",
-    "semantic_hash": ""
-  },
-  ".codex/skills/openspec-apply-change/SKILL.md": {
-    "mtime": 1783185559.5677643,
-    "ast_hash": "ef62fef14cd5c347e2be60d2af4ea59f",
-    "semantic_hash": ""
-  },
-  ".codex/skills/openspec-archive-change/SKILL.md": {
-    "mtime": 1783185559.5697646,
-    "ast_hash": "a853b3ce25149061a7f13f05b127350c",
-    "semantic_hash": ""
-  },
-  ".codex/skills/openspec-explore/SKILL.md": {
-    "mtime": 1783185559.5677643,
-    "ast_hash": "61496eebbad91c2af8b3e5bf7fc9d256",
-    "semantic_hash": ""
-  },
-  ".codex/skills/openspec-propose/SKILL.md": {
-    "mtime": 1783185559.570778,
-    "ast_hash": "5fe13ada44751b3ff94f56c22c383749",
-    "semantic_hash": ""
-  },
   ".github/workflows/ci.yml": {
     "mtime": 1783099738.192564,
     "ast_hash": "8a0881c9f51a33e61b70bf61ff657957",
@@ -627,46 +567,6 @@
   ".github/workflows/release.yml": {
     "mtime": 1783179674.7755916,
     "ast_hash": "67d224e3c7397c6bddeefe8537ef0b76",
-    "semantic_hash": ""
-  },
-  ".kilocode/skills/openspec-apply-change/SKILL.md": {
-    "mtime": 1783185559.5884466,
-    "ast_hash": "ef62fef14cd5c347e2be60d2af4ea59f",
-    "semantic_hash": ""
-  },
-  ".kilocode/skills/openspec-archive-change/SKILL.md": {
-    "mtime": 1783185559.591449,
-    "ast_hash": "a853b3ce25149061a7f13f05b127350c",
-    "semantic_hash": ""
-  },
-  ".kilocode/skills/openspec-explore/SKILL.md": {
-    "mtime": 1783185559.5874465,
-    "ast_hash": "61496eebbad91c2af8b3e5bf7fc9d256",
-    "semantic_hash": ""
-  },
-  ".kilocode/skills/openspec-propose/SKILL.md": {
-    "mtime": 1783185559.5924518,
-    "ast_hash": "5fe13ada44751b3ff94f56c22c383749",
-    "semantic_hash": ""
-  },
-  ".kilocode/workflows/opsx-apply.md": {
-    "mtime": 1783185559.594448,
-    "ast_hash": "2791e2fd08175e8c47ab4c06ce11f380",
-    "semantic_hash": ""
-  },
-  ".kilocode/workflows/opsx-archive.md": {
-    "mtime": 1783185559.5954456,
-    "ast_hash": "54586622d0625d0e9d909c0d7f8fdbf0",
-    "semantic_hash": ""
-  },
-  ".kilocode/workflows/opsx-explore.md": {
-    "mtime": 1783185559.5934472,
-    "ast_hash": "9942dff7a4b0dee7fedcd460f11d61bf",
-    "semantic_hash": ""
-  },
-  ".kilocode/workflows/opsx-propose.md": {
-    "mtime": 1783185559.5964472,
-    "ast_hash": "f88c2673574396377ad70f39fc560be5",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1920,9 +1820,9 @@
     "semantic_hash": "8963716ff0bb33ab78d9a25bb7f6f4e3"
   },
   "openspec/specs/deep-analysis-mode/spec.md": {
-    "mtime": 1781419726.392132,
-    "ast_hash": "535e968489d3ce9b212eec757423120b",
-    "semantic_hash": "535e968489d3ce9b212eec757423120b"
+    "mtime": 1783220850.0052223,
+    "ast_hash": "a25791e63dad9996a3dc22cae797dc4a",
+    "semantic_hash": ""
   },
   "openspec/specs/eco-opening-library/spec.md": {
     "mtime": 1781408974.387518,
@@ -2450,9 +2350,9 @@
     "semantic_hash": "a4171df43452a13e7ae633a067ee73c3"
   },
   "openspec/specs/pgn-export-with-notes/spec.md": {
-    "mtime": 1783157600.5528343,
-    "ast_hash": "9d8e0ad74746fb97bb4efaf39123e498",
-    "semantic_hash": "9d8e0ad74746fb97bb4efaf39123e498"
+    "mtime": 1783220866.4565158,
+    "ast_hash": "6437816527906f94e86e15aa0a3cb53f",
+    "semantic_hash": ""
   },
   "tests/integration/single-analysis-per-move.spec.ts": {
     "mtime": 1783171638.9254084,
@@ -2482,31 +2382,6 @@
   ".claude/skills/openspec-sync-specs/SKILL.md": {
     "mtime": 1783185935.2525663,
     "ast_hash": "211bc14ef7cb2d1e24b6b73e878d8509",
-    "semantic_hash": ""
-  },
-  ".cline/skills/openspec-sync-specs/SKILL.md": {
-    "mtime": 1783185559.5557656,
-    "ast_hash": "211bc14ef7cb2d1e24b6b73e878d8509",
-    "semantic_hash": ""
-  },
-  ".clinerules/workflows/opsx-sync.md": {
-    "mtime": 1783185559.5617788,
-    "ast_hash": "7dcfdaaed5f9ed3359c0260c85e5b9c9",
-    "semantic_hash": ""
-  },
-  ".codex/skills/openspec-sync-specs/SKILL.md": {
-    "mtime": 1783185559.5687644,
-    "ast_hash": "211bc14ef7cb2d1e24b6b73e878d8509",
-    "semantic_hash": ""
-  },
-  ".kilocode/skills/openspec-sync-specs/SKILL.md": {
-    "mtime": 1783185559.5894468,
-    "ast_hash": "211bc14ef7cb2d1e24b6b73e878d8509",
-    "semantic_hash": ""
-  },
-  ".kilocode/workflows/opsx-sync.md": {
-    "mtime": 1783185559.5954456,
-    "ast_hash": "0ff0804b22a26ca17c40062cda147250",
     "semantic_hash": ""
   },
   "openspec/changes/archive/2026-07-04-analysis-line-controls-and-version/.openspec.yaml": {
@@ -2555,8 +2430,8 @@
     "semantic_hash": ""
   },
   "openspec/specs/selected-line-moves-panel/spec.md": {
-    "mtime": 1783181922.6663902,
-    "ast_hash": "f040bab1e07adc244858f7e2ecd9a31d",
+    "mtime": 1783220820.8412747,
+    "ast_hash": "ad26f7cc1c8a69961c214b536e3be18c",
     "semantic_hash": ""
   },
   "src/utils/markdownHtml.test.ts": {
@@ -2572,6 +2447,51 @@
   "tests/integration/note-editor.spec.ts": {
     "mtime": 1783219938.0045886,
     "ast_hash": "13520b43fbcf96f2f34d27f6315bf430",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-07-05-retro-analysis-panel-refinements/.openspec.yaml": {
+    "mtime": 1783220350.35376,
+    "ast_hash": "80abc064fb03c04c055eb3363f6520a5",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-07-05-retro-analysis-panel-refinements/design.md": {
+    "mtime": 1783220648.4694998,
+    "ast_hash": "427fc5a04901215e7e143e86e2ecf332",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-07-05-retro-analysis-panel-refinements/proposal.md": {
+    "mtime": 1783220392.1452272,
+    "ast_hash": "cc823d4c463e120a5a43b03bb92791eb",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-07-05-retro-analysis-panel-refinements/specs/deep-analysis-mode/spec.md": {
+    "mtime": 1783220459.0754044,
+    "ast_hash": "65da42f59f9731a383cb13f5a84da4b4",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-07-05-retro-analysis-panel-refinements/specs/markdown-note-editor/spec.md": {
+    "mtime": 1783220472.5057056,
+    "ast_hash": "877d860fb2fee4e6498c800e361ac92a",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-07-05-retro-analysis-panel-refinements/specs/pgn-export-with-notes/spec.md": {
+    "mtime": 1783220490.0738993,
+    "ast_hash": "5eb1c3da1706bba1213fec4172c175e3",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-07-05-retro-analysis-panel-refinements/specs/selected-line-moves-panel/spec.md": {
+    "mtime": 1783220450.3431296,
+    "ast_hash": "17883e03b2e09a50bcf3182be3419f86",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-07-05-retro-analysis-panel-refinements/tasks.md": {
+    "mtime": 1783220683.588122,
+    "ast_hash": "240471446fb17c5d985f7f2f706f3e01",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/README.md": {
+    "mtime": 1783221079.0603642,
+    "ast_hash": "00a98c901e057e505e04839cb51895f4",
     "semantic_hash": ""
   }
 }

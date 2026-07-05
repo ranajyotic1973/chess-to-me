@@ -425,5 +425,21 @@
   "423": "SKILL.md",
   "424": "SKILL.md",
   "425": "SKILL.md",
-  "426": "opsx-sync.md"
+  "426": "opsx-sync.md",
+  "427": "chessNotationParser.test.ts",
+  "428": "proposal.md",
+  "429": "note-editor.spec.ts",
+  "430": "spec.md",
+  "431": "tasks.md",
+  "432": "Archived Changes",
+  "433": "electronMock.ts",
+  "434": "design.md",
+  "435": "SelectableList.tsx",
+  "436": "AIImportDialog.tsx",
+  "437": "MoveWarningDialog.tsx",
+  "438": "chess.ts",
+  "439": "formatLabel.ts",
+  "440": "app-happy-path.spec.ts",
+  "441": "TitleBar.tsx",
+  "442": "single-analysis-per-move.spec.ts"
 }
